@@ -2,7 +2,7 @@
  * Example: Stellar MPP Channel Server
  *
  * Charges per request via off-chain one-way payment channel commitments.
- * No on-chain transaction per payment — the recipient withdraws on-chain later.
+ * No on-chain transaction per payment — the recipient closes the channel to settle later.
  *
  * Prerequisites:
  *   - A deployed one-way-channel contract on testnet

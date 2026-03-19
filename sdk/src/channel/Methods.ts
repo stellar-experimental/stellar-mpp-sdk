@@ -5,7 +5,7 @@ import { z } from 'zod/mini'
  * Stellar one-way payment channel intent.
  *
  * Instead of settling each payment on-chain, the funder signs
- * cumulative commitments off-chain. The recipient can withdraw
+ * cumulative commitments off-chain. The recipient can close the channel
  * on-chain at any time using the latest commitment.
  *
  * @see https://github.com/stellar-experimental/one-way-channel

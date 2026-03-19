@@ -21,7 +21,7 @@ import { channel as ChannelMethod } from '../Methods.js'
  * The server:
  * 1. Issues challenges with the channel contract address and cumulative amount
  * 2. Verifies commitment signatures against the channel's commitment key
- * 3. Optionally withdraws accumulated funds on-chain
+ * 3. Optionally closes the channel and settles funds on-chain
  *
  * @example
  * ```ts
@@ -237,18 +237,20 @@ export function channel(parameters: channel.Parameters) {
 }
 
 /**
- * Withdraw funds from the channel contract on-chain using the latest
- * commitment. This is a server-side administrative operation.
+ * Close the channel contract on-chain using a signed commitment.
+ * Transfers the committed amount to the recipient and auto-refunds
+ * the remaining balance to the funder. This is a server-side
+ * administrative operation.
  */
-export async function withdraw(parameters: {
+export async function close(parameters: {
   /** Channel contract address. */
   channel: string
-  /** Cumulative amount to withdraw. */
+  /** Commitment amount to close with. */
   amount: bigint
   /** Ed25519 signature for the commitment. */
   signature: Uint8Array
-  /** Keypair to sign the withdrawal transaction. */
-  withdrawKey: Keypair
+  /** Keypair to sign the close transaction. */
+  closeKey: Keypair
   /** Network identifier. */
   network?: NetworkId
   /** Custom RPC URL. */
@@ -258,7 +260,7 @@ export async function withdraw(parameters: {
     channel: channelAddress,
     amount,
     signature,
-    withdrawKey,
+    closeKey,
     network = 'testnet',
     rpcUrl,
   } = parameters
@@ -268,23 +270,23 @@ export async function withdraw(parameters: {
   const server = new rpc.Server(resolvedRpcUrl)
 
   const contract = new Contract(channelAddress)
-  const withdrawOp = contract.call(
-    'withdraw',
+  const closeOp = contract.call(
+    'close',
     nativeToScVal(amount, { type: 'i128' }),
     nativeToScVal(Buffer.from(signature), { type: 'bytes' }),
   )
 
-  const account = await server.getAccount(withdrawKey.publicKey())
+  const account = await server.getAccount(closeKey.publicKey())
   const tx = new TransactionBuilder(account, {
     fee: '100',
     networkPassphrase,
   })
-    .addOperation(withdrawOp)
+    .addOperation(closeOp)
     .setTimeout(180)
     .build()
 
   const prepared = await server.prepareTransaction(tx)
-  prepared.sign(withdrawKey)
+  prepared.sign(closeKey)
 
   const result = await server.sendTransaction(prepared)
 
@@ -304,7 +306,7 @@ export async function withdraw(parameters: {
 
   if (txResult.status !== 'SUCCESS') {
     throw new ChannelVerificationError(
-      `Withdraw transaction failed: ${txResult.status}`,
+      `Close transaction failed: ${txResult.status}`,
       { hash: result.hash, status: txResult.status },
     )
   }

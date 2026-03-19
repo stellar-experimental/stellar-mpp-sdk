@@ -17,7 +17,7 @@ import { channel as ChannelMethod } from '../Methods.js'
  * Creates a Stellar one-way-channel method for use on the **client**.
  *
  * Instead of building a full Soroban transaction per payment, the client
- * signs an ed25519 commitment authorising the recipient to withdraw up
+ * signs an ed25519 commitment authorising the recipient to close the channel and receive up
  * to a cumulative amount from the on-chain channel contract.
  *
  * @example

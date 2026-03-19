@@ -190,7 +190,7 @@ Client (Funder)                 Server (Recipient)
   |<------------------------------|
 ```
 
-No on-chain transactions happen during payments. The server can withdraw accumulated funds on-chain at any time.
+No on-chain transactions happen during payments. The server can close the channel and settle accumulated funds on-chain at any time.
 
 ### Channel environment variables
 

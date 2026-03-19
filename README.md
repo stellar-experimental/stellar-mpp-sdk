@@ -71,7 +71,7 @@ Client (Funder)                 Server (Recipient)
   |  Verify, 200 OK               |
   |<------------------------------|
   |                               |
-  |  [Server withdraws on-chain   |
+  |  [Server closes channel      |
   |   when convenient]            |
 ```
 
@@ -194,7 +194,7 @@ const data = await response.json()
 | `stellar-mpp-sdk/server` | `stellar`, `charge`, `Mppx`, `Store`, `Expires` |
 | `stellar-mpp-sdk/channel` | `channel` (method schema) |
 | `stellar-mpp-sdk/channel/client` | `stellar`, `channel`, `Mppx` |
-| `stellar-mpp-sdk/channel/server` | `stellar`, `channel`, `withdraw`, `Mppx`, `Store`, `Expires` |
+| `stellar-mpp-sdk/channel/server` | `stellar`, `channel`, `close`, `Mppx`, `Store`, `Expires` |
 
 ### Server options (charge)
 
@@ -313,18 +313,18 @@ Payment channels allow many off-chain micro-payments with minimal on-chain trans
 - The client signs cumulative commitment amounts off-chain using the ed25519 commitment key
 - The server verifies signatures by simulating `prepare_commitment` on the channel contract and checking the ed25519 signature
 - A `Store` is required on the server to track cumulative amounts across requests
-- The server can call `withdraw()` on-chain at any time to settle accumulated payments
+- The server can call `close()` on-chain at any time to settle accumulated payments
 
-**On-chain withdrawal (server-side):**
+**On-chain close (server-side):**
 
 ```ts
-import { withdraw } from 'stellar-mpp-sdk/channel/server'
+import { close } from 'stellar-mpp-sdk/channel/server'
 
-await withdraw({
+await close({
   channel: 'CABC...',           // channel contract address
-  amount: 8000000n,             // cumulative amount to withdraw
+  amount: 8000000n,             // commitment amount to close with
   signature: commitmentSigBytes,// ed25519 signature from the latest commitment
-  withdrawKey: recipientKeypair,// keypair to sign the withdraw transaction
+  closeKey: recipientKeypair,   // keypair to sign the close transaction
   network: 'testnet',
 })
 ```
@@ -381,7 +381,7 @@ stellar-mpp-sdk/
 │       │   ├── Methods.ts  # stellar.channel() convenience wrapper
 │       │   └── index.ts
 │       └── server/
-│           ├── Channel.ts  # Server-side commitment verification + withdraw
+│           ├── Channel.ts  # Server-side commitment verification + close
 │           ├── Methods.ts  # stellar.channel() convenience wrapper
 │           └── index.ts
 ├── examples/
