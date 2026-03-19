@@ -9,7 +9,7 @@ graph TB
     subgraph "Schemas & Constants"
         METHODS["Methods.ts<br/><i>charge schema</i><br/>Method.from name:stellar intent:charge"]
         CH_METHODS["channel/Methods.ts<br/><i>channel schema</i><br/>Method.from name:stellar intent:channel"]
-        CONST["constants.ts<br/>NETWORK_PASSPHRASE<br/>SOROBAN_RPC_URLS<br/>SAC_ADDRESSES<br/>DECIMALS / FEE / TIMEOUT"]
+        CONST["constants.ts<br/>NETWORK_PASSPHRASE<br/>SOROBAN_RPC_URLS<br/>SAC_ADDRESSES<br/>HORIZON_URLS<br/>DEFAULT_DECIMALS / DEFAULT_FEE / DEFAULT_TIMEOUT"]
     end
 
     subgraph "Client Side"
@@ -24,8 +24,8 @@ graph TB
         direction TB
         S_CHARGE["server/Charge.ts<br/><b>charge()</b><br/>Method.toServer(charge, {request,verify})"]
         S_CHANNEL["channel/server/Channel.ts<br/><b>channel()</b> + <b>close()</b><br/>Method.toServer(channel, {request,verify})"]
-        S_IDX["server/index.ts<br/>exports: charge, stellar, Store, Expires"]
-        S_CH_IDX["channel/server/index.ts<br/>exports: channel, close, stellar, Store"]
+        S_IDX["server/index.ts<br/>exports: charge, stellar, Store, Expires, Mppx"]
+        S_CH_IDX["channel/server/index.ts<br/>exports: channel, close, stellar, Store, Expires, Mppx"]
     end
 
     subgraph "External Dependencies"

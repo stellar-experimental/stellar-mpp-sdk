@@ -40,7 +40,7 @@ sequenceDiagram
     rect rgb(255, 240, 230)
         App->>SC: close(channel, amount, signature, closeKey)
         SC->>RPC: Build close(amount, signature) invocation
-        SC->>RPC: simulateTransaction
+        SC->>RPC: prepareTransaction
         RPC-->>SC: Prepared TX
         SC->>SC: closeKey.sign(tx)
         SC->>RPC: sendTransaction
