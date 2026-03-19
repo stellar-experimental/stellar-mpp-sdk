@@ -39,7 +39,9 @@
     "check:types": "tsc --noEmit",
     "test": "vitest",
     "demo:server": "tsx examples/server.ts",
-    "demo:client": "tsx examples/client.ts"
+    "demo:client": "tsx examples/client.ts",
+    "demo:channel-server": "tsx examples/channel-server.ts",
+    "demo:channel-client": "tsx examples/channel-client.ts"
   },
   "peerDependencies": {
     "@stellar/stellar-sdk": ">=14.0.0",
