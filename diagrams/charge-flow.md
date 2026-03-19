@@ -17,7 +17,7 @@ sequenceDiagram
 
     App->>CC: createCredential(challenge)
     CC->>CC: Resolve network, build SAC transfer(from, to, amount)
-    CC->>RPC: simulateTransaction(transferOp)
+    CC->>RPC: prepareTransaction(transferOp)
     RPC-->>CC: Prepared TX with resources
 
     CC->>CC: keypair.sign(preparedTx)
@@ -33,7 +33,6 @@ sequenceDiagram
         RPC->>Chain: Broadcast
         SC->>RPC: Poll getTransaction(hash)
         RPC-->>SC: TX confirmed
-        SC->>SC: verifySacTransfer(result) — verify on-chain
         SC-->>App: Receipt {status:'success', reference:txHash}
     else Push Mode
         CC->>RPC: sendTransaction(signedTx)

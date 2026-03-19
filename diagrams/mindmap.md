@@ -27,7 +27,7 @@ mindmap
       Charge — client/Charge.ts
         Pull mode: sign XDR, server broadcasts
         Push mode: client broadcasts, send hash
-        TransactionBuilder + simulateTransaction
+        TransactionBuilder + rpc.Server.prepareTransaction
         keypair.sign
         Progress events
       Channel — channel/client/Channel.ts
