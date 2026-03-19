@@ -1,3 +1,7 @@
 export { channel, close } from './Channel.js'
+export { getChannelState } from './State.js'
+export type { ChannelState } from './State.js'
 export { stellar } from './Methods.js'
+export { watchChannel } from './Watcher.js'
+export type { ChannelEvent } from './Watcher.js'
 export { Expires, Mppx, Store } from 'mppx/server'
