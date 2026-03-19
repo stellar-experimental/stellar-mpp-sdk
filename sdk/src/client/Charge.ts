@@ -53,6 +53,12 @@ export function charge(parameters: charge.Parameters) {
     timeout = DEFAULT_TIMEOUT,
   } = parameters
 
+  if (!keypairParam && !secretKey) {
+    throw new Error(
+      'Either keypair or secretKey must be provided.',
+    )
+  }
+
   const keypair = keypairParam ?? Keypair.fromSecret(secretKey!)
 
   return Method.toClient(Methods.charge, {
@@ -125,7 +131,13 @@ export function charge(parameters: charge.Parameters) {
         // Poll until confirmed
         onProgress?.({ type: 'confirming', hash: result.hash })
         let txResult = await server.getTransaction(result.hash)
+        let pollAttempts = 0
         while (txResult.status === 'NOT_FOUND') {
+          if (++pollAttempts >= 60) {
+            throw new Error(
+              `Transaction not confirmed after ${pollAttempts} attempts.`,
+            )
+          }
           await new Promise((r) => setTimeout(r, 1000))
           txResult = await server.getTransaction(result.hash)
         }

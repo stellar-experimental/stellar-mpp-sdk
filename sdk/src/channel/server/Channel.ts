@@ -223,9 +223,6 @@ export function channel(parameters: channel.Parameters) {
         })
       }
 
-      // Calculate the incremental payment
-      const incrementalAmount = commitmentAmount - previousCumulative
-
       return Receipt.from({
         method: 'stellar',
         reference: challengeRequest.methodDetails?.reference ?? challenge.id,
