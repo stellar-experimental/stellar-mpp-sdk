@@ -152,7 +152,14 @@ export function charge(parameters: charge.Parameters) {
           const sendResult = await server.sendTransaction(txToSubmit)
 
           let txResult = await server.getTransaction(sendResult.hash)
+          let txAttempts = 0
           while (txResult.status === 'NOT_FOUND') {
+            if (++txAttempts >= 60) {
+              throw new PaymentVerificationError(
+                `Transaction not found after ${txAttempts} attempts.`,
+                { hash: sendResult.hash },
+              )
+            }
             await new Promise((r) => setTimeout(r, 1000))
             txResult = await server.getTransaction(sendResult.hash)
           }
@@ -261,32 +268,37 @@ function verifySacTransfer(
   txResult: rpc.Api.GetSuccessfulTransactionResponse,
   expected: { amount: bigint; currency: string; recipient: string },
 ) {
-  if (txResult.envelopeXdr) {
-    const envelope =
-      typeof txResult.envelopeXdr === 'string'
-        ? xdr.TransactionEnvelope.fromXDR(txResult.envelopeXdr, 'base64')
-        : txResult.envelopeXdr
+  if (!txResult.envelopeXdr) {
+    throw new PaymentVerificationError(
+      'Transaction envelope is missing — cannot verify SAC transfer.',
+      {},
+    )
+  }
 
+  const envelope =
+    typeof txResult.envelopeXdr === 'string'
+      ? xdr.TransactionEnvelope.fromXDR(txResult.envelopeXdr, 'base64')
+      : txResult.envelopeXdr
+
+  // Determine network passphrase — try testnet first, then mainnet
+  let innerTx: Transaction | null = null
+  for (const np of [NETWORK_PASSPHRASE.testnet, NETWORK_PASSPHRASE.public]) {
     try {
-      // Determine network passphrase — try testnet first, then mainnet
-      let innerTx: Transaction | null = null
-      for (const np of [NETWORK_PASSPHRASE.testnet, NETWORK_PASSPHRASE.public]) {
-        try {
-          innerTx = new Transaction(envelope, np)
-          break
-        } catch {
-          continue
-        }
-      }
-
-      if (innerTx) {
-        verifyFromRawOps(innerTx, expected)
-        return
-      }
+      innerTx = new Transaction(envelope, np)
+      break
     } catch {
-      // Fall through — cannot verify envelope
+      continue
     }
   }
+
+  if (!innerTx) {
+    throw new PaymentVerificationError(
+      'Could not parse transaction envelope — cannot verify SAC transfer.',
+      {},
+    )
+  }
+
+  verifyFromRawOps(innerTx, expected)
 }
 
 function scValToBigInt(val: xdr.ScVal): bigint {
