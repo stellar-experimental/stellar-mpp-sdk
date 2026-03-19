@@ -207,46 +207,42 @@ function verifyFromRawOps(
   tx: Transaction,
   expected: { amount: bigint; currency: string; recipient: string },
 ) {
-  // Use the high-level operations API which safely handles Soroban-prepared txs
-  const ops = tx.operations
-
   let found = false
+  const xdrEnvelope = tx.toXDR()
+  const envelope = xdr.TransactionEnvelope.fromXDR(xdrEnvelope, 'base64')
+  const txBody = envelope.v1().tx()
+  const ops = txBody.operations()
 
-  for (const op of ops) {
-    if (op.type !== 'invokeHostFunction') continue
-
-    // Access the raw XDR for this operation to inspect the contract invocation
-    try {
-      const rawOp = (op as any).rawBody ?? extractRawOp(tx, op)
-      if (!rawOp) continue
-
-      const hostFn = rawOp.invokeHostFunctionOp().hostFunction()
-      if (hostFn.switch().value !== xdr.HostFunctionType.hostFunctionTypeInvokeContract().value) {
-        continue
-      }
-
-      const invokeArgs = hostFn.invokeContract()
-      const contractAddress = Address.fromScAddress(
-        invokeArgs.contractAddress(),
-      ).toString()
-      const functionName = invokeArgs.functionName().toString()
-      const args = invokeArgs.args()
-
-      if (functionName !== 'transfer') continue
-      if (contractAddress !== expected.currency) continue
-      if (args.length < 3) continue
-
-      const toAddress = Address.fromScVal(args[1]).toString()
-      if (toAddress !== expected.recipient) continue
-
-      const amountVal = scValToBigInt(args[2])
-      if (amountVal !== expected.amount) continue
-
-      found = true
-      break
-    } catch {
+  for (let i = 0; i < ops.length; i++) {
+    const opBody = ops[i].body()
+    if (opBody.switch().value !== xdr.OperationType.invokeHostFunction().value) {
       continue
     }
+
+    const hostFn = opBody.invokeHostFunctionOp().hostFunction()
+    if (hostFn.switch().value !== xdr.HostFunctionType.hostFunctionTypeInvokeContract().value) {
+      continue
+    }
+
+    const invokeArgs = hostFn.invokeContract()
+    const contractAddress = Address.fromScAddress(
+      invokeArgs.contractAddress(),
+    ).toString()
+    const functionName = invokeArgs.functionName().toString()
+    const args = invokeArgs.args()
+
+    if (functionName !== 'transfer') continue
+    if (contractAddress !== expected.currency) continue
+    if (args.length < 3) continue
+
+    const toAddress = Address.fromScVal(args[1]).toString()
+    if (toAddress !== expected.recipient) continue
+
+    const amountVal = scValToBigInt(args[2])
+    if (amountVal !== expected.amount) continue
+
+    found = true
+    break
   }
 
   if (!found) {
@@ -258,30 +254,6 @@ function verifyFromRawOps(
         amount: expected.amount.toString(),
       },
     )
-  }
-}
-
-/**
- * Extract the raw XDR OperationBody for an operation by index.
- */
-function extractRawOp(tx: Transaction, op: any): xdr.OperationBody | null {
-  try {
-    const env = tx.toEnvelope()
-    const txBody = env.v1().tx()
-    const rawOps = txBody.operations()
-    const idx = tx.operations.indexOf(op)
-    if (idx >= 0 && idx < rawOps.length) {
-      return rawOps[idx].body()
-    }
-    // If indexOf didn't find it, scan for invokeHostFunction ops
-    for (const rawOp of rawOps) {
-      if (rawOp.body().switch().value === xdr.OperationType.invokeHostFunction().value) {
-        return rawOp.body()
-      }
-    }
-    return null
-  } catch {
-    return null
   }
 }
 
@@ -318,20 +290,38 @@ function verifySacTransfer(
 }
 
 function scValToBigInt(val: xdr.ScVal): bigint {
-  switch (val.switch().value) {
-    case xdr.ScValType.scvI128().value: {
-      const parts = val.i128()
-      const hi = BigInt(parts.hi().toString())
-      const lo = BigInt(parts.lo().toString())
-      return (hi << 64n) | lo
-    }
-    case xdr.ScValType.scvU64().value:
-      return BigInt(val.u64().toString())
-    case xdr.ScValType.scvI64().value:
-      return BigInt(val.i64().toString())
-    default:
-      throw new Error(`Cannot convert ScVal type ${val.switch().name} to BigInt`)
+  const switchValue = val.switch().value
+  // scvU32 = 3
+  if (switchValue === xdr.ScValType.scvU32().value) {
+    return BigInt(val.u32())
   }
+  // scvI32 = 4
+  if (switchValue === xdr.ScValType.scvI32().value) {
+    return BigInt(val.i32())
+  }
+  // scvU64 = 5
+  if (switchValue === xdr.ScValType.scvU64().value) {
+    return BigInt(val.u64().toString())
+  }
+  // scvI64 = 6
+  if (switchValue === xdr.ScValType.scvI64().value) {
+    return BigInt(val.i64().toString())
+  }
+  // scvU128 = 9
+  if (switchValue === xdr.ScValType.scvU128().value) {
+    const parts = val.u128()
+    const hi = BigInt(parts.hi().toString())
+    const lo = BigInt(parts.lo().toString())
+    return (hi << 64n) | lo
+  }
+  // scvI128 = 10
+  if (switchValue === xdr.ScValType.scvI128().value) {
+    const parts = val.i128()
+    const hi = BigInt(parts.hi().toString())
+    const lo = BigInt(parts.lo().toString())
+    return (hi << 64n) | lo
+  }
+  throw new Error(`Cannot convert ScVal type ${switchValue} to BigInt`)
 }
 
 // ---------------------------------------------------------------------------
