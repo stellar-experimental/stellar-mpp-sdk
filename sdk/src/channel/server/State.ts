@@ -2,7 +2,6 @@ import {
   Address,
   Contract,
   TransactionBuilder,
-  nativeToScVal,
   rpc,
   xdr,
 } from '@stellar/stellar-sdk'
@@ -110,9 +109,12 @@ export async function getChannelState(
     ])
 
   const balance = scValToI128(balanceVal!)
-  const refundWaitingPeriod = balanceVal
-    ? waitingPeriodVal!.u32()
-    : 0
+  if (!waitingPeriodVal) {
+    throw new Error(
+      `Failed to simulate refund_waiting_period on channel ${channelAddress}: missing return value`,
+    )
+  }
+  const refundWaitingPeriod = waitingPeriodVal.u32()
   const token = Address.fromScVal(tokenVal!).toString()
   const from = Address.fromScVal(fromVal!).toString()
   const to = Address.fromScVal(toVal!).toString()
