@@ -297,6 +297,32 @@ describe('stellar server charge verification', () => {
     ).rejects.toThrow('Transaction envelope is missing')
   })
 
+  it('signature path: throws when envelope XDR is malformed', async () => {
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: 'not-valid-base64-xdr!!!',
+    })
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: TEST_CONTRACT,
+    })
+
+    const credential = makeSignatureCredential({
+      hash: 'bad-xdr-hash',
+      amount: '1000000',
+      currency: TEST_CONTRACT,
+      recipient: RECIPIENT,
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('Transaction envelope could not be decoded')
+  })
+
   it('signature path: throws when tx is not successful', async () => {
     mockGetTransaction.mockResolvedValueOnce({
       status: 'FAILED',

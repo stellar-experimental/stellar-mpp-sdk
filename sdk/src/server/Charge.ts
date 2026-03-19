@@ -275,10 +275,19 @@ function verifySacTransfer(
     )
   }
 
-  const envelope =
-    typeof txResult.envelopeXdr === 'string'
-      ? xdr.TransactionEnvelope.fromXDR(txResult.envelopeXdr, 'base64')
-      : txResult.envelopeXdr
+  let envelope: xdr.TransactionEnvelope
+  if (typeof txResult.envelopeXdr === 'string') {
+    try {
+      envelope = xdr.TransactionEnvelope.fromXDR(txResult.envelopeXdr, 'base64')
+    } catch {
+      throw new PaymentVerificationError(
+        'Transaction envelope could not be decoded — cannot verify SAC transfer.',
+        {},
+      )
+    }
+  } else {
+    envelope = txResult.envelopeXdr
+  }
 
   // Determine network passphrase — try testnet first, then mainnet
   let innerTx: Transaction | null = null
