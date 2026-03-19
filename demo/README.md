@@ -202,3 +202,58 @@ No on-chain transactions happen during payments. The server can close the channe
 | `MPP_SECRET_KEY` | No | MPP signing key (defaults to `stellar-mpp-channel-demo-secret`) |
 | `PORT` | No | Server port (defaults to `3001`) |
 | `SERVER_URL` | No | Client target URL (defaults to `http://localhost:3001`) |
+
+---
+
+## Channel E2E Demo (full lifecycle with on-chain settlement)
+
+Runs the **complete channel lifecycle** from scratch: create accounts → deploy contract → off-chain payments → on-chain close. All transactions are reported with Stellar Expert links for verification.
+
+See [channel-e2e-output.txt](channel-e2e-output.txt) for example output from a real testnet run.
+
+### Prerequisites
+
+- Everything from the channel demo above, plus:
+- [stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli) installed
+- The one-way-channel contract WASM file (build from the [one-way-channel repo](https://github.com/stellar-experimental/one-way-channel))
+
+### Build the WASM
+
+```bash
+git clone https://github.com/stellar-experimental/one-way-channel
+cd one-way-channel
+stellar contract build
+# WASM is at: target/wasm32v1-none/release/channel.wasm
+```
+
+### Run the demo
+
+```bash
+WASM_PATH=path/to/channel.wasm ./demo/run-channel-e2e.sh
+```
+
+The script will:
+1. Create fresh funded testnet accounts (funder + recipient)
+2. Generate a random ed25519 commitment keypair
+3. Upload WASM and deploy the channel contract (on-chain)
+4. Run 2 off-chain MPP payments via the SDK (no on-chain tx)
+5. Close the channel on-chain — settling funds to recipient, refunding remainder to funder
+6. Print all Stellar Expert links for transaction verification
+
+### What happens on-chain
+
+| Step | Transaction | On-chain? |
+|------|------------|-----------|
+| Create accounts | Friendbot funding | Yes |
+| Upload WASM | `uploadWasm` | Yes |
+| Deploy contract | `__constructor` + deposit | Yes |
+| Payment 1 | Commitment signature only | **No** |
+| Payment 2 | Commitment signature only | **No** |
+| Close channel | `close(amount, sig)` | Yes |
+
+### E2E environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `WASM_PATH` | Yes | Path to the compiled `channel.wasm` file |
+| `PORT` | No | Server port (defaults to `3002`) |

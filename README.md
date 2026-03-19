@@ -2,7 +2,6 @@
 
 Stellar blockchain payment method for the [Machine Payments Protocol (MPP)](https://mpp.dev). Enables machine-to-machine payments using Soroban SAC token transfers on the Stellar network, with optional support for [one-way payment channels](https://github.com/stellar-experimental/one-way-channel) for high-frequency off-chain payments.
 
-Built on [mppx](https://github.com/nicholasgriffintn/mppx) — the TypeScript SDK for MPP.
 
 ## Payment modes
 
@@ -357,6 +356,17 @@ STELLAR_SECRET=S... pnpm demo:client      # Terminal 2
 
 Browser UI available at `http://localhost:3000/demo` once the server is running.
 
+### Channel end-to-end (with on-chain settlement)
+
+Run the full channel lifecycle — deploy, off-chain payments, and on-chain close — in a single command:
+
+```bash
+# Build the one-way-channel WASM first (see https://github.com/stellar-experimental/one-way-channel)
+WASM_PATH=path/to/channel.wasm ./demo/run-channel-e2e.sh
+```
+
+See [demo/channel-e2e-output.txt](demo/channel-e2e-output.txt) for example output with Stellar Expert links.
+
 ## Project structure
 
 ```
@@ -386,10 +396,16 @@ stellar-mpp-sdk/
 │           └── index.ts
 ├── examples/
 │   ├── server.ts           # Example server (Node http + tsx)
-│   └── client.ts           # Example client with progress events
+│   ├── client.ts           # Example client with progress events
+│   ├── channel-server.ts   # Channel server example
+│   ├── channel-client.ts   # Channel client example
+│   └── channel-close.ts    # On-chain channel close example
 ├── demo/
 │   ├── index.html          # Interactive browser UI (served at /demo)
-│   ├── run.sh              # All-in-one demo script
+│   ├── run.sh              # All-in-one charge demo script
+│   ├── run-channel.sh      # Off-chain channel demo script
+│   ├── run-channel-e2e.sh  # Full lifecycle e2e demo (deploy → pay → close)
+│   ├── channel-e2e-output.txt # Example e2e output with Stellar Expert links
 │   └── README.md           # Demo setup instructions
 └── dist/                   # Compiled output
 ```

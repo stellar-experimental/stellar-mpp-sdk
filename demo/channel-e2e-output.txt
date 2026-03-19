@@ -1,0 +1,117 @@
+═══════════════════════════════════════════════════════════
+  Stellar MPP Channel — End-to-End Demo
+  Full lifecycle: deploy → off-chain payments → on-chain close
+═══════════════════════════════════════════════════════════
+
+Demo ID: mpp-e2e-1773942774
+
+═══ Step 1: Creating funded testnet accounts ═══
+
+  Creating funder account...
+  ✔ Funder:    GDGGJUVCIE3M4ZSCWJV4EW372P3OQ5GKBSCZFOLHMT5ZLXTZMTKKFZHP
+  Creating recipient account...
+  ✔ Recipient: GAHRDOKGD26XPWB2GNWFOCDJE5ZSJECLHAFJRLDEBZPVE6VR3HDLCJTV
+
+═══ Step 2: Generating ed25519 commitment keypair ═══
+
+  ✔ Public:  645b0ea155d757339764c75b2659886f5099c2bd3b9f6d49898a98c011147f1a
+  ✔ Secret:  a6e7a144...2dd66dbd (hidden)
+
+═══ Step 3: Deploying channel contract ═══
+
+  Uploading WASM...
+  ✔ WASM hash: f9b7fdf860ce427097226f45f72b336763ca55d46c967076a94eb9682d8c484b
+  Deploying channel (deposit: 10000000 stroops = 1.0 XLM)...
+  ✔ Contract:  CB2B347IE6N5C2EDV2SGUQ22KM6WFL6CWFMPFOTUYNUITVXUREOYPLAD
+
+  Channel balance after deploy:
+    "10000000" stroops
+
+═══ Step 4: Off-chain MPP payments (2 requests × 0.1 XLM) ═══
+
+  Starting channel server on port 3002...
+  🚀 Stellar MPP Channel server running on http://localhost:3002
+     Channel contract: CB2B347IE6N5C2EDV2SGUQ22KM6WFL6CWFMPFOTUYNUITVXUREOYPLAD
+
+  Running channel client (2 off-chain payments)...
+
+  Using commitment key: GBSFWDVBKXLVOM4XMTDVWJSZRBXVBGOCXU5Z63KJRGFJRQARCR7RUMB3
+
+  Request 1:
+    [17:53:26.904] 💳 Challenge received — 1000000 stroops via channel CB2B347IE6N5...
+    [17:53:26.904]    Cumulative amount will be: 1000000 stroops
+    [17:53:27.217] ✍️  Signing commitment...
+    [17:53:27.218] ✅ Commitment signed (cumulative: 1000000 stroops)
+
+    --- Response (200) ---
+    {
+      "message": "Payment verified via channel commitment — here is your content.",
+      "timestamp": "2026-03-19T17:53:27.579Z",
+      "note": "No on-chain transaction was needed for this payment!"
+    }
+
+  Request 2:
+    [17:53:27.591] 💳 Challenge received — 1000000 stroops via channel CB2B347IE6N5...
+    [17:53:27.591]    Cumulative amount will be: 2000000 stroops
+    [17:53:27.794] ✍️  Signing commitment...
+    [17:53:27.795] ✅ Commitment signed (cumulative: 2000000 stroops)
+
+    --- Response 2 (200) ---
+    {
+      "message": "Payment verified via channel commitment — here is your content.",
+      "timestamp": "2026-03-19T17:53:27.993Z",
+      "note": "No on-chain transaction was needed for this payment!"
+    }
+
+  ✔ Server stopped. Off-chain phase complete.
+  Cumulative committed: 2000000 stroops (0.2 XLM)
+
+═══ Step 5: On-chain settlement — closing channel ═══
+
+  Closing channel CB2B347IE6N5C2EDV2SGUQ22KM6WFL6CWFMPFOTUYNUITVXUREOYPLAD
+    Amount: 2000000 stroops (0.2 XLM)
+    Close key: GAHRDOKGD26XPWB2GNWFOCDJE5ZSJECLHAFJRLDEBZPVE6VR3HDLCJTV
+
+  1. Simulating prepare_commitment...
+     Commitment: 0000001100000001000000040000000f00000006...
+  2. Signing commitment...
+     Signature: 567c6748ed5a06a849f040a762a7e513a7f4d99e...
+  3. Submitting close transaction...
+
+  ═══════════════════════════════════════════════════════
+    ✅ Channel closed on-chain!
+    Transaction: c6c54df5be7b469e1259e85a05c8b7d5fdc71bebb1f937c4b5e3b540111d6463
+    Verify:      https://stellar.expert/explorer/testnet/tx/c6c54df5be7b469e1259e85a05c8b7d5fdc71bebb1f937c4b5e3b540111d6463
+  ═══════════════════════════════════════════════════════
+
+═══ Step 6: Final channel state ═══
+
+  Channel balance after close:
+    "0" stroops
+
+  (close transferred 2000000 to recipient, auto-refunded remainder to funder)
+
+═══════════════════════════════════════════════════════════════════
+  Demo Complete — Verify on Stellar Expert (testnet)
+═══════════════════════════════════════════════════════════════════
+
+  Accounts:
+    Funder:    https://stellar.expert/explorer/testnet/account/GDGGJUVCIE3M4ZSCWJV4EW372P3OQ5GKBSCZFOLHMT5ZLXTZMTKKFZHP
+    Recipient: https://stellar.expert/explorer/testnet/account/GAHRDOKGD26XPWB2GNWFOCDJE5ZSJECLHAFJRLDEBZPVE6VR3HDLCJTV
+
+  Contract:
+    Channel:   https://stellar.expert/explorer/testnet/contract/CB2B347IE6N5C2EDV2SGUQ22KM6WFL6CWFMPFOTUYNUITVXUREOYPLAD
+
+  What happened:
+    1. Funder deployed channel contract with 10000000 stroops deposit
+    2. Client made 2 off-chain payments (0.1 XLM each) — no on-chain tx
+    3. Recipient closed channel for 2000000 stroops on-chain
+       → 2000000 transferred to recipient
+       → remainder auto-refunded to funder
+
+  On-chain transactions to verify:
+    • WASM upload         — see funder account history
+    • Contract deploy     — https://stellar.expert/explorer/testnet/tx/9c7db8b91bc3768d6ec1bbf063f0b95062f27c485afa0e210707fd3fb509bc3f
+    • Channel close       — https://stellar.expert/explorer/testnet/tx/c6c54df5be7b469e1259e85a05c8b7d5fdc71bebb1f937c4b5e3b540111d6463
+
+═══════════════════════════════════════════════════════════════════
