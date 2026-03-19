@@ -207,41 +207,46 @@ function verifyFromRawOps(
   tx: Transaction,
   expected: { amount: bigint; currency: string; recipient: string },
 ) {
-  const env = tx.toEnvelope()
-  const txBody = env.v1().tx()
-  const ops = txBody.operations()
+  // Use the high-level operations API which safely handles Soroban-prepared txs
+  const ops = tx.operations
 
   let found = false
 
   for (const op of ops) {
-    if (op.body().switch().name !== 'invokeHostFunction') {
+    if (op.type !== 'invokeHostFunction') continue
+
+    // Access the raw XDR for this operation to inspect the contract invocation
+    try {
+      const rawOp = (op as any).rawBody ?? extractRawOp(tx, op)
+      if (!rawOp) continue
+
+      const hostFn = rawOp.invokeHostFunctionOp().hostFunction()
+      if (hostFn.switch().value !== xdr.HostFunctionType.hostFunctionTypeInvokeContract().value) {
+        continue
+      }
+
+      const invokeArgs = hostFn.invokeContract()
+      const contractAddress = Address.fromScAddress(
+        invokeArgs.contractAddress(),
+      ).toString()
+      const functionName = invokeArgs.functionName().toString()
+      const args = invokeArgs.args()
+
+      if (functionName !== 'transfer') continue
+      if (contractAddress !== expected.currency) continue
+      if (args.length < 3) continue
+
+      const toAddress = Address.fromScVal(args[1]).toString()
+      if (toAddress !== expected.recipient) continue
+
+      const amountVal = scValToBigInt(args[2])
+      if (amountVal !== expected.amount) continue
+
+      found = true
+      break
+    } catch {
       continue
     }
-
-    const hostFn = op.body().invokeHostFunctionOp().hostFunction()
-    if (hostFn.switch().name !== 'hostFunctionTypeInvokeContract') {
-      continue
-    }
-
-    const invokeArgs = hostFn.invokeContract()
-    const contractAddress = Address.fromScAddress(
-      invokeArgs.contractAddress(),
-    ).toString()
-    const functionName = invokeArgs.functionName().toString()
-    const args = invokeArgs.args()
-
-    if (functionName !== 'transfer') continue
-    if (contractAddress !== expected.currency) continue
-    if (args.length < 3) continue
-
-    const toAddress = Address.fromScVal(args[1]).toString()
-    if (toAddress !== expected.recipient) continue
-
-    const amountVal = scValToBigInt(args[2])
-    if (amountVal !== expected.amount) continue
-
-    found = true
-    break
   }
 
   if (!found) {
@@ -256,6 +261,30 @@ function verifyFromRawOps(
   }
 }
 
+/**
+ * Extract the raw XDR OperationBody for an operation by index.
+ */
+function extractRawOp(tx: Transaction, op: any): xdr.OperationBody | null {
+  try {
+    const env = tx.toEnvelope()
+    const txBody = env.v1().tx()
+    const rawOps = txBody.operations()
+    const idx = tx.operations.indexOf(op)
+    if (idx >= 0 && idx < rawOps.length) {
+      return rawOps[idx].body()
+    }
+    // If indexOf didn't find it, scan for invokeHostFunction ops
+    for (const rawOp of rawOps) {
+      if (rawOp.body().switch().value === xdr.OperationType.invokeHostFunction().value) {
+        return rawOp.body()
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 function verifySacTransfer(
   txResult: rpc.Api.GetSuccessfulTransactionResponse,
   expected: { amount: bigint; currency: string; recipient: string },
@@ -266,13 +295,24 @@ function verifySacTransfer(
         ? xdr.TransactionEnvelope.fromXDR(txResult.envelopeXdr, 'base64')
         : txResult.envelopeXdr
 
-    const innerTx = envelope.v1()
-      ? new Transaction(envelope, NETWORK_PASSPHRASE.testnet)
-      : null
+    try {
+      // Determine network passphrase — try testnet first, then mainnet
+      let innerTx: Transaction | null = null
+      for (const np of [NETWORK_PASSPHRASE.testnet, NETWORK_PASSPHRASE.public]) {
+        try {
+          innerTx = new Transaction(envelope, np)
+          break
+        } catch {
+          continue
+        }
+      }
 
-    if (innerTx) {
-      verifyFromRawOps(innerTx, expected)
-      return
+      if (innerTx) {
+        verifyFromRawOps(innerTx, expected)
+        return
+      }
+    } catch {
+      // Fall through — cannot verify envelope
     }
   }
 }

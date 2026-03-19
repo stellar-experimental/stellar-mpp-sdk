@@ -18,17 +18,17 @@ fi
 # ── Prompt for keys if not set ────────────────────────────────────────────────
 if [ -z "${STELLAR_RECIPIENT:-}" ]; then
   echo ""
-  echo "Enter your Stellar public key (recipient):"
-  read -rp "  STELLAR_RECIPIENT=G" recipient
-  export STELLAR_RECIPIENT="G${recipient}"
+  echo "Enter your Stellar public key (recipient, starts with G):"
+  read -rp "  STELLAR_RECIPIENT=" recipient
+  export STELLAR_RECIPIENT="${recipient}"
 fi
 
 if [ -z "${STELLAR_SECRET:-}" ]; then
   echo ""
-  echo "Enter your Stellar secret key (payer):"
-  read -rsp "  STELLAR_SECRET=S" secret
+  echo "Enter your Stellar secret key (payer, starts with S):"
+  read -rsp "  STELLAR_SECRET=" secret
   echo ""
-  export STELLAR_SECRET="S${secret}"
+  export STELLAR_SECRET="${secret}"
 fi
 
 echo ""
@@ -40,6 +40,15 @@ echo "════════════════════════�
 echo ""
 
 # ── Start server in background ────────────────────────────────────────────────
+PORT=${PORT:-3000}
+
+# Kill any existing process on the port
+if lsof -ti:$PORT &>/dev/null; then
+  echo "⚠ Port $PORT in use — freeing it..."
+  lsof -ti:$PORT | xargs kill -9 2>/dev/null
+  sleep 1
+fi
+
 echo "▶ Starting server..."
 npx tsx examples/server.ts &
 SERVER_PID=$!
