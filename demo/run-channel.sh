@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 #
-# Stellar MPP Demo — run server + client end-to-end
+# Stellar MPP Channel Demo — run channel server + client end-to-end
+#
+# Uses the one-way payment channel for off-chain micro-payments.
+# No on-chain transaction per payment — only commitment signatures.
 #
 # Usage:
-#   ./demo/run.sh                    # uses defaults (prompts if no keys set)
-#   STELLAR_RECIPIENT=G... STELLAR_SECRET=S... ./demo/run.sh
+#   ./demo/run-channel.sh                    # prompts for keys
+#   CHANNEL_CONTRACT=C... COMMITMENT_PUBKEY=... COMMITMENT_SECRET=... ./demo/run-channel.sh
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -16,31 +19,45 @@ if ! command -v npx &>/dev/null; then
 fi
 
 # ── Prompt for keys if not set ────────────────────────────────────────────────
-if [ -z "${STELLAR_RECIPIENT:-}" ]; then
+if [ -z "${CHANNEL_CONTRACT:-}" ]; then
   echo ""
-  echo "Enter your Stellar public key (recipient, starts with G):"
-  read -rp "  STELLAR_RECIPIENT=" recipient
-  export STELLAR_RECIPIENT="${recipient}"
+  echo "Enter the channel contract address (starts with C, 56 chars):"
+  read -rp "  CHANNEL_CONTRACT=" channel_contract
+  export CHANNEL_CONTRACT="${channel_contract}"
 fi
 
-if [ -z "${STELLAR_SECRET:-}" ]; then
+if [ -z "${COMMITMENT_PUBKEY:-}" ]; then
   echo ""
-  echo "Enter your Stellar secret key (payer, starts with S):"
-  read -rsp "  STELLAR_SECRET=" secret
+  echo "Enter the ed25519 commitment public key (64 hex chars):"
+  read -rp "  COMMITMENT_PUBKEY=" commitment_pubkey
+  export COMMITMENT_PUBKEY="${commitment_pubkey}"
+fi
+
+if [ -z "${COMMITMENT_SECRET:-}" ]; then
   echo ""
-  export STELLAR_SECRET="${secret}"
+  echo "Enter the ed25519 commitment secret key (64 hex chars):"
+  read -rsp "  COMMITMENT_SECRET=" commitment_secret
+  echo ""
+  export COMMITMENT_SECRET="${commitment_secret}"
+fi
+
+if [ -z "${SOURCE_ACCOUNT:-}" ]; then
+  echo ""
+  echo "Enter a funded testnet Stellar account (G..., 56 chars) for simulations:"
+  read -rp "  SOURCE_ACCOUNT=" source_account
+  export SOURCE_ACCOUNT="${source_account}"
 fi
 
 echo ""
 echo "══════════════════════════════════════════════════"
-echo "  Stellar MPP Demo"
-echo "  Recipient: ${STELLAR_RECIPIENT:0:8}...${STELLAR_RECIPIENT: -4}"
-echo "  Payer:     ${STELLAR_SECRET:0:4}****"
+echo "  Stellar MPP Channel Demo"
+echo "  Contract: ${CHANNEL_CONTRACT:0:12}...${CHANNEL_CONTRACT: -4}"
+echo "  Commit key: ${COMMITMENT_PUBKEY:0:16}..."
 echo "══════════════════════════════════════════════════"
 echo ""
 
 # ── Start server in background ────────────────────────────────────────────────
-PORT=${PORT:-3000}
+PORT=${PORT:-3001}
 
 # Kill any existing process on the port
 if lsof -ti:$PORT &>/dev/null; then
@@ -49,30 +66,31 @@ if lsof -ti:$PORT &>/dev/null; then
   sleep 1
 fi
 
-echo "▶ Starting server..."
-npx tsx examples/server.ts &
+echo "▶ Starting channel server on port $PORT..."
+PORT=$PORT npx tsx examples/channel-server.ts &
 SERVER_PID=$!
 trap "kill $SERVER_PID 2>/dev/null" EXIT
 
 # Wait for server to be ready
 for i in $(seq 1 10); do
-  if curl -s http://localhost:3000 >/dev/null 2>&1; then
+  if curl -s http://localhost:$PORT >/dev/null 2>&1; then
     break
   fi
   sleep 0.5
 done
 
 echo ""
-echo "▶ Running client..."
+echo "▶ Running channel client (2 requests to show cumulative growth)..."
 echo ""
 
 # ── Run client ────────────────────────────────────────────────────────────────
-npx tsx examples/client.ts
+SERVER_URL="http://localhost:$PORT" npx tsx examples/channel-client.ts
 
 echo ""
 echo "══════════════════════════════════════════════════"
-echo "  Demo complete!"
-echo "  UI also available at: http://localhost:3000/demo"
+echo "  Channel Demo complete!"
+echo "  Two payments made via off-chain commitments."
+echo "  No on-chain transactions were needed!"
 echo "══════════════════════════════════════════════════"
 echo ""
 echo "Press Ctrl+C to stop the server."

@@ -1,0 +1,41 @@
+sagar@sagar-K9FV9RT447-mbp stellar-mpp-sdk % ./demo/run.sh
+
+Enter your Stellar public key (recipient, starts with G):
+  STELLAR_RECIPIENT=GC6ZBCI6M6PMBMRCZQMOGCUOZKFREM7P6G2NC3TD5FMYX3YLPAACQMJY
+
+Enter your Stellar secret key (payer, starts with S):
+  STELLAR_SECRET=
+
+══════════════════════════════════════════════════
+  Stellar MPP Demo
+  Recipient: GC6ZBCI6...QMJY
+  Payer:     SC6Z****
+══════════════════════════════════════════════════
+
+▶ Starting server...
+🚀 Stellar MPP server running on http://localhost:3000
+🌐 Demo UI available at http://localhost:3000/demo
+   Recipient: GC6ZBCI6M6PMBMRCZQMOGCUOZKFREM7P6G2NC3TD5FMYX3YLPAACQMJY
+
+▶ Running client...
+
+Using Stellar account: GDZYARK2HZX2XP7BDOCK2RLD4IE5HQAZWFHQ3K5TEAEWAIUNB3LRHDYT
+
+Requesting http://localhost:3000...
+
+[17:58:19.451] 💳 Challenge received — 0.0100000 to GC6ZBCI6M6PMBMRCZQMOGCUOZKFREM7P6G2NC3TD5FMYX3YLPAACQMJY
+[17:58:19.758] ✍️  Signing transaction...
+[17:58:19.760] ✅ Transaction signed (1008 bytes XDR)
+
+--- Response (200) ---
+{
+  "message": "Payment verified — here is your premium content.",
+  "timestamp": "2026-03-19T17:58:22.230Z"
+}
+
+══════════════════════════════════════════════════
+  Demo complete!
+  UI also available at: http://localhost:3000/demo
+══════════════════════════════════════════════════
+
+Press Ctrl+C to stop the server.

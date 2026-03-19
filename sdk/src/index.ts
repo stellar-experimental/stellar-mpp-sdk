@@ -1,4 +1,5 @@
 export * as Methods from './Methods.js'
+export * as ChannelMethods from './channel/Methods.js'
 export {
   DEFAULT_DECIMALS,
   DEFAULT_FEE,
