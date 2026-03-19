@@ -58,7 +58,8 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
 
   let cursor: string | undefined
   let startLedger: number | undefined
-  let timer: ReturnType<typeof setInterval> | undefined
+  let timerResolve: (() => void) | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
   let stopped = false
 
   async function init() {
@@ -93,6 +94,9 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
 
       const response = await server.getEvents(request)
 
+      // Guard: do not emit events after shutdown
+      if (stopped) return
+
       for (const event of response.events) {
         const parsed = parseEvent(event)
         if (parsed) {
@@ -100,9 +104,9 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
         }
       }
 
-      if (response.events.length > 0) {
-        cursor = response.cursor
-      }
+      // Always advance the cursor so subsequent polls don't re-scan
+      // the same ledger range even when there are no matching events.
+      cursor = response.cursor
     } catch (error) {
       if (!stopped) {
         onError?.(error instanceof Error ? error : new Error(String(error)))
@@ -113,7 +117,27 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
   function stop() {
     stopped = true
     if (timer != null) {
-      clearInterval(timer)
+      clearTimeout(timer)
+      timer = undefined
+    }
+    // Unblock the sleep promise so the loop can exit promptly
+    timerResolve?.()
+    timerResolve = undefined
+  }
+
+  async function runLoop() {
+    while (!stopped) {
+      await poll()
+      if (stopped) break
+      await new Promise<void>((resolve) => {
+        timerResolve = resolve
+        timer = setTimeout(() => {
+          timerResolve = undefined
+          timer = undefined
+          resolve()
+        }, intervalMs)
+      })
+      timerResolve = undefined
       timer = undefined
     }
   }
@@ -126,9 +150,8 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
     signal.addEventListener('abort', stop, { once: true })
   }
 
-  // Start polling immediately, then on interval
-  void poll()
-  timer = setInterval(() => void poll(), intervalMs)
+  // Start the polling loop immediately
+  void runLoop()
 
   return stop
 }

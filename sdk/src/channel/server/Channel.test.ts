@@ -615,4 +615,25 @@ describe('stellar server channel dispute detection', () => {
     expect(receipt.status).toBe('success')
     expect(mockGetChannelState).not.toHaveBeenCalled()
   })
+
+  it('throws a configuration error when checkOnChainState is true but sourceAccount is missing', async () => {
+    const credential = makeCredential({
+      amount: '1000000',
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      checkOnChainState: true,
+      // sourceAccount intentionally omitted
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('checkOnChainState requires sourceAccount to be set')
+  })
 })

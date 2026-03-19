@@ -125,7 +125,13 @@ export function channel(parameters: channel.Parameters) {
       // close_start has been called on-chain. This mirrors Tempo's
       // close_requested_at guard — each incoming voucher refreshes
       // our view of the channel without requiring a background poller.
-      if (checkOnChainState && sourceAccount) {
+      if (checkOnChainState) {
+        if (!sourceAccount) {
+          throw new Error(
+            'checkOnChainState requires sourceAccount to be set. ' +
+            'Provide a funded Stellar account address (G...) to use for on-chain simulations.',
+          )
+        }
         try {
           const state = await getChannelState({
             channel: channelAddress,
@@ -452,7 +458,8 @@ export declare namespace channel {
     /**
      * When true, each verify call lazily reads on-chain state to detect
      * if `close_start` has been called (dispute detection). Requires
-     * `sourceAccount` to be set. @default false
+     * `sourceAccount` to be set — a configuration error is thrown if
+     * `sourceAccount` is missing when this is enabled. @default false
      */
     checkOnChainState?: boolean
     /**
