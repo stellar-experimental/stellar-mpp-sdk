@@ -1,5 +1,4 @@
 import {
-  Address,
   Contract,
   Keypair,
   TransactionBuilder,
@@ -47,18 +46,17 @@ export function channel(parameters: channel.Parameters) {
     decimals = DEFAULT_DECIMALS,
     network = 'testnet',
     rpcUrl,
+    sourceAccount,
     store,
-    withdrawKey,
   } = parameters
 
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
   const networkPassphrase = NETWORK_PASSPHRASE[network]
   const server = new rpc.Server(resolvedRpcUrl)
 
-  // Parse the commitment public key (accepts G... string or raw hex)
+  // Parse the commitment public key (accepts G... Stellar public key string or Keypair)
   const commitmentKeypair = (() => {
     if (typeof commitmentKeyParam === 'string') {
-      // Could be a Stellar public key (G...) — create a verify-only Keypair
       return Keypair.fromPublicKey(commitmentKeyParam)
     }
     return commitmentKeyParam
@@ -109,6 +107,20 @@ export function channel(parameters: channel.Parameters) {
       const payload = credential.payload
       const commitmentAmount = BigInt(payload.amount)
       const signatureHex = payload.signature
+
+      // Validate hex signature format
+      if (!/^[0-9a-f]+$/i.test(signatureHex) || signatureHex.length % 2 !== 0) {
+        throw new ChannelVerificationError(
+          'Invalid signature: not a valid hex string.',
+          { signature: signatureHex },
+        )
+      }
+      if (signatureHex.length !== 128) {
+        throw new ChannelVerificationError(
+          `Invalid signature length: expected 128 hex chars (64 bytes), got ${signatureHex.length}.`,
+          { length: String(signatureHex.length) },
+        )
+      }
       const signatureBytes = Buffer.from(signatureHex, 'hex')
 
       // Retrieve the previous cumulative amount
@@ -131,6 +143,19 @@ export function channel(parameters: channel.Parameters) {
         )
       }
 
+      // The commitment must cover the requested amount
+      const requestedAmount = BigInt(challengeRequest.amount)
+      if (commitmentAmount < previousCumulative + requestedAmount) {
+        throw new ChannelVerificationError(
+          `Commitment amount ${commitmentAmount} does not cover the requested amount ${requestedAmount} (previous cumulative: ${previousCumulative}).`,
+          {
+            commitmentAmount: commitmentAmount.toString(),
+            requestedAmount: requestedAmount.toString(),
+            previousCumulative: previousCumulative.toString(),
+          },
+        )
+      }
+
       // Verify: call prepare_commitment on the channel contract to
       // reconstruct the expected commitment bytes, then verify the
       // ed25519 signature.
@@ -141,7 +166,7 @@ export function channel(parameters: channel.Parameters) {
       )
 
       const account = await server.getAccount(
-        commitmentKeypair.publicKey(),
+        sourceAccount ?? commitmentKeypair.publicKey(),
       )
       const simTx = new TransactionBuilder(account, {
         fee: '100',
@@ -263,8 +288,16 @@ export async function withdraw(parameters: {
 
   const result = await server.sendTransaction(prepared)
 
+  const MAX_POLL_ATTEMPTS = 60
   let txResult = await server.getTransaction(result.hash)
+  let attempts = 0
   while (txResult.status === 'NOT_FOUND') {
+    if (++attempts >= MAX_POLL_ATTEMPTS) {
+      throw new ChannelVerificationError(
+        `Transaction not found after ${MAX_POLL_ATTEMPTS} attempts.`,
+        { hash: result.hash },
+      )
+    }
     await new Promise((r) => setTimeout(r, 1000))
     txResult = await server.getTransaction(result.hash)
   }
@@ -298,10 +331,14 @@ export declare namespace channel {
     network?: NetworkId
     /** Custom Soroban RPC URL. */
     rpcUrl?: string
+    /**
+     * Funded Stellar account address (G...) used as the source for
+     * read-only transaction simulations. If omitted, the commitment
+     * key's public key is used, which requires it to be a funded account.
+     */
+    sourceAccount?: string
     /** Store for replay protection and cumulative amount tracking. */
     store?: Store.Store
-    /** Keypair for signing on-chain withdraw transactions. */
-    withdrawKey?: Keypair
   }
 }
 

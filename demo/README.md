@@ -8,7 +8,7 @@ Two demo modes are available:
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 20+
 - A funded Stellar **testnet** account (create one at [Stellar Laboratory](https://laboratory.stellar.org/#account-creator?network=test))
 - `pnpm install` (from project root)
 - For the **channel demo**: a deployed [one-way-channel](https://github.com/stellar-experimental/one-way-channel) contract on testnet

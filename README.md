@@ -232,8 +232,8 @@ stellar.channel({
   network?: 'testnet' | 'public', // default: 'testnet'
   decimals?: number,              // default: 7
   rpcUrl?: string,                // custom Soroban RPC URL
+  sourceAccount?: string,         // funded G... address for simulations
   store?: Store.Store,            // replay protection + cumulative amount tracking
-  withdrawKey?: Keypair,          // keypair for on-chain withdrawals
 })
 ```
 
@@ -244,6 +244,7 @@ stellar.channel({
   commitmentKey?: Keypair,        // ed25519 Keypair for signing commitments
   commitmentSecret?: string,      // ed25519 secret key (S...)
   rpcUrl?: string,                // custom Soroban RPC URL
+  sourceAccount?: string,         // funded G... address for simulations
   onProgress?: (event) => void,   // lifecycle callback
 })
 ```

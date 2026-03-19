@@ -17,9 +17,9 @@ export const channel = Method.from({
     credential: {
       payload: z.object({
         /** Cumulative amount authorised by this commitment (base units). */
-        amount: z.string(),
-        /** Ed25519 signature over the commitment bytes. */
-        signature: z.string(),
+        amount: z.string().check(z.regex(/^\d+$/)),
+        /** Ed25519 signature over the commitment bytes (128 hex chars). */
+        signature: z.string().check(z.regex(/^[0-9a-f]{128}$/i)),
       }),
     },
     request: z.object({

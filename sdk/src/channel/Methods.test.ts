@@ -56,11 +56,39 @@ describe('channel method schema', () => {
   })
 
   it('credential payload accepts amount and signature', () => {
+    const validSig = 'a'.repeat(128)
     const result = channel.schema.credential.payload.parse({
       amount: '3000000',
-      signature: 'deadbeef',
+      signature: validSig,
     })
     expect(result.amount).toBe('3000000')
-    expect(result.signature).toBe('deadbeef')
+    expect(result.signature).toBe(validSig)
+  })
+
+  it('credential payload rejects non-numeric amount', () => {
+    expect(() =>
+      channel.schema.credential.payload.parse({
+        amount: 'abc',
+        signature: 'a'.repeat(128),
+      }),
+    ).toThrow()
+  })
+
+  it('credential payload rejects invalid hex signature', () => {
+    expect(() =>
+      channel.schema.credential.payload.parse({
+        amount: '1000000',
+        signature: 'not-hex',
+      }),
+    ).toThrow()
+  })
+
+  it('credential payload rejects wrong-length signature', () => {
+    expect(() =>
+      channel.schema.credential.payload.parse({
+        amount: '1000000',
+        signature: 'abcdef',
+      }),
+    ).toThrow()
   })
 })

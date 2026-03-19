@@ -67,4 +67,13 @@ describe('stellar server channel', () => {
     })
     expect(method.name).toBe('stellar')
   })
+
+  it('accepts sourceAccount parameter', () => {
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY.publicKey(),
+      sourceAccount: Keypair.random().publicKey(),
+    })
+    expect(method.name).toBe('stellar')
+  })
 })

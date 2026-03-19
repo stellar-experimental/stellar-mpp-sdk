@@ -1,10 +1,8 @@
 import {
-  Address,
   Contract,
   Keypair,
   nativeToScVal,
   rpc,
-  xdr,
 } from '@stellar/stellar-sdk'
 import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
@@ -43,7 +41,14 @@ export function channel(parameters: channel.Parameters) {
     commitmentSecret,
     onProgress,
     rpcUrl,
+    sourceAccount,
   } = parameters
+
+  if (!commitmentKeyParam && !commitmentSecret) {
+    throw new Error(
+      'Either commitmentKey or commitmentSecret must be provided.',
+    )
+  }
 
   const commitmentKey =
     commitmentKeyParam ?? Keypair.fromSecret(commitmentSecret!)
@@ -88,7 +93,9 @@ export function channel(parameters: channel.Parameters) {
       )
 
       // Simulate the call to get the commitment bytes
-      const account = await server.getAccount(commitmentKey.publicKey())
+      const account = await server.getAccount(
+        sourceAccount ?? commitmentKey.publicKey(),
+      )
       const { TransactionBuilder } = await import('@stellar/stellar-sdk')
       const simTx = new TransactionBuilder(account, {
         fee: '100',
@@ -158,6 +165,12 @@ export declare namespace channel {
     commitmentKey?: Keypair
     /** Custom Soroban RPC URL. Defaults based on network. */
     rpcUrl?: string
+    /**
+     * Funded Stellar account address (G...) used as the source for
+     * read-only transaction simulations. If omitted, the commitment
+     * key's public key is used, which requires it to be a funded account.
+     */
+    sourceAccount?: string
     /** Callback invoked at each lifecycle stage. */
     onProgress?: (event: ProgressEvent) => void
   }

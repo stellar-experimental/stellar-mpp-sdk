@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 
 # ── Check prerequisites ──────────────────────────────────────────────────────
 if ! command -v npx &>/dev/null; then
-  echo "❌ npx not found. Install Node.js 18+ first."
+  echo "❌ npx not found. Install Node.js 20+ first."
   exit 1
 fi
 

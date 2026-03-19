@@ -37,4 +37,18 @@ describe('stellar client channel', () => {
     })
     expect(typeof method.createCredential).toBe('function')
   })
+
+  it('throws if neither commitmentKey nor commitmentSecret is provided', () => {
+    expect(() => channel({} as Parameters<typeof channel>[0])).toThrow(
+      'Either commitmentKey or commitmentSecret must be provided.',
+    )
+  })
+
+  it('accepts sourceAccount parameter', () => {
+    const method = channel({
+      commitmentKey: TEST_KEYPAIR,
+      sourceAccount: Keypair.random().publicKey(),
+    })
+    expect(method.name).toBe('stellar')
+  })
 })
