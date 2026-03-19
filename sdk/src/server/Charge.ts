@@ -14,6 +14,7 @@ import {
   SOROBAN_RPC_URLS,
   type NetworkId,
 } from '../constants.js'
+import { withKeyLock } from '../internal/withKeyLock.js'
 import * as Methods from '../Methods.js'
 import { toBaseUnits } from '../Methods.js'
 
@@ -60,123 +61,131 @@ export function charge(parameters: charge.Parameters) {
     },
     async verify({ credential }) {
       const { challenge } = credential
-      const { request: challengeRequest } = challenge
+      return withKeyLock(
+        `stellar:charge:verify:${challenge.id}`,
+        async () => {
+          const { request: challengeRequest } = challenge
 
-      if (store) {
-        const key = `stellar:challenge:${challenge.id}`
-        const existing = await store.get(key)
-        if (existing) {
-          throw new Error(
-            'Challenge already used. Replay rejected.',
-          )
-        }
-        await store.put(key, { usedAt: new Date().toISOString() })
-      }
-
-      const { amount } = challengeRequest
-      const expectedCurrency = challengeRequest.currency
-      const expectedRecipient = challengeRequest.recipient
-      const expectedAmount = BigInt(amount)
-
-      const payload = credential.payload
-
-      switch (payload.type) {
-        case 'signature': {
-          const hash = payload.hash
-
-          let txResult = await server.getTransaction(hash)
-          let attempts = 0
-          while (txResult.status === 'NOT_FOUND' && attempts < 10) {
-            await new Promise((r) => setTimeout(r, 1000))
-            txResult = await server.getTransaction(hash)
-            attempts++
+          if (store) {
+            const key = `stellar:challenge:${challenge.id}`
+            const existing = await store.get(key)
+            if (existing) {
+              throw new Error(
+                'Challenge already used. Replay rejected.',
+              )
+            }
+            await store.put(key, { usedAt: new Date().toISOString() })
           }
 
-          if (txResult.status !== 'SUCCESS') {
-            throw new PaymentVerificationError(
-              `Transaction ${hash} is not successful (status: ${txResult.status}).`,
-              { hash, status: txResult.status },
-            )
+          const { amount } = challengeRequest
+          const expectedCurrency = challengeRequest.currency
+          const expectedRecipient = challengeRequest.recipient
+          const expectedAmount = BigInt(amount)
+
+          const payload = credential.payload
+
+          switch (payload.type) {
+            case 'signature': {
+              const hash = payload.hash
+
+              const txResult = await pollForTransaction(server, hash)
+
+              if (txResult.status !== 'SUCCESS') {
+                throw new PaymentVerificationError(
+                  `Transaction ${hash} is not successful (status: ${txResult.status}).`,
+                  { hash, status: txResult.status },
+                )
+              }
+
+              verifySacTransfer(txResult, {
+                amount: expectedAmount,
+                currency: expectedCurrency,
+                networkPassphrase,
+                recipient: expectedRecipient,
+              })
+
+              return Receipt.from({
+                method: 'stellar',
+                reference: hash,
+                status: 'success',
+                timestamp: new Date().toISOString(),
+              })
+            }
+
+            case 'transaction': {
+              const txXdr = payload.xdr
+              let parsed: Transaction | FeeBumpTransaction
+
+              try {
+                parsed = TransactionBuilder.fromXDR(
+                  txXdr,
+                  networkPassphrase,
+                ) as Transaction | FeeBumpTransaction
+              } catch (error) {
+                throw new PaymentVerificationError(
+                  'Credential transaction XDR is invalid.',
+                  { error: error instanceof Error ? error.message : String(error) },
+                )
+              }
+
+              const tx =
+                parsed instanceof FeeBumpTransaction
+                  ? parsed.innerTransaction
+                  : (parsed as Transaction)
+
+              verifySacInvocation(tx, {
+                amount: expectedAmount,
+                currency: expectedCurrency,
+                recipient: expectedRecipient,
+              })
+
+              let txToSubmit: Transaction | FeeBumpTransaction = parsed as
+                | Transaction
+                | FeeBumpTransaction
+
+              if (feePayer && !(parsed instanceof FeeBumpTransaction)) {
+                const feePayerKeypair =
+                  typeof feePayer === 'string'
+                    ? Keypair.fromSecret(feePayer)
+                    : feePayer
+                txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
+                  feePayerKeypair,
+                  (BigInt(tx.fee) * 10n).toString(),
+                  tx,
+                  networkPassphrase,
+                )
+                txToSubmit.sign(feePayerKeypair)
+              }
+
+              const sendResult = await server.sendTransaction(txToSubmit)
+
+              const txResult = await pollForTransaction(
+                server,
+                sendResult.hash,
+              )
+
+              if (txResult.status !== 'SUCCESS') {
+                throw new PaymentVerificationError(
+                  `Transaction failed on-chain: ${txResult.status}`,
+                  { hash: sendResult.hash, status: txResult.status },
+                )
+              }
+
+              return Receipt.from({
+                method: 'stellar',
+                reference: sendResult.hash,
+                status: 'success',
+                timestamp: new Date().toISOString(),
+              })
+            }
+
+            default:
+              throw new Error(
+                `Unsupported credential type "${(payload as { type: string }).type}".`,
+              )
           }
-
-          verifySacTransfer(txResult, {
-            amount: expectedAmount,
-            currency: expectedCurrency,
-            recipient: expectedRecipient,
-          })
-
-          return Receipt.from({
-            method: 'stellar',
-            reference: hash,
-            status: 'success',
-            timestamp: new Date().toISOString(),
-          })
-        }
-
-        case 'transaction': {
-          const txXdr = payload.xdr
-          const parsed = TransactionBuilder.fromXDR(
-            txXdr,
-            networkPassphrase,
-          )
-
-          const tx =
-            parsed instanceof FeeBumpTransaction
-              ? parsed.innerTransaction
-              : (parsed as Transaction)
-
-          verifySacInvocation(tx, {
-            amount: expectedAmount,
-            currency: expectedCurrency,
-            recipient: expectedRecipient,
-          })
-
-          let txToSubmit: Transaction | FeeBumpTransaction = parsed as
-            | Transaction
-            | FeeBumpTransaction
-
-          if (feePayer && !(parsed instanceof FeeBumpTransaction)) {
-            const feePayerKeypair =
-              typeof feePayer === 'string'
-                ? Keypair.fromSecret(feePayer)
-                : feePayer
-            txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
-              feePayerKeypair,
-              (Number(tx.fee) * 10).toString(),
-              tx,
-              networkPassphrase,
-            )
-            txToSubmit.sign(feePayerKeypair)
-          }
-
-          const sendResult = await server.sendTransaction(txToSubmit)
-
-          let txResult = await server.getTransaction(sendResult.hash)
-          while (txResult.status === 'NOT_FOUND') {
-            await new Promise((r) => setTimeout(r, 1000))
-            txResult = await server.getTransaction(sendResult.hash)
-          }
-
-          if (txResult.status !== 'SUCCESS') {
-            throw new PaymentVerificationError(
-              `Transaction failed on-chain: ${txResult.status}`,
-              { hash: sendResult.hash, status: txResult.status },
-            )
-          }
-
-          return Receipt.from({
-            method: 'stellar',
-            reference: sendResult.hash,
-            status: 'success',
-            timestamp: new Date().toISOString(),
-          })
-        }
-
-        default:
-          throw new Error(
-            `Unsupported credential type "${(payload as { type: string }).type}".`,
-          )
-      }
+        },
+      )
     },
   })
 }
@@ -259,34 +268,67 @@ function verifyFromRawOps(
 
 function verifySacTransfer(
   txResult: rpc.Api.GetSuccessfulTransactionResponse,
-  expected: { amount: bigint; currency: string; recipient: string },
+  expected: {
+    amount: bigint
+    currency: string
+    networkPassphrase: string
+    recipient: string
+  },
 ) {
-  if (txResult.envelopeXdr) {
-    const envelope =
+  if (!txResult.envelopeXdr) {
+    throw new PaymentVerificationError(
+      'Transaction envelope is missing; cannot verify SAC transfer.',
+      {},
+    )
+  }
+
+  let envelope: xdr.TransactionEnvelope
+
+  try {
+    envelope =
       typeof txResult.envelopeXdr === 'string'
         ? xdr.TransactionEnvelope.fromXDR(txResult.envelopeXdr, 'base64')
         : txResult.envelopeXdr
-
-    try {
-      // Determine network passphrase — try testnet first, then mainnet
-      let innerTx: Transaction | null = null
-      for (const np of [NETWORK_PASSPHRASE.testnet, NETWORK_PASSPHRASE.public]) {
-        try {
-          innerTx = new Transaction(envelope, np)
-          break
-        } catch {
-          continue
-        }
-      }
-
-      if (innerTx) {
-        verifyFromRawOps(innerTx, expected)
-        return
-      }
-    } catch {
-      // Fall through — cannot verify envelope
-    }
+  } catch (error) {
+    throw new PaymentVerificationError(
+      'Transaction envelope could not be parsed.',
+      { error: error instanceof Error ? error.message : String(error) },
+    )
   }
+
+  let innerTx: Transaction
+
+  try {
+    innerTx = new Transaction(envelope, expected.networkPassphrase)
+  } catch (error) {
+    throw new PaymentVerificationError(
+      'Transaction envelope network does not match expected network.',
+      { error: error instanceof Error ? error.message : String(error) },
+    )
+  }
+
+  verifyFromRawOps(innerTx, expected)
+}
+
+const MAX_POLL_ATTEMPTS = 60
+
+async function pollForTransaction(server: rpc.Server, hash: string) {
+  let txResult = await server.getTransaction(hash)
+  let attempts = 0
+
+  while (txResult.status === 'NOT_FOUND') {
+    if (++attempts >= MAX_POLL_ATTEMPTS) {
+      throw new PaymentVerificationError(
+        `Transaction not found after ${MAX_POLL_ATTEMPTS} attempts.`,
+        { hash },
+      )
+    }
+
+    await new Promise((r) => setTimeout(r, 1000))
+    txResult = await server.getTransaction(hash)
+  }
+
+  return txResult
 }
 
 function scValToBigInt(val: xdr.ScVal): bigint {

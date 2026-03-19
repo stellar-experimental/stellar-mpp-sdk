@@ -12,6 +12,7 @@ import {
   SOROBAN_RPC_URLS,
   type NetworkId,
 } from '../../constants.js'
+import { withKeyLock } from '../../internal/withKeyLock.js'
 import { toBaseUnits } from '../../Methods.js'
 import { channel as ChannelMethod } from '../Methods.js'
 
@@ -92,146 +93,137 @@ export function channel(parameters: channel.Parameters) {
     },
     async verify({ credential }) {
       const { challenge } = credential
-      const { request: challengeRequest } = challenge
+      return withKeyLock(
+        `stellar:channel:verify:${channelAddress}`,
+        async () => {
+          const { request: challengeRequest } = challenge
 
-      // Replay protection
-      if (store) {
-        const replayKey = `stellar:challenge:${challenge.id}`
-        const existing = await store.get(replayKey)
-        if (existing) {
-          throw new Error('Challenge already used. Replay rejected.')
-        }
-        await store.put(replayKey, { usedAt: new Date().toISOString() })
-      }
+          if (store) {
+            const replayKey = `stellar:challenge:${challenge.id}`
+            const existing = await store.get(replayKey)
+            if (existing) {
+              throw new Error('Challenge already used. Replay rejected.')
+            }
+            await store.put(replayKey, { usedAt: new Date().toISOString() })
+          }
 
-      const payload = credential.payload
-      const commitmentAmount = BigInt(payload.amount)
-      const signatureHex = payload.signature
+          const payload = credential.payload
+          const commitmentAmount = BigInt(payload.amount)
+          const signatureHex = payload.signature
 
-      // Validate hex signature format
-      if (!/^[0-9a-f]+$/i.test(signatureHex) || signatureHex.length % 2 !== 0) {
-        throw new ChannelVerificationError(
-          'Invalid signature: not a valid hex string.',
-          { signature: signatureHex },
-        )
-      }
-      if (signatureHex.length !== 128) {
-        throw new ChannelVerificationError(
-          `Invalid signature length: expected 128 hex chars (64 bytes), got ${signatureHex.length}.`,
-          { length: String(signatureHex.length) },
-        )
-      }
-      const signatureBytes = Buffer.from(signatureHex, 'hex')
+          if (!/^[0-9a-f]+$/i.test(signatureHex) || signatureHex.length % 2 !== 0) {
+            throw new ChannelVerificationError(
+              'Invalid signature: not a valid hex string.',
+              { signature: signatureHex },
+            )
+          }
+          if (signatureHex.length !== 128) {
+            throw new ChannelVerificationError(
+              `Invalid signature length: expected 128 hex chars (64 bytes), got ${signatureHex.length}.`,
+              { length: String(signatureHex.length) },
+            )
+          }
+          const signatureBytes = Buffer.from(signatureHex, 'hex')
 
-      // Retrieve the previous cumulative amount
-      let previousCumulative = 0n
-      if (store) {
-        const stored = await store.get(cumulativeKey)
-        if (stored && typeof stored === 'object' && 'amount' in stored) {
-          previousCumulative = BigInt((stored as { amount: string }).amount)
-        }
-      }
+          let previousCumulative = 0n
+          if (store) {
+            const stored = await store.get(cumulativeKey)
+            if (stored && typeof stored === 'object' && 'amount' in stored) {
+              previousCumulative = BigInt((stored as { amount: string }).amount)
+            }
+          }
 
-      // The new cumulative must be >= previous cumulative
-      if (commitmentAmount < previousCumulative) {
-        throw new ChannelVerificationError(
-          `Commitment amount ${commitmentAmount} is less than previous cumulative ${previousCumulative}.`,
-          {
-            commitmentAmount: commitmentAmount.toString(),
-            previousCumulative: previousCumulative.toString(),
-          },
-        )
-      }
+          if (commitmentAmount < previousCumulative) {
+            throw new ChannelVerificationError(
+              `Commitment amount ${commitmentAmount} is less than previous cumulative ${previousCumulative}.`,
+              {
+                commitmentAmount: commitmentAmount.toString(),
+                previousCumulative: previousCumulative.toString(),
+              },
+            )
+          }
 
-      // The commitment must cover the requested amount
-      const requestedAmount = BigInt(challengeRequest.amount)
-      if (commitmentAmount < previousCumulative + requestedAmount) {
-        throw new ChannelVerificationError(
-          `Commitment amount ${commitmentAmount} does not cover the requested amount ${requestedAmount} (previous cumulative: ${previousCumulative}).`,
-          {
-            commitmentAmount: commitmentAmount.toString(),
-            requestedAmount: requestedAmount.toString(),
-            previousCumulative: previousCumulative.toString(),
-          },
-        )
-      }
+          const requestedAmount = BigInt(challengeRequest.amount)
+          if (commitmentAmount < previousCumulative + requestedAmount) {
+            throw new ChannelVerificationError(
+              `Commitment amount ${commitmentAmount} does not cover the requested amount ${requestedAmount} (previous cumulative: ${previousCumulative}).`,
+              {
+                commitmentAmount: commitmentAmount.toString(),
+                requestedAmount: requestedAmount.toString(),
+                previousCumulative: previousCumulative.toString(),
+              },
+            )
+          }
 
-      // Verify: call prepare_commitment on the channel contract to
-      // reconstruct the expected commitment bytes, then verify the
-      // ed25519 signature.
-      const contract = new Contract(channelAddress)
-      const call = contract.call(
-        'prepare_commitment',
-        nativeToScVal(commitmentAmount, { type: 'i128' }),
+          const contract = new Contract(channelAddress)
+          const call = contract.call(
+            'prepare_commitment',
+            nativeToScVal(commitmentAmount, { type: 'i128' }),
+          )
+
+          const account = await server.getAccount(
+            sourceAccount ?? commitmentKeypair.publicKey(),
+          )
+          const simTx = new TransactionBuilder(account, {
+            fee: '100',
+            networkPassphrase,
+          })
+            .addOperation(call)
+            .setTimeout(30)
+            .build()
+
+          const simResult = await server.simulateTransaction(simTx)
+
+          if (!rpc.Api.isSimulationSuccess(simResult)) {
+            throw new ChannelVerificationError(
+              'Failed to simulate prepare_commitment for verification.',
+              {
+                error:
+                  'error' in simResult
+                    ? String(simResult.error)
+                    : 'unknown',
+              },
+            )
+          }
+
+          const returnValue = simResult.result?.retval
+          if (!returnValue) {
+            throw new ChannelVerificationError(
+              'prepare_commitment returned no value.',
+              {},
+            )
+          }
+
+          const commitmentBytes = returnValue.bytes()
+          const valid = commitmentKeypair.verify(
+            Buffer.from(commitmentBytes),
+            signatureBytes,
+          )
+
+          if (!valid) {
+            throw new ChannelVerificationError(
+              'Commitment signature verification failed.',
+              {
+                amount: commitmentAmount.toString(),
+                channel: channelAddress,
+              },
+            )
+          }
+
+          if (store) {
+            await store.put(cumulativeKey, {
+              amount: commitmentAmount.toString(),
+            })
+          }
+
+          return Receipt.from({
+            method: 'stellar',
+            reference: challengeRequest.methodDetails?.reference ?? challenge.id,
+            status: 'success',
+            timestamp: new Date().toISOString(),
+          })
+        },
       )
-
-      const account = await server.getAccount(
-        sourceAccount ?? commitmentKeypair.publicKey(),
-      )
-      const simTx = new TransactionBuilder(account, {
-        fee: '100',
-        networkPassphrase,
-      })
-        .addOperation(call)
-        .setTimeout(30)
-        .build()
-
-      const simResult = await server.simulateTransaction(simTx)
-
-      if (!rpc.Api.isSimulationSuccess(simResult)) {
-        throw new ChannelVerificationError(
-          'Failed to simulate prepare_commitment for verification.',
-          {
-            error:
-              'error' in simResult
-                ? String(simResult.error)
-                : 'unknown',
-          },
-        )
-      }
-
-      const returnValue = simResult.result?.retval
-      if (!returnValue) {
-        throw new ChannelVerificationError(
-          'prepare_commitment returned no value.',
-          {},
-        )
-      }
-
-      const commitmentBytes = returnValue.bytes()
-
-      // Verify the ed25519 signature
-      const valid = commitmentKeypair.verify(
-        Buffer.from(commitmentBytes),
-        signatureBytes,
-      )
-
-      if (!valid) {
-        throw new ChannelVerificationError(
-          'Commitment signature verification failed.',
-          {
-            amount: commitmentAmount.toString(),
-            channel: channelAddress,
-          },
-        )
-      }
-
-      // Update cumulative amount in store
-      if (store) {
-        await store.put(cumulativeKey, {
-          amount: commitmentAmount.toString(),
-        })
-      }
-
-      // Calculate the incremental payment
-      const incrementalAmount = commitmentAmount - previousCumulative
-
-      return Receipt.from({
-        method: 'stellar',
-        reference: challengeRequest.methodDetails?.reference ?? challenge.id,
-        status: 'success',
-        timestamp: new Date().toISOString(),
-      })
     },
   })
 }

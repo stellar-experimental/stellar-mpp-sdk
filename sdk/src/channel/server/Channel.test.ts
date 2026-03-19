@@ -113,6 +113,25 @@ function successSimResult(commitmentBytes: Buffer) {
   }
 }
 
+function createDelayedStore() {
+  const values = new Map<string, unknown>()
+
+  return {
+    async get(key: string) {
+      if (key.startsWith('stellar:channel:cumulative:')) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      return values.has(key) ? (values.get(key) as unknown) : null
+    },
+    async put(key: string, value: unknown) {
+      values.set(key, value)
+    },
+    async delete(key: string) {
+      values.delete(key)
+    },
+  }
+}
+
 describe('stellar server channel', () => {
   it('creates a server method with correct name and intent', () => {
     const method = channel({
@@ -391,5 +410,47 @@ describe('stellar server channel verification', () => {
         request: credential.challenge.request,
       }),
     ).rejects.toThrow('Replay rejected')
+  })
+
+  it('serializes concurrent verifications for the same channel in-process', async () => {
+    const commitmentBytes = Buffer.from('serial-channel-bytes')
+    mockSimulateTransaction.mockResolvedValue(
+      successSimResult(commitmentBytes),
+    )
+
+    const store = createDelayedStore() as Store.Store
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      store,
+    })
+
+    const first = makeSignedCredential({
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+    const second = makeSignedCredential({
+      commitmentBytes,
+      cumulativeAmount: 1500000n,
+      challengeAmount: '1000000',
+    })
+
+    const results = await Promise.allSettled([
+      method.verify({
+        credential: first as any,
+        request: first.challenge.request,
+      }),
+      method.verify({
+        credential: second as any,
+        request: second.challenge.request,
+      }),
+    ])
+
+    expect(results[0].status).toBe('fulfilled')
+    expect(results[1].status).toBe('rejected')
+    expect((results[1] as PromiseRejectedResult).reason.message).toContain(
+      'does not cover the requested amount',
+    )
   })
 })

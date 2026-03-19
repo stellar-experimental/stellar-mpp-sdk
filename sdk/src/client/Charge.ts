@@ -79,6 +79,10 @@ export function charge(parameters: charge.Parameters) {
       const networkPassphrase = NETWORK_PASSPHRASE[network]
       const server = new rpc.Server(resolvedRpcUrl)
 
+      if (memo && Buffer.byteLength(memo, 'utf8') > 28) {
+        throw new Error('Memo text exceeds Stellar 28-byte limit.')
+      }
+
       // Load source account via Soroban RPC
       const sourceAccount = await server.getAccount(keypair.publicKey())
 
@@ -124,11 +128,7 @@ export function charge(parameters: charge.Parameters) {
 
         // Poll until confirmed
         onProgress?.({ type: 'confirming', hash: result.hash })
-        let txResult = await server.getTransaction(result.hash)
-        while (txResult.status === 'NOT_FOUND') {
-          await new Promise((r) => setTimeout(r, 1000))
-          txResult = await server.getTransaction(result.hash)
-        }
+        const txResult = await pollForTransaction(server, result.hash)
 
         if (txResult.status !== 'SUCCESS') {
           throw new Error(
@@ -187,4 +187,24 @@ export declare namespace charge {
     /** Callback invoked at each lifecycle stage. */
     onProgress?: (event: ProgressEvent) => void
   }
+}
+
+const MAX_POLL_ATTEMPTS = 60
+
+async function pollForTransaction(server: rpc.Server, hash: string) {
+  let txResult = await server.getTransaction(hash)
+  let attempts = 0
+
+  while (txResult.status === 'NOT_FOUND') {
+    if (++attempts >= MAX_POLL_ATTEMPTS) {
+      throw new Error(
+        `Transaction not found after ${MAX_POLL_ATTEMPTS} attempts.`,
+      )
+    }
+
+    await new Promise((r) => setTimeout(r, 1000))
+    txResult = await server.getTransaction(hash)
+  }
+
+  return txResult
 }

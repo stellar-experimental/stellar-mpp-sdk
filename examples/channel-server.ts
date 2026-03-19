@@ -7,12 +7,13 @@
  * Prerequisites:
  *   - A deployed one-way-channel contract on testnet
  *   - The commitment public key used when deploying the channel
+ *   - A funded testnet Stellar account for Soroban simulation
  *
  * Usage:
- *   CHANNEL_CONTRACT=CABC... COMMITMENT_PUBKEY=b83e... npx tsx examples/channel-server.ts
+ *   CHANNEL_CONTRACT=CABC... COMMITMENT_PUBKEY=b83e... SOURCE_ACCOUNT=GABC... npx tsx examples/channel-server.ts
  *
  * Then test with:
- *   COMMITMENT_SECRET=73b5... npx tsx examples/channel-client.ts
+ *   COMMITMENT_SECRET=73b5... SOURCE_ACCOUNT=GABC... npx tsx examples/channel-client.ts
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
@@ -23,6 +24,7 @@ import { stellar } from '../sdk/src/channel/server/index.js'
 const PORT = Number(process.env.PORT ?? 3001)
 const CHANNEL_CONTRACT = process.env.CHANNEL_CONTRACT
 const COMMITMENT_PUBKEY = process.env.COMMITMENT_PUBKEY
+const SOURCE_ACCOUNT = process.env.SOURCE_ACCOUNT
 
 if (!CHANNEL_CONTRACT || !CHANNEL_CONTRACT.startsWith('C') || CHANNEL_CONTRACT.length !== 56) {
   console.error('❌ Set CHANNEL_CONTRACT to the deployed channel contract address (C..., 56 chars)')
@@ -33,6 +35,12 @@ if (!CHANNEL_CONTRACT || !CHANNEL_CONTRACT.startsWith('C') || CHANNEL_CONTRACT.l
 if (!COMMITMENT_PUBKEY || COMMITMENT_PUBKEY.length !== 64) {
   console.error('❌ Set COMMITMENT_PUBKEY to the ed25519 public key used when deploying the channel (64 hex chars)')
   console.error('   Example: COMMITMENT_PUBKEY=b83ee77019d9ca0aac432139fe0159ec01b5d31f58905fdc089980be05b7c5fd')
+  process.exit(1)
+}
+
+if (!SOURCE_ACCOUNT || !StrKey.isValidEd25519PublicKey(SOURCE_ACCOUNT)) {
+  console.error('❌ Set SOURCE_ACCOUNT to a funded Stellar testnet account (G..., 56 chars) for Soroban simulation')
+  console.error('   Example: SOURCE_ACCOUNT=GDGGJUVCIE3M4ZSCWJV4EW372P3OQ5GKBSCZFOLHMT5ZLXTZMTKKFZHP')
   process.exit(1)
 }
 
@@ -47,7 +55,7 @@ const mppx = Mppx.create({
     stellar.channel({
       channel: CHANNEL_CONTRACT,
       commitmentKey: commitmentPublicKeyG,
-      sourceAccount: process.env.SOURCE_ACCOUNT,
+      sourceAccount: SOURCE_ACCOUNT,
       store,
       network: 'testnet',
     }),

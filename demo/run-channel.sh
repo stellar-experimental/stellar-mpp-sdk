@@ -7,7 +7,7 @@
 #
 # Usage:
 #   ./demo/run-channel.sh                    # prompts for keys
-#   CHANNEL_CONTRACT=C... COMMITMENT_PUBKEY=... COMMITMENT_SECRET=... ./demo/run-channel.sh
+#   CHANNEL_CONTRACT=C... COMMITMENT_PUBKEY=... COMMITMENT_SECRET=... SOURCE_ACCOUNT=G... ./demo/run-channel.sh
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -60,7 +60,7 @@ echo ""
 PORT=${PORT:-3001}
 
 # Kill any existing process on the port
-if lsof -ti:$PORT &>/dev/null; then
+if command -v lsof &>/dev/null && lsof -ti:$PORT &>/dev/null; then
   echo "⚠ Port $PORT in use — freeing it..."
   lsof -ti:$PORT | xargs kill -9 2>/dev/null
   sleep 1

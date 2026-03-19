@@ -128,6 +128,7 @@ Or pass keys directly:
 CHANNEL_CONTRACT=CBU3P5BAU6CYGPAVY7TGGGNEPCS7H73IA3L677Z3CFZSGFYB7UFK4IMS \
 COMMITMENT_PUBKEY=b83ee77019d9ca0aac432139fe0159ec01b5d31f58905fdc089980be05b7c5fd \
 COMMITMENT_SECRET=73b51cad30e14119e78d9a3d5d143a55c07f57c53fe9b95aa6bb061d0d4afb4f \
+SOURCE_ACCOUNT=GDGGJUVCIE3M4ZSCWJV4EW372P3OQ5GKBSCZFOLHMT5ZLXTZMTKKFZHP \
 ./demo/run-channel.sh
 ```
 
@@ -137,12 +138,14 @@ COMMITMENT_SECRET=73b51cad30e14119e78d9a3d5d143a55c07f57c53fe9b95aa6bb061d0d4afb
 # Terminal 1 — start channel server
 CHANNEL_CONTRACT=CBU3P5BAU6CYGPAVY7TGGGNEPCS7H73IA3L677Z3CFZSGFYB7UFK4IMS \
 COMMITMENT_PUBKEY=b83ee77019d9ca0aac432139fe0159ec01b5d31f58905fdc089980be05b7c5fd \
+SOURCE_ACCOUNT=GDGGJUVCIE3M4ZSCWJV4EW372P3OQ5GKBSCZFOLHMT5ZLXTZMTKKFZHP \
 npx tsx examples/channel-server.ts
 ```
 
 ```bash
 # Terminal 2 — run channel client
 COMMITMENT_SECRET=73b51cad30e14119e78d9a3d5d143a55c07f57c53fe9b95aa6bb061d0d4afb4f \
+SOURCE_ACCOUNT=GDGGJUVCIE3M4ZSCWJV4EW372P3OQ5GKBSCZFOLHMT5ZLXTZMTKKFZHP \
 npx tsx examples/channel-client.ts
 ```
 
@@ -150,11 +153,13 @@ Or use npm scripts:
 
 ```bash
 # Terminal 1
-CHANNEL_CONTRACT=C... COMMITMENT_PUBKEY=... pnpm demo:channel-server
+CHANNEL_CONTRACT=C... COMMITMENT_PUBKEY=... SOURCE_ACCOUNT=G... pnpm demo:channel-server
 
 # Terminal 2
-COMMITMENT_SECRET=... pnpm demo:channel-client
+COMMITMENT_SECRET=... SOURCE_ACCOUNT=G... pnpm demo:channel-client
 ```
+
+`SOURCE_ACCOUNT` must be a funded Stellar testnet account. The channel demo uses a raw ed25519 commitment key for signing, so a separate funded G-address is needed for Soroban simulation on both the server and client sides.
 
 ### How the channel flow works
 
@@ -199,6 +204,7 @@ No on-chain transactions happen during payments. The server can close the channe
 | `CHANNEL_CONTRACT` | Server | Deployed channel contract address (C..., 56 chars) |
 | `COMMITMENT_PUBKEY` | Server | Ed25519 commitment public key (64 hex chars) |
 | `COMMITMENT_SECRET` | Client | Ed25519 commitment secret key (64 hex chars) |
+| `SOURCE_ACCOUNT` | Both | Funded Stellar public key (G..., 56 chars) used for Soroban simulation |
 | `MPP_SECRET_KEY` | No | MPP signing key (defaults to `stellar-mpp-channel-demo-secret`) |
 | `PORT` | No | Server port (defaults to `3001`) |
 | `SERVER_URL` | No | Client target URL (defaults to `http://localhost:3001`) |

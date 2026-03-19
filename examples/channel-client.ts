@@ -5,16 +5,22 @@
  * off-chain commitment updates — no on-chain transaction per payment.
  *
  * Usage:
- *   COMMITMENT_SECRET=73b5... npx tsx examples/channel-client.ts
+ *   COMMITMENT_SECRET=73b5... SOURCE_ACCOUNT=GABC... npx tsx examples/channel-client.ts
  */
 
-import { Keypair } from '@stellar/stellar-sdk'
+import { Keypair, StrKey } from '@stellar/stellar-sdk'
 import { Mppx } from 'mppx/client'
 import { stellar } from '../sdk/src/channel/client/index.js'
 
 const commitmentSecret = process.env.COMMITMENT_SECRET
+const sourceAccount = process.env.SOURCE_ACCOUNT
 if (!commitmentSecret || commitmentSecret.length !== 64) {
-  console.error('Usage: COMMITMENT_SECRET=<64-char-hex-ed25519-secret> npx tsx examples/channel-client.ts')
+  console.error('Usage: COMMITMENT_SECRET=<64-char-hex-ed25519-secret> SOURCE_ACCOUNT=<funded G... account> npx tsx examples/channel-client.ts')
+  process.exit(1)
+}
+
+if (!sourceAccount || !StrKey.isValidEd25519PublicKey(sourceAccount)) {
+  console.error('Usage: COMMITMENT_SECRET=<64-char-hex-ed25519-secret> SOURCE_ACCOUNT=<funded G... account> npx tsx examples/channel-client.ts')
   process.exit(1)
 }
 
@@ -27,7 +33,7 @@ Mppx.create({
   methods: [
     stellar.channel({
       commitmentKey,
-      sourceAccount: process.env.SOURCE_ACCOUNT,
+      sourceAccount,
       onProgress(event) {
         const ts = new Date().toISOString().slice(11, 23)
         switch (event.type) {

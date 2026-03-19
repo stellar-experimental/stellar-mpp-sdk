@@ -1,6 +1,8 @@
 import { Method } from 'mppx'
 import { z } from 'zod/mini'
 
+const DECIMAL_AMOUNT_PATTERN = /^\d+(\.\d+)?$/
+
 /**
  * Stellar charge intent for one-time SAC token transfers.
  *
@@ -28,7 +30,7 @@ export const charge = Method.from({
     },
     request: z.object({
       /** Payment amount in base units (stroops). */
-      amount: z.string(),
+      amount: z.string().check(z.regex(DECIMAL_AMOUNT_PATTERN)),
       /** SAC contract address (C...) for the token to transfer. */
       currency: z.string(),
       /** Recipient Stellar public key (G...) or contract address (C...). */
@@ -70,9 +72,10 @@ export const charge = Method.from({
  * ```
  */
 export function toBaseUnits(amount: string, decimals: number): string {
-  const [whole = '0', frac = ''] = amount.split('.')
+  const [whole = '0', frac = ''] = parseDecimalAmount(amount)
   const paddedFrac = frac.padEnd(decimals, '0').slice(0, decimals)
-  return (BigInt(whole) * BigInt(10 ** decimals) + BigInt(paddedFrac)).toString()
+  const factor = 10n ** BigInt(decimals)
+  return (BigInt(whole) * factor + BigInt(paddedFrac || '0')).toString()
 }
 
 /**
@@ -85,8 +88,17 @@ export function toBaseUnits(amount: string, decimals: number): string {
  */
 export function fromBaseUnits(baseUnits: string, decimals: number): string {
   const bi = BigInt(baseUnits)
-  const divisor = BigInt(10 ** decimals)
+  const divisor = 10n ** BigInt(decimals)
   const whole = (bi / divisor).toString()
   const remainder = (bi % divisor).toString().padStart(decimals, '0')
   return `${whole}.${remainder}`
+}
+
+function parseDecimalAmount(amount: string): [string, string] {
+  if (!DECIMAL_AMOUNT_PATTERN.test(amount)) {
+    throw new Error(`Invalid amount format: ${amount}`)
+  }
+
+  const [whole = '0', frac = ''] = amount.split('.')
+  return [whole, frac]
 }

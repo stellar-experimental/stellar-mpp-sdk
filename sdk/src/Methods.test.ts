@@ -27,6 +27,14 @@ describe('toBaseUnits', () => {
   it('pads fewer decimals', () => {
     expect(toBaseUnits('1.5', 7)).toBe('15000000')
   })
+
+  it('rejects malformed decimal strings', () => {
+    expect(() => toBaseUnits('1.2.3', 7)).toThrow('Invalid amount format')
+  })
+
+  it('supports larger decimal counts without number precision loss', () => {
+    expect(toBaseUnits('1', 30)).toBe('1000000000000000000000000000000')
+  })
 })
 
 describe('fromBaseUnits', () => {
@@ -71,6 +79,16 @@ describe('Methods.charge', () => {
       'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
     )
     expect(result.recipient).toBe('GBXYZ')
+  })
+
+  it('request schema rejects malformed amount strings', () => {
+    expect(() =>
+      Methods.charge.schema.request.parse({
+        amount: '1.2.3',
+        currency: 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
+        recipient: 'GBXYZ',
+      }),
+    ).toThrow()
   })
 
   it('request schema accepts externalId', () => {
