@@ -156,7 +156,7 @@ export function charge(parameters: charge.Parameters) {
           while (txResult.status === 'NOT_FOUND') {
             if (++txAttempts >= 60) {
               throw new PaymentVerificationError(
-                `Transaction not found after ${txAttempts} attempts.`,
+                `Transaction not found after ${txAttempts} polling attempts.`,
                 { hash: sendResult.hash },
               )
             }
@@ -275,10 +275,25 @@ function verifySacTransfer(
     )
   }
 
-  const envelope =
-    typeof txResult.envelopeXdr === 'string'
-      ? xdr.TransactionEnvelope.fromXDR(txResult.envelopeXdr, 'base64')
-      : txResult.envelopeXdr
+  let envelope: xdr.TransactionEnvelope
+  if (typeof txResult.envelopeXdr === 'string') {
+    try {
+      envelope = xdr.TransactionEnvelope.fromXDR(
+        txResult.envelopeXdr,
+        'base64',
+      )
+    } catch (error) {
+      throw new PaymentVerificationError(
+        'Could not parse transaction envelope for verification.',
+        {
+          details:
+            error instanceof Error ? error.message : String(error),
+        },
+      )
+    }
+  } else {
+    envelope = txResult.envelopeXdr
+  }
 
   // Determine network passphrase — try testnet first, then mainnet
   let innerTx: Transaction | null = null

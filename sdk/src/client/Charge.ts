@@ -135,7 +135,7 @@ export function charge(parameters: charge.Parameters) {
         while (txResult.status === 'NOT_FOUND') {
           if (++pollAttempts >= 60) {
             throw new Error(
-              `Transaction not confirmed after ${pollAttempts} attempts.`,
+              `Transaction not confirmed after ${pollAttempts} polling attempts.`,
             )
           }
           await new Promise((r) => setTimeout(r, 1000))
