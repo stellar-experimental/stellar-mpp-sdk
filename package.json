@@ -17,6 +17,18 @@
     "./server": {
       "types": "./dist/server/index.d.ts",
       "default": "./dist/server/index.js"
+    },
+    "./channel": {
+      "types": "./dist/channel/index.d.ts",
+      "default": "./dist/channel/index.js"
+    },
+    "./channel/client": {
+      "types": "./dist/channel/client/index.d.ts",
+      "default": "./dist/channel/client/index.js"
+    },
+    "./channel/server": {
+      "types": "./dist/channel/server/index.d.ts",
+      "default": "./dist/channel/server/index.js"
     }
   },
   "files": [
@@ -35,6 +47,7 @@
   },
   "devDependencies": {
     "@stellar/stellar-sdk": "^14.6.1",
+    "@types/node": "^25.5.0",
     "mppx": "^0.4.7",
     "tsx": "^4.21.0",
     "typescript": "^5.8.0",
