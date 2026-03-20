@@ -103,9 +103,11 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
           try {
             onEvent(parsed)
           } catch (callbackError) {
-            onError?.(callbackError instanceof Error
-              ? callbackError
-              : new Error(String(callbackError)))
+            try {
+              onError?.(callbackError instanceof Error
+                ? callbackError
+                : new Error(String(callbackError)))
+            } catch { /* prevent onError from breaking the poll loop */ }
           }
         }
       }
@@ -113,12 +115,14 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
       // Always advance cursor so polling progresses even when no
       // events match — without this the watcher would re-scan the
       // same ledger range on every poll.
-      if (response.cursor) {
+      if (response.cursor != null) {
         cursor = response.cursor
       }
     } catch (error) {
       if (!stopped) {
-        onError?.(error instanceof Error ? error : new Error(String(error)))
+        try {
+          onError?.(error instanceof Error ? error : new Error(String(error)))
+        } catch { /* prevent onError from breaking the poll loop */ }
       }
     }
   }
