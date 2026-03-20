@@ -27,6 +27,11 @@ describe('toBaseUnits', () => {
   it('pads fewer decimals', () => {
     expect(toBaseUnits('1.5', 7)).toBe('15000000')
   })
+
+  it('handles negative amounts correctly (NM-006)', () => {
+    expect(toBaseUnits('-1.5', 7)).toBe('-15000000')
+    expect(toBaseUnits('-0.01', 7)).toBe('-100000')
+  })
 })
 
 describe('fromBaseUnits', () => {
@@ -41,6 +46,16 @@ describe('fromBaseUnits', () => {
   it('roundtrips', () => {
     const base = toBaseUnits('42.1234567', 7)
     expect(fromBaseUnits(base, 7)).toBe('42.1234567')
+  })
+
+  it('handles negative amounts correctly (NM-006)', () => {
+    expect(fromBaseUnits('-15000000', 7)).toBe('-1.5000000')
+    expect(fromBaseUnits('-5000000', 7)).toBe('-0.5000000')
+  })
+
+  it('roundtrips negative amounts (NM-006)', () => {
+    const base = toBaseUnits('-1.5', 7)
+    expect(fromBaseUnits(base, 7)).toBe('-1.5000000')
   })
 })
 

@@ -10,6 +10,7 @@ import {
   SOROBAN_RPC_URLS,
   type NetworkId,
 } from '../../constants.js'
+import { scValToBigInt } from '../../scval.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -108,7 +109,7 @@ export async function getChannelState(
       simulateGetter('to'),
     ])
 
-  const balance = scValToI128(balanceVal!)
+  const balance = scValToBigInt(balanceVal!)
   if (!waitingPeriodVal) {
     throw new Error(
       `Failed to simulate refund_waiting_period on channel ${channelAddress}: missing return value`,
@@ -229,11 +230,4 @@ function isEnumVariant(scVal: xdr.ScVal, name: string): boolean {
     // not the shape we expected
   }
   return false
-}
-
-function scValToI128(val: xdr.ScVal): bigint {
-  const i128 = val.i128()
-  const hi = BigInt(i128.hi().toString())
-  const lo = BigInt(i128.lo().toString())
-  return (hi << 64n) | lo
 }

@@ -3,6 +3,7 @@ import {
   SOROBAN_RPC_URLS,
   type NetworkId,
 } from '../../constants.js'
+import { scValToBigInt } from '../../scval.js'
 
 // ---------------------------------------------------------------------------
 // Event types
@@ -202,13 +203,13 @@ function parseEvent(event: rpc.Api.EventResponse): ChannelEvent | null {
 
   switch (topicName) {
     case 'close':
-      return { type: 'close', amount: decodeI128(event.value), txHash, ledger, ledgerClosedAt }
+      return { type: 'close', amount: scValToBigInt(event.value), txHash, ledger, ledgerClosedAt }
     case 'close_start':
       return { type: 'close_start', txHash, ledger, ledgerClosedAt }
     case 'refund':
-      return { type: 'refund', amount: decodeI128(event.value), txHash, ledger, ledgerClosedAt }
+      return { type: 'refund', amount: scValToBigInt(event.value), txHash, ledger, ledgerClosedAt }
     case 'top_up':
-      return { type: 'top_up', amount: decodeI128(event.value), txHash, ledger, ledgerClosedAt }
+      return { type: 'top_up', amount: scValToBigInt(event.value), txHash, ledger, ledgerClosedAt }
     default:
       return null
   }
@@ -223,15 +224,4 @@ function decodeSymbol(scVal: xdr.ScVal): string | null {
     // Not a symbol
   }
   return null
-}
-
-function decodeI128(scVal: xdr.ScVal): bigint {
-  try {
-    const i128 = scVal.i128()
-    const hi = BigInt(i128.hi().toString())
-    const lo = BigInt(i128.lo().toString())
-    return (hi << 64n) | lo
-  } catch {
-    return 0n
-  }
 }

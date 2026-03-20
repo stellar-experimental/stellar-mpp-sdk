@@ -70,6 +70,9 @@ export const charge = Method.from({
  * ```
  */
 export function toBaseUnits(amount: string, decimals: number): string {
+  if (amount.startsWith('-')) {
+    return '-' + toBaseUnits(amount.slice(1), decimals)
+  }
   const [whole = '0', frac = ''] = amount.split('.')
   if (decimals === 0) return BigInt(whole).toString()
   const paddedFrac = frac.padEnd(decimals, '0').slice(0, decimals)
@@ -86,6 +89,9 @@ export function toBaseUnits(amount: string, decimals: number): string {
  */
 export function fromBaseUnits(baseUnits: string, decimals: number): string {
   const bi = BigInt(baseUnits)
+  if (bi < 0n) {
+    return '-' + fromBaseUnits((-bi).toString(), decimals)
+  }
   const divisor = 10n ** BigInt(decimals)
   const whole = (bi / divisor).toString()
   const remainder = (bi % divisor).toString().padStart(decimals, '0')

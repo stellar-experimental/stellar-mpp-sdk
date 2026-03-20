@@ -11,6 +11,7 @@ import {
 import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
 import {
+  DEFAULT_DECIMALS,
   DEFAULT_TIMEOUT,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
@@ -45,6 +46,7 @@ import { fromBaseUnits } from '../Methods.js'
  */
 export function charge(parameters: charge.Parameters) {
   const {
+    decimals = DEFAULT_DECIMALS,
     keypair: keypairParam,
     mode: defaultMode = 'pull',
     onProgress,
@@ -76,7 +78,7 @@ export function charge(parameters: charge.Parameters) {
       onProgress?.({
         type: 'challenge',
         recipient,
-        amount: fromBaseUnits(amount, 7),
+        amount: fromBaseUnits(amount, decimals),
         currency,
         ...(feePayerKey ? { feePayerKey } : {}),
       })
@@ -182,6 +184,8 @@ export declare namespace charge {
     secretKey?: string
     /** Stellar Keypair instance. Provide either this or `secretKey`. */
     keypair?: Keypair
+    /** Number of decimal places for the token. @default 7 */
+    decimals?: number
     /** Custom Soroban RPC URL. Defaults based on network. */
     rpcUrl?: string
     /**

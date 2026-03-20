@@ -558,17 +558,11 @@ describe('stellar server channel dispute detection', () => {
     expect(onDisputeDetected).toHaveBeenCalledWith(disputeState)
   })
 
-  it('continues normally when on-chain check fails (network error)', async () => {
+  it('rejects voucher when on-chain check fails (network error)', async () => {
     mockGetChannelState.mockRejectedValueOnce(new Error('network timeout'))
 
-    const commitmentBytes = Buffer.from('network-error-test')
-    mockSimulateTransaction.mockResolvedValueOnce(
-      successSimResult(commitmentBytes),
-    )
-
-    const credential = makeSignedCredential({
-      commitmentBytes,
-      cumulativeAmount: 1000000n,
+    const credential = makeCredential({
+      amount: '1000000',
       challengeAmount: '1000000',
     })
 
@@ -579,12 +573,13 @@ describe('stellar server channel dispute detection', () => {
       sourceAccount: MOCK_SOURCE_KEY.publicKey(),
     })
 
-    // Should still succeed — on-chain check failure is non-fatal
-    const receipt = await method.verify({
-      credential: credential as any,
-      request: credential.challenge.request,
-    })
-    expect(receipt.status).toBe('success')
+    // NM-005: Fail closed — on-chain check failure now rejects the voucher
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('On-chain state check failed')
   })
 
   it('caches on-chain state in store', async () => {
@@ -679,5 +674,63 @@ describe('stellar server channel dispute detection', () => {
         request: credential.challenge.request,
       }),
     ).rejects.toThrow('checkOnChainState requires sourceAccount to be set')
+  })
+
+  it('rejects voucher after channel finalization (NM-001)', async () => {
+    const store = Store.memory()
+    await store.put(`stellar:channel:finalized:${CHANNEL_ADDRESS}`, {
+      finalizedAt: new Date().toISOString(),
+      txHash: 'abc123',
+      amount: '5000000',
+    })
+
+    const credential = makeCredential({
+      amount: '1000000',
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      store,
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('Channel has been finalized')
+  })
+
+  it('rejects commitment that exceeds on-chain balance (NM-003)', async () => {
+    mockGetChannelState.mockResolvedValueOnce({
+      balance: 500000n, // less than commitment
+      refundWaitingPeriod: 1000,
+      token: 'CTOKEN...',
+      from: 'GFROM...',
+      to: 'GTO...',
+      closeEffectiveAtLedger: null,
+      currentLedger: 4000,
+    })
+
+    const credential = makeCredential({
+      amount: '1000000',
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      checkOnChainState: true,
+      sourceAccount: MOCK_SOURCE_KEY.publicKey(),
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('exceeds channel balance')
   })
 })
