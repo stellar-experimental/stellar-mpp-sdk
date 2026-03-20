@@ -14,6 +14,7 @@ import {
 } from '../../constants.js'
 import { toBaseUnits } from '../../Methods.js'
 import { channel as ChannelMethod } from '../Methods.js'
+import { getChannelState, type ChannelState } from './State.js'
 
 /**
  * Creates a Stellar one-way-channel method for use on the **server**.
@@ -42,9 +43,12 @@ import { channel as ChannelMethod } from '../Methods.js'
 export function channel(parameters: channel.Parameters) {
   const {
     channel: channelAddress,
+    checkOnChainState = false,
+    closeKey: closeKeyParam,
     commitmentKey: commitmentKeyParam,
     decimals = DEFAULT_DECIMALS,
     network = 'testnet',
+    onDisputeDetected,
     rpcUrl,
     sourceAccount,
     store,
@@ -60,6 +64,15 @@ export function channel(parameters: channel.Parameters) {
       return Keypair.fromPublicKey(commitmentKeyParam)
     }
     return commitmentKeyParam
+  })()
+
+  // Parse the optional close signer key
+  const closeKeypair = (() => {
+    if (!closeKeyParam) return undefined
+    if (typeof closeKeyParam === 'string') {
+      return Keypair.fromSecret(closeKeyParam)
+    }
+    return closeKeyParam
   })()
 
   // Track cumulative amounts per channel in the store
@@ -107,6 +120,59 @@ export function channel(parameters: channel.Parameters) {
       const payload = credential.payload
       const commitmentAmount = BigInt(payload.amount)
       const signatureHex = payload.signature
+
+      // Lazy on-chain dispute detection: if enabled, check whether
+      // close_start has been called on-chain. This mirrors Tempo's
+      // close_requested_at guard — each incoming voucher refreshes
+      // our view of the channel without requiring a background poller.
+      if (checkOnChainState) {
+        if (!sourceAccount) {
+          throw new Error(
+            'checkOnChainState requires sourceAccount to be set. ' +
+            'Provide a funded Stellar account address (G...) to use for on-chain simulations.',
+          )
+        }
+        try {
+          const state = await getChannelState({
+            channel: channelAddress,
+            network,
+            rpcUrl,
+            sourceAccount,
+          })
+
+          // Cache the on-chain state for the caller
+          if (store) {
+            await store.put(
+              `stellar:channel:state:${channelAddress}`,
+              {
+                balance: state.balance.toString(),
+                closeEffectiveAtLedger: state.closeEffectiveAtLedger,
+                currentLedger: state.currentLedger,
+                queriedAt: new Date().toISOString(),
+              },
+            )
+          }
+
+          if (state.closeEffectiveAtLedger != null) {
+            onDisputeDetected?.(state)
+
+            if (state.currentLedger >= state.closeEffectiveAtLedger) {
+              throw new ChannelVerificationError(
+                'Channel is closed: close effective ledger has been reached.',
+                {
+                  closeEffectiveAtLedger: String(state.closeEffectiveAtLedger),
+                  currentLedger: String(state.currentLedger),
+                },
+              )
+            }
+          }
+        } catch (error) {
+          // Re-throw ChannelVerificationError (channel closed)
+          if (error instanceof ChannelVerificationError) throw error
+          // Silently continue if on-chain check fails (network issue).
+          // The verify logic below still protects against invalid credentials.
+        }
+      }
 
       // Validate hex signature format
       if (!/^[0-9a-f]+$/i.test(signatureHex) || signatureHex.length % 2 !== 0) {
@@ -223,6 +289,76 @@ export function channel(parameters: channel.Parameters) {
         })
       }
 
+      // Dispatch on action
+      const action = payload.action ?? 'voucher'
+
+      if (action === 'close') {
+        if (!closeKeypair) {
+          throw new ChannelVerificationError(
+            'Close action requires a closeKey to be configured.',
+            {},
+          )
+        }
+
+        // Submit the close transaction on-chain
+        const closeOp = contract.call(
+          'close',
+          nativeToScVal(commitmentAmount, { type: 'i128' }),
+          nativeToScVal(Buffer.from(signatureBytes), { type: 'bytes' }),
+        )
+
+        const closeAccount = await server.getAccount(closeKeypair.publicKey())
+        const closeTx = new TransactionBuilder(closeAccount, {
+          fee: '100',
+          networkPassphrase,
+        })
+          .addOperation(closeOp)
+          .setTimeout(180)
+          .build()
+
+        const prepared = await server.prepareTransaction(closeTx)
+        prepared.sign(closeKeypair)
+
+        const sendResult = await server.sendTransaction(prepared)
+
+        const MAX_POLL_ATTEMPTS = 60
+        let txResult = await server.getTransaction(sendResult.hash)
+        let attempts = 0
+        while (txResult.status === 'NOT_FOUND') {
+          if (++attempts >= MAX_POLL_ATTEMPTS) {
+            throw new ChannelVerificationError(
+              `Close transaction not found after ${MAX_POLL_ATTEMPTS} attempts.`,
+              { hash: sendResult.hash },
+            )
+          }
+          await new Promise((r) => setTimeout(r, 1000))
+          txResult = await server.getTransaction(sendResult.hash)
+        }
+
+        if (txResult.status !== 'SUCCESS') {
+          throw new ChannelVerificationError(
+            `Close transaction failed: ${txResult.status}`,
+            { hash: sendResult.hash, status: txResult.status },
+          )
+        }
+
+        // Mark channel as finalized in store
+        if (store) {
+          await store.put(`stellar:channel:finalized:${channelAddress}`, {
+            finalizedAt: new Date().toISOString(),
+            txHash: sendResult.hash,
+            amount: commitmentAmount.toString(),
+          })
+        }
+
+        return Receipt.from({
+          method: 'stellar',
+          reference: sendResult.hash,
+          status: 'success',
+          timestamp: new Date().toISOString(),
+        })
+      }
+
       return Receipt.from({
         method: 'stellar',
         reference: challengeRequest.methodDetails?.reference ?? challenge.id,
@@ -320,6 +456,19 @@ export declare namespace channel {
     /** On-chain channel contract address (C...). */
     channel: string
     /**
+     * When true, each verify call lazily reads on-chain state to detect
+     * if `close_start` has been called (dispute detection). Requires
+     * `sourceAccount` to be set — a configuration error is thrown if
+     * `sourceAccount` is missing when this is enabled. @default false
+     */
+    checkOnChainState?: boolean
+    /**
+     * Keypair for signing close transactions. Required when handling
+     * close credential actions. Accepts a Stellar secret key string (S...)
+     * or a Keypair instance.
+     */
+    closeKey?: string | Keypair
+    /**
      * Ed25519 public key for verifying commitment signatures.
      * Accepts a Stellar public key string (G...) or a Keypair instance.
      */
@@ -328,6 +477,11 @@ export declare namespace channel {
     decimals?: number
     /** Stellar network. @default 'testnet' */
     network?: NetworkId
+    /**
+     * Called when a dispute is detected on-chain (close_start has been called).
+     * Use this to trigger a close response before the waiting period elapses.
+     */
+    onDisputeDetected?: (state: ChannelState) => void
     /** Custom Soroban RPC URL. */
     rpcUrl?: string
     /**

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 // Hoisted mock stubs — accessible inside the vi.mock factory
 const mockGetAccount = vi.fn()
 const mockSimulateTransaction = vi.fn()
+const mockGetChannelState = vi.fn()
 
 vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@stellar/stellar-sdk')>()
@@ -19,6 +20,10 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
     },
   }
 })
+
+vi.mock('./State.js', () => ({
+  getChannelState: (...args: unknown[]) => mockGetChannelState(...args),
+}))
 
 // Re-import after mock is set up
 const { channel } = await import('./Channel.js')
@@ -39,6 +44,7 @@ const CHANNEL_ADDRESS = 'CAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQC52
  * Build a fake credential for testing verify().
  */
 function makeCredential(opts: {
+  action?: 'voucher' | 'close'
   amount: string
   challengeAmount?: string
   cumulativeAmount?: string
@@ -62,6 +68,7 @@ function makeCredential(opts: {
   return Credential.from({
     challenge,
     payload: {
+      action: opts.action ?? 'voucher',
       amount: opts.amount,
       signature: opts.signature ?? 'a'.repeat(128),
     },
@@ -70,6 +77,7 @@ function makeCredential(opts: {
 
 /** Build a credential with a real ed25519 signature over `commitmentBytes`. */
 function makeSignedCredential(opts: {
+  action?: 'voucher' | 'close'
   commitmentBytes: Buffer
   cumulativeAmount: bigint
   challengeAmount: string
@@ -95,6 +103,7 @@ function makeSignedCredential(opts: {
   return Credential.from({
     challenge,
     payload: {
+      action: opts.action ?? 'voucher',
       amount: opts.cumulativeAmount.toString(),
       signature: sigHex,
     },
@@ -180,6 +189,15 @@ describe('stellar server channel', () => {
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       sourceAccount: Keypair.random().publicKey(),
+    })
+    expect(method.name).toBe('stellar')
+  })
+
+  it('accepts closeKey parameter', () => {
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY.publicKey(),
+      closeKey: Keypair.random(),
     })
     expect(method.name).toBe('stellar')
   })
@@ -391,5 +409,231 @@ describe('stellar server channel verification', () => {
         request: credential.challenge.request,
       }),
     ).rejects.toThrow('Replay rejected')
+  })
+
+  it('rejects close action when closeKey is not configured', async () => {
+    const commitmentBytes = Buffer.from('close-test-bytes')
+    mockSimulateTransaction.mockResolvedValueOnce(
+      successSimResult(commitmentBytes),
+    )
+
+    const credential = makeSignedCredential({
+      action: 'close',
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('Close action requires a closeKey')
+  })
+})
+
+describe('stellar server channel dispute detection', () => {
+  it('rejects voucher when channel is closed (effective ledger reached)', async () => {
+    mockGetChannelState.mockResolvedValueOnce({
+      balance: 1000000n,
+      refundWaitingPeriod: 1000,
+      token: 'CTOKEN...',
+      from: 'GFROM...',
+      to: 'GTO...',
+      closeEffectiveAtLedger: 5000,
+      currentLedger: 5500, // past effective → closed
+    })
+
+    const credential = makeCredential({
+      amount: '1000000',
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      checkOnChainState: true,
+      sourceAccount: MOCK_SOURCE_KEY.publicKey(),
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('Channel is closed')
+  })
+
+  it('calls onDisputeDetected when close_start detected but not yet effective', async () => {
+    const disputeState = {
+      balance: 1000000n,
+      refundWaitingPeriod: 1000,
+      token: 'CTOKEN...',
+      from: 'GFROM...',
+      to: 'GTO...',
+      closeEffectiveAtLedger: 6000,
+      currentLedger: 5500, // before effective → still open, but dispute started
+    }
+    mockGetChannelState.mockResolvedValueOnce(disputeState)
+
+    const commitmentBytes = Buffer.from('dispute-test-bytes')
+    mockSimulateTransaction.mockResolvedValueOnce(
+      successSimResult(commitmentBytes),
+    )
+
+    const onDisputeDetected = vi.fn()
+
+    const credential = makeSignedCredential({
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      checkOnChainState: true,
+      sourceAccount: MOCK_SOURCE_KEY.publicKey(),
+      onDisputeDetected,
+    })
+
+    const receipt = await method.verify({
+      credential: credential as any,
+      request: credential.challenge.request,
+    })
+
+    // Verification should still succeed (channel not yet closed)
+    expect(receipt.status).toBe('success')
+    // But dispute callback should have been called
+    expect(onDisputeDetected).toHaveBeenCalledWith(disputeState)
+  })
+
+  it('continues normally when on-chain check fails (network error)', async () => {
+    mockGetChannelState.mockRejectedValueOnce(new Error('network timeout'))
+
+    const commitmentBytes = Buffer.from('network-error-test')
+    mockSimulateTransaction.mockResolvedValueOnce(
+      successSimResult(commitmentBytes),
+    )
+
+    const credential = makeSignedCredential({
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      checkOnChainState: true,
+      sourceAccount: MOCK_SOURCE_KEY.publicKey(),
+    })
+
+    // Should still succeed — on-chain check failure is non-fatal
+    const receipt = await method.verify({
+      credential: credential as any,
+      request: credential.challenge.request,
+    })
+    expect(receipt.status).toBe('success')
+  })
+
+  it('caches on-chain state in store', async () => {
+    mockGetChannelState.mockResolvedValueOnce({
+      balance: 5000000n,
+      refundWaitingPeriod: 1000,
+      token: 'CTOKEN...',
+      from: 'GFROM...',
+      to: 'GTO...',
+      closeEffectiveAtLedger: null,
+      currentLedger: 4000,
+    })
+
+    const commitmentBytes = Buffer.from('cache-test-bytes')
+    mockSimulateTransaction.mockResolvedValueOnce(
+      successSimResult(commitmentBytes),
+    )
+
+    const store = Store.memory()
+
+    const credential = makeSignedCredential({
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      checkOnChainState: true,
+      sourceAccount: MOCK_SOURCE_KEY.publicKey(),
+      store,
+    })
+
+    await method.verify({
+      credential: credential as any,
+      request: credential.challenge.request,
+    })
+
+    const cached = (await store.get(
+      `stellar:channel:state:${CHANNEL_ADDRESS}`,
+    )) as { balance: string; currentLedger: number }
+    expect(cached).not.toBeNull()
+    expect(cached.balance).toBe('5000000')
+    expect(cached.currentLedger).toBe(4000)
+  })
+
+  it('skips on-chain check when checkOnChainState is false', async () => {
+    mockGetChannelState.mockClear()
+
+    const commitmentBytes = Buffer.from('skip-check-bytes')
+    mockSimulateTransaction.mockResolvedValueOnce(
+      successSimResult(commitmentBytes),
+    )
+
+    const credential = makeSignedCredential({
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      // checkOnChainState defaults to false
+    })
+
+    const receipt = await method.verify({
+      credential: credential as any,
+      request: credential.challenge.request,
+    })
+    expect(receipt.status).toBe('success')
+    expect(mockGetChannelState).not.toHaveBeenCalled()
+  })
+
+  it('throws a configuration error when checkOnChainState is true but sourceAccount is missing', async () => {
+    const credential = makeCredential({
+      amount: '1000000',
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      checkOnChainState: true,
+      // sourceAccount intentionally omitted
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('checkOnChainState requires sourceAccount to be set')
   })
 })

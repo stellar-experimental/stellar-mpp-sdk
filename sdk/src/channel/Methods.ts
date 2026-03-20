@@ -15,12 +15,24 @@ export const channel = Method.from({
   intent: 'channel',
   schema: {
     credential: {
-      payload: z.object({
-        /** Cumulative amount authorised by this commitment (base units). */
-        amount: z.string().check(z.regex(/^\d+$/)),
-        /** Ed25519 signature over the commitment bytes (128 hex chars). */
-        signature: z.string().check(z.regex(/^[0-9a-f]{128}$/i)),
-      }),
+      payload: z.union([
+        z.object({
+          /** Action discriminator — pay a voucher. */
+          action: z.literal('voucher'),
+          /** Cumulative amount authorised by this commitment (base units). */
+          amount: z.string().check(z.regex(/^\d+$/)),
+          /** Ed25519 signature over the commitment bytes (128 hex chars). */
+          signature: z.string().check(z.regex(/^[0-9a-f]{128}$/i)),
+        }),
+        z.object({
+          /** Action discriminator — close the channel. */
+          action: z.literal('close'),
+          /** Cumulative amount authorised by this commitment (base units). */
+          amount: z.string().check(z.regex(/^\d+$/)),
+          /** Ed25519 signature over the commitment bytes (128 hex chars). */
+          signature: z.string().check(z.regex(/^[0-9a-f]{128}$/i)),
+        }),
+      ]),
     },
     request: z.object({
       /** Incremental payment amount in base units (stroops). */

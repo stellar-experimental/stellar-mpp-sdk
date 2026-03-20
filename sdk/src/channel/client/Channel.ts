@@ -57,6 +57,8 @@ export function channel(parameters: channel.Parameters) {
     context: z.object({
       /** Override the cumulative amount to commit. */
       cumulativeAmount: z.optional(z.string()),
+      /** Credential action: 'voucher' (default) or 'close'. */
+      action: z.optional(z.enum(['voucher', 'close'])),
     }),
     async createCredential({ challenge, context }) {
       const { request } = challenge
@@ -66,6 +68,8 @@ export function channel(parameters: channel.Parameters) {
 
       // The server tells us the cumulative amount via methodDetails,
       // or the caller can override via context.
+      const action = context?.action ?? 'voucher'
+
       const previousCumulative = BigInt(
         request.methodDetails?.cumulativeAmount ?? '0',
       )
@@ -139,6 +143,7 @@ export function channel(parameters: channel.Parameters) {
       return Credential.serialize({
         challenge,
         payload: {
+          action,
           amount: cumulativeAmount.toString(),
           signature: sigHex,
         },
