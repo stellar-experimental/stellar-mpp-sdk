@@ -311,4 +311,70 @@ describe('watchChannel', () => {
 
     stop()
   })
+
+  it('continues delivering events when onEvent callback throws', async () => {
+    const errors: Error[] = []
+    const events: unknown[] = []
+    let callCount = 0
+
+    mockGetEvents.mockResolvedValueOnce({
+      events: [
+        makeEvent({ topicName: 'close', value: makeI128ScVal(1_000_000n), txHash: 'tx1' }),
+        makeEvent({ topicName: 'top_up', value: makeI128ScVal(2_000_000n), txHash: 'tx2' }),
+      ],
+      cursor: 'cursor-after-throw',
+    })
+
+    const stop = watchChannel({
+      channel: CHANNEL_ADDRESS,
+      onEvent: (e) => {
+        callCount++
+        if (callCount === 1) throw new Error('handler boom')
+        events.push(e)
+      },
+      onError: (e) => errors.push(e),
+    })
+
+    await vi.advanceTimersByTimeAsync(0)
+
+    // First event threw, but second still delivered
+    expect(errors).toHaveLength(1)
+    expect(errors[0].message).toBe('handler boom')
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ type: 'top_up' })
+
+    stop()
+  })
+
+  it('advances cursor even when no events match', async () => {
+    mockGetEvents
+      .mockResolvedValueOnce({
+        events: [],
+        cursor: 'cursor-empty-page',
+      })
+      .mockResolvedValueOnce({
+        events: [],
+        cursor: 'cursor-empty-page-2',
+      })
+
+    const stop = watchChannel({
+      channel: CHANNEL_ADDRESS,
+      intervalMs: 1000,
+      onEvent: () => {},
+    })
+
+    // First poll — uses startLedger
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mockGetEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ startLedger: 5000 }),
+    )
+
+    // Second poll — should use cursor, not startLedger
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockGetEvents).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: 'cursor-empty-page' }),
+    )
+
+    stop()
+  })
 })

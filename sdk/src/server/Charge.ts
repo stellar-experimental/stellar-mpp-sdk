@@ -39,6 +39,10 @@ export function charge(parameters: charge.Parameters) {
       ).publicKey()
     : undefined
 
+  // Serialize verify operations to prevent concurrent race conditions
+  // on tx hash deduplication (get/put is not atomic).
+  let verifyLock: Promise<unknown> = Promise.resolve()
+
   return Method.toServer(Methods.charge, {
     defaults: {
       currency,
@@ -59,6 +63,18 @@ export function charge(parameters: charge.Parameters) {
       }
     },
     async verify({ credential }) {
+      // Serialize through the lock to prevent concurrent race conditions
+      const result = await new Promise<any>((resolve, reject) => {
+        verifyLock = verifyLock.then(
+          () => doVerify(credential).then(resolve, reject),
+          () => doVerify(credential).then(resolve, reject),
+        )
+      })
+      return result
+    },
+  })
+
+  async function doVerify(credential: any) {
       const { challenge } = credential
       const { request: challengeRequest } = challenge
 
@@ -84,6 +100,20 @@ export function charge(parameters: charge.Parameters) {
         case 'signature': {
           const hash = payload.hash
 
+          // Check tx hash dedup BEFORE verification to reject known replays
+          // early, but only mark as used AFTER successful verification to
+          // avoid permanently burning a hash on transient failures.
+          if (store) {
+            const hashKey = `stellar:tx:${hash}`
+            const hashUsed = await store.get(hashKey)
+            if (hashUsed) {
+              throw new PaymentVerificationError(
+                'Transaction hash already used. Replay rejected.',
+                { hash },
+              )
+            }
+          }
+
           let txResult = await server.getTransaction(hash)
           let attempts = 0
           while (txResult.status === 'NOT_FOUND' && attempts < 10) {
@@ -104,6 +134,11 @@ export function charge(parameters: charge.Parameters) {
             currency: expectedCurrency,
             recipient: expectedRecipient,
           })
+
+          // Mark tx hash as used only after successful verification
+          if (store) {
+            await store.put(`stellar:tx:${hash}`, { usedAt: new Date().toISOString() })
+          }
 
           return Receipt.from({
             method: 'stellar',
@@ -184,8 +219,7 @@ export function charge(parameters: charge.Parameters) {
             `Unsupported credential type "${(payload as { type: string }).type}".`,
           )
       }
-    },
-  })
+  }
 }
 
 // ---------------------------------------------------------------------------

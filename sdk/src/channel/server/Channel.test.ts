@@ -246,7 +246,51 @@ describe('stellar server channel verification', () => {
         credential: credential as any,
         request: credential.challenge.request,
       }),
-    ).rejects.toThrow('is less than previous cumulative')
+    ).rejects.toThrow('must be greater than previous cumulative')
+  })
+
+  it('rejects zero-amount challenge request', async () => {
+    const credential = makeCredential({
+      amount: '1000000',
+      challengeAmount: '0',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('Requested amount must be positive')
+  })
+
+  it('rejects commitment equal to previous cumulative (no progress)', async () => {
+    const store = Store.memory()
+    const cumulativeKey = `stellar:channel:cumulative:${CHANNEL_ADDRESS}`
+    await store.put(cumulativeKey, { amount: '5000000' })
+
+    // Commitment = 5000000, previous cumulative = 5000000 → reject (must be strictly greater)
+    const credential = makeCredential({
+      amount: '5000000',
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      store,
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('must be greater than previous cumulative')
   })
 
   it('rejects invalid hex signature', async () => {

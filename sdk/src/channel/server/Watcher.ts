@@ -94,22 +94,35 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
 
       const response = await server.getEvents(request)
 
-      // Guard: do not emit events after shutdown
+      // Check stopped after await to avoid emitting events after shutdown
       if (stopped) return
 
       for (const event of response.events) {
         const parsed = parseEvent(event)
         if (parsed) {
-          onEvent(parsed)
+          try {
+            onEvent(parsed)
+          } catch (callbackError) {
+            try {
+              onError?.(callbackError instanceof Error
+                ? callbackError
+                : new Error(String(callbackError)))
+            } catch { /* prevent onError from breaking the poll loop */ }
+          }
         }
       }
 
-      // Always advance the cursor so subsequent polls don't re-scan
-      // the same ledger range even when there are no matching events.
-      cursor = response.cursor
+      // Always advance cursor so polling progresses even when no
+      // events match — without this the watcher would re-scan the
+      // same ledger range on every poll.
+      if (response.cursor != null) {
+        cursor = response.cursor
+      }
     } catch (error) {
       if (!stopped) {
-        onError?.(error instanceof Error ? error : new Error(String(error)))
+        try {
+          onError?.(error instanceof Error ? error : new Error(String(error)))
+        } catch { /* prevent onError from breaking the poll loop */ }
       }
     }
   }

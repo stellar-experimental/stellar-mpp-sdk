@@ -1,8 +1,24 @@
 import { Keypair } from '@stellar/stellar-sdk'
-import { Store } from 'mppx'
-import { describe, expect, it } from 'vitest'
+import { Challenge, Credential, Store } from 'mppx'
+import { describe, expect, it, vi } from 'vitest'
 import { USDC_SAC_TESTNET } from '../constants.js'
-import { charge } from './Charge.js'
+
+const mockGetTransaction = vi.fn()
+
+vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@stellar/stellar-sdk')>()
+  return {
+    ...actual,
+    rpc: {
+      ...actual.rpc,
+      Server: vi.fn().mockImplementation(() => ({
+        getTransaction: mockGetTransaction,
+      })),
+    },
+  }
+})
+
+const { charge } = await import('./Charge.js')
 
 const RECIPIENT = Keypair.random().publicKey()
 
@@ -76,5 +92,76 @@ describe('stellar server charge', () => {
       decimals: 6,
     })
     expect(method.name).toBe('stellar')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Transaction hash dedup tests (signature flow with mocked RPC)
+// ---------------------------------------------------------------------------
+
+function makeSignatureCredential(opts: { hash: string; challengeId?: string }) {
+  const challenge = Challenge.from({
+    id: opts.challengeId ?? `test-${crypto.randomUUID()}`,
+    realm: 'localhost',
+    method: 'stellar',
+    intent: 'charge',
+    request: {
+      amount: '10000000',
+      currency: USDC_SAC_TESTNET,
+      recipient: RECIPIENT,
+    },
+  })
+  return Credential.from({
+    challenge,
+    payload: { type: 'signature', hash: opts.hash },
+  })
+}
+
+describe('charge tx hash dedup', () => {
+  it('rejects a second verify with the same tx hash', async () => {
+    // Mock: tx SUCCESS with a valid SAC transfer envelope
+    mockGetTransaction.mockResolvedValue({
+      status: 'SUCCESS',
+      envelopeXdr: undefined, // verifySacTransfer will throw — that's fine for
+    })
+
+    const store = Store.memory()
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store,
+    })
+
+    const hash = 'abc123firstuse'
+
+    // First attempt — will fail on envelope verification (no envelope),
+    // which means the hash should NOT be marked as used (write is after verify).
+    const cred1 = makeSignatureCredential({ hash })
+    await expect(
+      method.verify({ credential: cred1 as any, request: cred1.challenge.request }),
+    ).rejects.toThrow()
+
+    // Verify the hash was NOT stored (failed verification should not burn it)
+    const stored = await store.get(`stellar:tx:${hash}`)
+    expect(stored).toBeFalsy()
+  })
+
+  it('marks tx hash as used only after successful verification', async () => {
+    const store = Store.memory()
+
+    // Pre-populate the hash to simulate it already being used
+    const hash = 'already-used-hash'
+    await store.put(`stellar:tx:${hash}`, { usedAt: new Date().toISOString() })
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store,
+    })
+
+    const cred = makeSignatureCredential({ hash })
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('Transaction hash already used')
   })
 })
