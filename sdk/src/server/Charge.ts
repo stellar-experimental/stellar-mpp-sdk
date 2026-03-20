@@ -16,6 +16,7 @@ import {
 } from '../constants.js'
 import * as Methods from '../Methods.js'
 import { toBaseUnits } from '../Methods.js'
+import { scValToBigInt } from '../scval.js'
 
 export function charge(parameters: charge.Parameters) {
   const {
@@ -133,7 +134,7 @@ export function charge(parameters: charge.Parameters) {
             amount: expectedAmount,
             currency: expectedCurrency,
             recipient: expectedRecipient,
-          })
+          }, networkPassphrase)
 
           // Mark tx hash as used only after successful verification
           if (store) {
@@ -175,9 +176,13 @@ export function charge(parameters: charge.Parameters) {
               typeof feePayer === 'string'
                 ? Keypair.fromSecret(feePayer)
                 : feePayer
+            // NM-004: Cap the fee-bump to prevent a malicious client from
+            // inflating tx.fee and draining the fee payer account.
+            const MAX_FEE_BUMP = 10_000_000 // 1 XLM in stroops
+            const bumpFee = Math.min(Number(tx.fee) * 10, MAX_FEE_BUMP)
             txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
               feePayerKeypair,
-              (Number(tx.fee) * 10).toString(),
+              bumpFee.toString(),
               tx,
               networkPassphrase,
             )
@@ -301,6 +306,7 @@ function verifyFromRawOps(
 function verifySacTransfer(
   txResult: rpc.Api.GetSuccessfulTransactionResponse,
   expected: { amount: bigint; currency: string; recipient: string },
+  networkPassphrase: string,
 ) {
   if (!txResult.envelopeXdr) {
     throw new PaymentVerificationError(
@@ -329,18 +335,11 @@ function verifySacTransfer(
     envelope = txResult.envelopeXdr
   }
 
-  // Determine network passphrase — try testnet first, then mainnet
-  let innerTx: Transaction | null = null
-  for (const np of [NETWORK_PASSPHRASE.testnet, NETWORK_PASSPHRASE.public]) {
-    try {
-      innerTx = new Transaction(envelope, np)
-      break
-    } catch {
-      continue
-    }
-  }
-
-  if (!innerTx) {
+  // NM-009: Use the configured network passphrase instead of guessing.
+  let innerTx: Transaction
+  try {
+    innerTx = new Transaction(envelope, networkPassphrase)
+  } catch {
     throw new PaymentVerificationError(
       'Could not parse transaction envelope for verification.',
       {},
@@ -348,41 +347,6 @@ function verifySacTransfer(
   }
 
   verifyFromRawOps(innerTx, expected)
-}
-
-function scValToBigInt(val: xdr.ScVal): bigint {
-  const switchValue = val.switch().value
-  // scvU32 = 3
-  if (switchValue === xdr.ScValType.scvU32().value) {
-    return BigInt(val.u32())
-  }
-  // scvI32 = 4
-  if (switchValue === xdr.ScValType.scvI32().value) {
-    return BigInt(val.i32())
-  }
-  // scvU64 = 5
-  if (switchValue === xdr.ScValType.scvU64().value) {
-    return BigInt(val.u64().toString())
-  }
-  // scvI64 = 6
-  if (switchValue === xdr.ScValType.scvI64().value) {
-    return BigInt(val.i64().toString())
-  }
-  // scvU128 = 9
-  if (switchValue === xdr.ScValType.scvU128().value) {
-    const parts = val.u128()
-    const hi = BigInt(parts.hi().toString())
-    const lo = BigInt(parts.lo().toString()) & 0xFFFFFFFFFFFFFFFFn
-    return (hi << 64n) | lo
-  }
-  // scvI128 = 10
-  if (switchValue === xdr.ScValType.scvI128().value) {
-    const parts = val.i128()
-    const hi = BigInt(parts.hi().toString())
-    const lo = BigInt(parts.lo().toString()) & 0xFFFFFFFFFFFFFFFFn
-    return (hi << 64n) | lo
-  }
-  throw new Error(`Cannot convert ScVal type ${switchValue} to BigInt`)
 }
 
 // ---------------------------------------------------------------------------

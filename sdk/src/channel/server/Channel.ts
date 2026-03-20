@@ -124,7 +124,21 @@ export function channel(parameters: channel.Parameters) {
       const { challenge } = credential
       const { request: challengeRequest } = challenge
 
-      // Replay protection
+      // NM-001: Reject vouchers once the channel has been finalized (closed on-chain).
+      if (store) {
+        const finalized = await store.get(`stellar:channel:finalized:${channelAddress}`)
+        if (finalized) {
+          throw new ChannelVerificationError(
+            'Channel has been finalized. No further vouchers accepted.',
+            { channel: channelAddress },
+          )
+        }
+      }
+
+      // Replay protection.
+      // NM-002: The verifyLock serializes calls so the get→put gap cannot
+      // be exploited in a single-process deployment. Multi-process
+      // deployments MUST use a store with atomic put-if-absent semantics.
       if (store) {
         const replayKey = `stellar:challenge:${challenge.id}`
         const existing = await store.get(replayKey)
@@ -183,11 +197,26 @@ export function channel(parameters: channel.Parameters) {
               )
             }
           }
+
+          // NM-003: Reject commitments that exceed the channel's on-chain balance.
+          if (commitmentAmount > state.balance) {
+            throw new ChannelVerificationError(
+              `Commitment ${commitmentAmount} exceeds channel balance ${state.balance}.`,
+              {
+                commitmentAmount: commitmentAmount.toString(),
+                balance: state.balance.toString(),
+              },
+            )
+          }
         } catch (error) {
-          // Re-throw ChannelVerificationError (channel closed)
+          // Re-throw ChannelVerificationError (channel closed / over-balance)
           if (error instanceof ChannelVerificationError) throw error
-          // Silently continue if on-chain check fails (network issue).
-          // The verify logic below still protects against invalid credentials.
+          // NM-005: Fail closed — reject the voucher when the on-chain
+          // check cannot be completed rather than silently skipping it.
+          throw new ChannelVerificationError(
+            'On-chain state check failed. Cannot verify channel status.',
+            { error: error instanceof Error ? error.message : String(error) },
+          )
         }
       }
 
