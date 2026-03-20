@@ -16,6 +16,7 @@ import {
 } from '../constants.js'
 import * as Methods from '../Methods.js'
 import { toBaseUnits } from '../Methods.js'
+import { sendTx, pollTx } from '../rpc-poll.js'
 
 export function charge(parameters: charge.Parameters) {
   const {
@@ -84,20 +85,7 @@ export function charge(parameters: charge.Parameters) {
         case 'signature': {
           const hash = payload.hash
 
-          let txResult = await server.getTransaction(hash)
-          let attempts = 0
-          while (txResult.status === 'NOT_FOUND' && attempts < 10) {
-            await new Promise((r) => setTimeout(r, 1000))
-            txResult = await server.getTransaction(hash)
-            attempts++
-          }
-
-          if (txResult.status !== 'SUCCESS') {
-            throw new PaymentVerificationError(
-              `Transaction ${hash} is not successful (status: ${txResult.status}).`,
-              { hash, status: txResult.status },
-            )
-          }
+          const txResult = await pollTx(server, hash, 10)
 
           verifySacTransfer(txResult, {
             amount: expectedAmount,
@@ -149,31 +137,12 @@ export function charge(parameters: charge.Parameters) {
             txToSubmit.sign(feePayerKeypair)
           }
 
-          const sendResult = await server.sendTransaction(txToSubmit)
-
-          let txResult = await server.getTransaction(sendResult.hash)
-          let txAttempts = 0
-          while (txResult.status === 'NOT_FOUND') {
-            if (++txAttempts >= 60) {
-              throw new PaymentVerificationError(
-                `Transaction not found after ${txAttempts} polling attempts.`,
-                { hash: sendResult.hash },
-              )
-            }
-            await new Promise((r) => setTimeout(r, 1000))
-            txResult = await server.getTransaction(sendResult.hash)
-          }
-
-          if (txResult.status !== 'SUCCESS') {
-            throw new PaymentVerificationError(
-              `Transaction failed on-chain: ${txResult.status}`,
-              { hash: sendResult.hash, status: txResult.status },
-            )
-          }
+          const hash = await sendTx(server, txToSubmit)
+          await pollTx(server, hash)
 
           return Receipt.from({
             method: 'stellar',
-            reference: sendResult.hash,
+            reference: hash,
             status: 'success',
             timestamp: new Date().toISOString(),
           })

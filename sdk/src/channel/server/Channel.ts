@@ -13,6 +13,7 @@ import {
   type NetworkId,
 } from '../../constants.js'
 import { toBaseUnits } from '../../Methods.js'
+import { sendTx, pollTx } from '../../rpc-poll.js'
 import { channel as ChannelMethod } from '../Methods.js'
 import { getChannelState, type ChannelState } from './State.js'
 
@@ -319,41 +320,21 @@ export function channel(parameters: channel.Parameters) {
         const prepared = await server.prepareTransaction(closeTx)
         prepared.sign(closeKeypair)
 
-        const sendResult = await server.sendTransaction(prepared)
-
-        const MAX_POLL_ATTEMPTS = 60
-        let txResult = await server.getTransaction(sendResult.hash)
-        let attempts = 0
-        while (txResult.status === 'NOT_FOUND') {
-          if (++attempts >= MAX_POLL_ATTEMPTS) {
-            throw new ChannelVerificationError(
-              `Close transaction not found after ${MAX_POLL_ATTEMPTS} attempts.`,
-              { hash: sendResult.hash },
-            )
-          }
-          await new Promise((r) => setTimeout(r, 1000))
-          txResult = await server.getTransaction(sendResult.hash)
-        }
-
-        if (txResult.status !== 'SUCCESS') {
-          throw new ChannelVerificationError(
-            `Close transaction failed: ${txResult.status}`,
-            { hash: sendResult.hash, status: txResult.status },
-          )
-        }
+        const closeHash = await sendTx(server, prepared)
+        await pollTx(server, closeHash)
 
         // Mark channel as finalized in store
         if (store) {
           await store.put(`stellar:channel:finalized:${channelAddress}`, {
             finalizedAt: new Date().toISOString(),
-            txHash: sendResult.hash,
+            txHash: closeHash,
             amount: commitmentAmount.toString(),
           })
         }
 
         return Receipt.from({
           method: 'stellar',
-          reference: sendResult.hash,
+          reference: closeHash,
           status: 'success',
           timestamp: new Date().toISOString(),
         })
@@ -421,30 +402,10 @@ export async function close(parameters: {
   const prepared = await server.prepareTransaction(tx)
   prepared.sign(closeKey)
 
-  const result = await server.sendTransaction(prepared)
+  const hash = await sendTx(server, prepared)
+  await pollTx(server, hash)
 
-  const MAX_POLL_ATTEMPTS = 60
-  let txResult = await server.getTransaction(result.hash)
-  let attempts = 0
-  while (txResult.status === 'NOT_FOUND') {
-    if (++attempts >= MAX_POLL_ATTEMPTS) {
-      throw new ChannelVerificationError(
-        `Transaction not found after ${MAX_POLL_ATTEMPTS} attempts.`,
-        { hash: result.hash },
-      )
-    }
-    await new Promise((r) => setTimeout(r, 1000))
-    txResult = await server.getTransaction(result.hash)
-  }
-
-  if (txResult.status !== 'SUCCESS') {
-    throw new ChannelVerificationError(
-      `Close transaction failed: ${txResult.status}`,
-      { hash: result.hash, status: txResult.status },
-    )
-  }
-
-  return result.hash
+  return hash
 }
 
 // ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import {
 } from '@stellar/stellar-sdk'
 import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
+import { sendTx, pollTx } from '../rpc-poll.js'
 import {
   DEFAULT_TIMEOUT,
   NETWORK_PASSPHRASE,
@@ -126,33 +127,15 @@ export function charge(parameters: charge.Parameters) {
       if (effectiveMode === 'push') {
         // Client broadcasts
         onProgress?.({ type: 'paying' })
-        const result = await server.sendTransaction(prepared)
+        const hash = await sendTx(server, prepared)
 
-        // Poll until confirmed
-        onProgress?.({ type: 'confirming', hash: result.hash })
-        let txResult = await server.getTransaction(result.hash)
-        let pollAttempts = 0
-        while (txResult.status === 'NOT_FOUND') {
-          if (++pollAttempts >= 60) {
-            throw new Error(
-              `Transaction not confirmed after ${pollAttempts} polling attempts.`,
-            )
-          }
-          await new Promise((r) => setTimeout(r, 1000))
-          txResult = await server.getTransaction(result.hash)
-        }
-
-        if (txResult.status !== 'SUCCESS') {
-          throw new Error(
-            `Transaction failed: ${txResult.status}`,
-          )
-        }
-
-        onProgress?.({ type: 'paid', hash: result.hash })
+        onProgress?.({ type: 'confirming', hash })
+        await pollTx(server, hash)
+        onProgress?.({ type: 'paid', hash })
 
         return Credential.serialize({
           challenge,
-          payload: { type: 'signature' as const, hash: result.hash },
+          payload: { type: 'signature' as const, hash },
         })
       }
 
