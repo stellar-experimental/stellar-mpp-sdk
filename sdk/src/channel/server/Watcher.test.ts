@@ -377,4 +377,46 @@ describe('watchChannel', () => {
 
     stop()
   })
+
+  it('advances cursor when parseEvent throws on a malformed event value', async () => {
+    const errors: Error[] = []
+    const events: unknown[] = []
+
+    // First event has an unexpected ScVal type that scValToBigInt cannot handle;
+    // second event is valid. Cursor must still advance.
+    mockGetEvents
+      .mockResolvedValueOnce({
+        events: [
+          makeEvent({ topicName: 'close', value: xdr.ScVal.scvVoid(), txHash: 'bad-tx' }),
+          makeEvent({ topicName: 'top_up', value: makeI128ScVal(500n), txHash: 'good-tx' }),
+        ],
+        cursor: 'cursor-after-bad',
+      })
+      .mockResolvedValueOnce({
+        events: [],
+        cursor: 'cursor-next',
+      })
+
+    const stop = watchChannel({
+      channel: CHANNEL_ADDRESS,
+      intervalMs: 1000,
+      onEvent: (e) => events.push(e),
+      onError: (e) => errors.push(e),
+    })
+
+    // First poll — bad event skipped, good event delivered, cursor advanced
+    await vi.advanceTimersByTimeAsync(0)
+    expect(errors).toHaveLength(1)
+    expect(errors[0].message).toMatch(/Cannot convert ScVal/)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ type: 'top_up', amount: 500n })
+
+    // Second poll uses the advanced cursor (not stuck on bad event)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockGetEvents).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: 'cursor-after-bad' }),
+    )
+
+    stop()
+  })
 })

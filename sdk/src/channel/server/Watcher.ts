@@ -99,7 +99,17 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
       if (stopped) return
 
       for (const event of response.events) {
-        const parsed = parseEvent(event)
+        let parsed: ChannelEvent | null
+        try {
+          parsed = parseEvent(event)
+        } catch (parseError) {
+          try {
+            onError?.(parseError instanceof Error
+              ? parseError
+              : new Error(String(parseError)))
+          } catch { /* prevent onError from breaking the poll loop */ }
+          continue
+        }
         if (parsed) {
           try {
             onEvent(parsed)
