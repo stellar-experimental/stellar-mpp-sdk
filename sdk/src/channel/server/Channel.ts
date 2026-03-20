@@ -78,6 +78,11 @@ export function channel(parameters: channel.Parameters) {
   // Track cumulative amounts per channel in the store
   const cumulativeKey = `stellar:channel:cumulative:${channelAddress}`
 
+  // Serialize verify operations to prevent concurrent double-acceptance.
+  // Without a transactional store, two concurrent verify calls could both
+  // read the same cumulative amount, both pass, and only one write wins.
+  let verifyLock: Promise<unknown> = Promise.resolve()
+
   return Method.toServer(ChannelMethod, {
     defaults: {
       channel: channelAddress,
@@ -104,6 +109,18 @@ export function channel(parameters: channel.Parameters) {
       }
     },
     async verify({ credential }) {
+      // Serialize through the lock to prevent concurrent double-acceptance
+      const result = await new Promise<any>((resolve, reject) => {
+        verifyLock = verifyLock.then(
+          () => doVerify(credential).then(resolve, reject),
+          () => doVerify(credential).then(resolve, reject),
+        )
+      })
+      return result
+    },
+  })
+
+  async function doVerify(credential: any) {
       const { challenge } = credential
       const { request: challengeRequest } = challenge
 
@@ -198,10 +215,19 @@ export function channel(parameters: channel.Parameters) {
         }
       }
 
-      // The new cumulative must be >= previous cumulative
-      if (commitmentAmount < previousCumulative) {
+      // Reject zero or negative requested amounts
+      const requestedAmount = BigInt(challengeRequest.amount)
+      if (requestedAmount <= 0n) {
         throw new ChannelVerificationError(
-          `Commitment amount ${commitmentAmount} is less than previous cumulative ${previousCumulative}.`,
+          'Requested amount must be positive.',
+          { requestedAmount: requestedAmount.toString() },
+        )
+      }
+
+      // The new cumulative must be strictly greater than previous cumulative
+      if (commitmentAmount <= previousCumulative) {
+        throw new ChannelVerificationError(
+          `Commitment amount ${commitmentAmount} must be greater than previous cumulative ${previousCumulative}.`,
           {
             commitmentAmount: commitmentAmount.toString(),
             previousCumulative: previousCumulative.toString(),
@@ -210,7 +236,6 @@ export function channel(parameters: channel.Parameters) {
       }
 
       // The commitment must cover the requested amount
-      const requestedAmount = BigInt(challengeRequest.amount)
       if (commitmentAmount < previousCumulative + requestedAmount) {
         throw new ChannelVerificationError(
           `Commitment amount ${commitmentAmount} does not cover the requested amount ${requestedAmount} (previous cumulative: ${previousCumulative}).`,
@@ -365,8 +390,7 @@ export function channel(parameters: channel.Parameters) {
         status: 'success',
         timestamp: new Date().toISOString(),
       })
-    },
-  })
+  }
 }
 
 /**

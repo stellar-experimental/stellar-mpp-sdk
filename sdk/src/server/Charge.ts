@@ -84,6 +84,21 @@ export function charge(parameters: charge.Parameters) {
         case 'signature': {
           const hash = payload.hash
 
+          // Deduplicate by transaction hash to prevent replay attacks:
+          // without this, an attacker could reuse a single on-chain tx
+          // hash across multiple challenges to get unlimited service.
+          if (store) {
+            const hashKey = `stellar:tx:${hash}`
+            const hashUsed = await store.get(hashKey)
+            if (hashUsed) {
+              throw new PaymentVerificationError(
+                'Transaction hash already used. Replay rejected.',
+                { hash },
+              )
+            }
+            await store.put(hashKey, { usedAt: new Date().toISOString() })
+          }
+
           let txResult = await server.getTransaction(hash)
           let attempts = 0
           while (txResult.status === 'NOT_FOUND' && attempts < 10) {
