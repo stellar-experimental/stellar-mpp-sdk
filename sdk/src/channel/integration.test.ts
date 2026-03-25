@@ -112,4 +112,18 @@ describe('channel credential serialization', () => {
     })
     expect(serialized).toContain('Payment')
   })
+
+  it('credential schema accepts open action payload', () => {
+    const challenge = mockChallenge()
+    const serialized = Credential.serialize({
+      challenge,
+      payload: {
+        action: 'open',
+        transaction: 'AAAA...base64xdr...',
+        amount: '1000000',
+        signature: 'a'.repeat(128),
+      },
+    })
+    expect(serialized).toContain('Payment')
+  })
 })

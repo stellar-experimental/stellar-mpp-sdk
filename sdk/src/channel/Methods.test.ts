@@ -78,6 +78,30 @@ describe('channel method schema', () => {
     expect(result.amount).toBe('5000000')
   })
 
+  it('credential payload accepts open action with transaction', () => {
+    const validSig = 'a'.repeat(128)
+    const result = channel.schema.credential.payload.parse({
+      action: 'open',
+      transaction: 'AAAA...base64xdr...',
+      amount: '1000000',
+      signature: validSig,
+    })
+    expect(result.action).toBe('open')
+    expect(result.transaction).toBe('AAAA...base64xdr...')
+    expect(result.amount).toBe('1000000')
+    expect(result.signature).toBe(validSig)
+  })
+
+  it('credential payload rejects open action without transaction', () => {
+    expect(() =>
+      channel.schema.credential.payload.parse({
+        action: 'open',
+        amount: '1000000',
+        signature: 'a'.repeat(128),
+      }),
+    ).toThrow()
+  })
+
   it('credential payload rejects non-numeric amount', () => {
     expect(() =>
       channel.schema.credential.payload.parse({

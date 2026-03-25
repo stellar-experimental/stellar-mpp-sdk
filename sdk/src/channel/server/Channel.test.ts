@@ -6,16 +6,31 @@ import { describe, expect, it, vi } from 'vitest'
 const mockGetAccount = vi.fn()
 const mockSimulateTransaction = vi.fn()
 const mockGetChannelState = vi.fn()
+const mockSendTransaction = vi.fn()
+const mockGetTransaction = vi.fn()
+const mockFromXDR = vi.fn()
 
 vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@stellar/stellar-sdk')>()
+  const OriginalTransactionBuilder = actual.TransactionBuilder
   return {
     ...actual,
+    TransactionBuilder: Object.assign(
+      function (...args: any[]) {
+        return new (OriginalTransactionBuilder as any)(...args)
+      },
+      {
+        ...OriginalTransactionBuilder,
+        fromXDR: (...args: unknown[]) => mockFromXDR(...args),
+      },
+    ),
     rpc: {
       ...actual.rpc,
       Server: vi.fn().mockImplementation(() => ({
         getAccount: mockGetAccount,
         simulateTransaction: mockSimulateTransaction,
+        sendTransaction: mockSendTransaction,
+        getTransaction: mockGetTransaction,
       })),
     },
   }
@@ -120,6 +135,74 @@ function successSimResult(commitmentBytes: Buffer) {
     },
     transactionData: 'mock',
   }
+}
+
+/** Build a credential for the open action. */
+function makeOpenCredential(opts: {
+  transaction: string
+  amount: string
+  signature?: string
+  challengeAmount?: string
+}) {
+  const challenge = Challenge.from({
+    id: `test-${crypto.randomUUID()}`,
+    realm: 'localhost',
+    method: 'stellar',
+    intent: 'channel',
+    request: {
+      amount: opts.challengeAmount ?? opts.amount,
+      channel: CHANNEL_ADDRESS,
+      methodDetails: {
+        reference: crypto.randomUUID(),
+        network: 'testnet',
+        cumulativeAmount: '0',
+      },
+    },
+  })
+  return Credential.from({
+    challenge,
+    payload: {
+      action: 'open',
+      transaction: opts.transaction,
+      amount: opts.amount,
+      signature: opts.signature ?? 'a'.repeat(128),
+    },
+  })
+}
+
+/** Build a signed open credential with a real ed25519 signature. */
+function makeSignedOpenCredential(opts: {
+  transaction: string
+  commitmentBytes: Buffer
+  cumulativeAmount: bigint
+  challengeAmount: string
+}) {
+  const sig = COMMITMENT_KEY.sign(opts.commitmentBytes)
+  const sigHex = Buffer.from(sig).toString('hex')
+  const challenge = Challenge.from({
+    id: `test-${crypto.randomUUID()}`,
+    realm: 'localhost',
+    method: 'stellar',
+    intent: 'channel',
+    request: {
+      amount: opts.challengeAmount,
+      channel: CHANNEL_ADDRESS,
+      methodDetails: {
+        reference: crypto.randomUUID(),
+        network: 'testnet',
+        cumulativeAmount: '0',
+      },
+    },
+  })
+  return Credential.from({
+    challenge,
+    payload: {
+      action: 'open',
+      transaction: opts.transaction,
+      amount: opts.cumulativeAmount.toString(),
+      signature: sigHex,
+    },
+  })
 }
 
 describe('stellar server channel', () => {
@@ -732,5 +815,140 @@ describe('stellar server channel dispute detection', () => {
         request: credential.challenge.request,
       }),
     ).rejects.toThrow('exceeds channel balance')
+  })
+})
+
+describe('stellar server channel open action', () => {
+  it('rejects open action with invalid signature format', async () => {
+    const credential = makeOpenCredential({
+      transaction: 'AAAA...base64xdr...',
+      amount: '1000000',
+      signature: 'not-valid-hex!!',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('Invalid commitment signature')
+  })
+
+  it('rejects open action with wrong-length signature', async () => {
+    const credential = makeOpenCredential({
+      transaction: 'AAAA...base64xdr...',
+      amount: '1000000',
+      signature: 'abcdef12', // 8 hex chars, need 128
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('Invalid commitment signature')
+  })
+
+  it('rejects open action with invalid commitment signature (bad sig)', async () => {
+    const commitmentBytes = Buffer.from('open-test-commitment')
+    mockSimulateTransaction.mockResolvedValueOnce(
+      successSimResult(commitmentBytes),
+    )
+
+    const credential = makeOpenCredential({
+      transaction: 'AAAA...base64xdr...',
+      amount: '1000000',
+      signature: 'ab'.repeat(64), // valid hex, wrong sig
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('Initial commitment signature verification failed')
+  })
+
+  it('accepts valid open credential, broadcasts tx, and initialises store', async () => {
+    const commitmentBytes = Buffer.from('open-valid-commitment')
+    mockSimulateTransaction.mockResolvedValueOnce(
+      successSimResult(commitmentBytes),
+    )
+    mockFromXDR.mockReturnValueOnce({ toXDR: () => 'mock-xdr' })
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'open-tx-hash-123' })
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
+
+    const store = Store.memory()
+
+    const credential = makeSignedOpenCredential({
+      transaction: 'AAAA...base64xdr...',
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      store,
+    })
+
+    const receipt = await method.verify({
+      credential: credential as any,
+      request: credential.challenge.request,
+    })
+
+    expect(receipt.status).toBe('success')
+    expect(receipt.reference).toBe('open-tx-hash-123')
+
+    // Verify cumulative was initialised in the store
+    const stored = (await store.get(
+      `stellar:channel:cumulative:${CHANNEL_ADDRESS}`,
+    )) as { amount: string }
+    expect(stored.amount).toBe('1000000')
+  })
+
+  it('rejects open when transaction broadcast fails', async () => {
+    const commitmentBytes = Buffer.from('open-fail-broadcast')
+    mockSimulateTransaction.mockResolvedValueOnce(
+      successSimResult(commitmentBytes),
+    )
+    mockFromXDR.mockReturnValueOnce({ toXDR: () => 'mock-xdr' })
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'fail-hash' })
+    mockGetTransaction.mockResolvedValueOnce({ status: 'FAILED' })
+
+    const credential = makeSignedOpenCredential({
+      transaction: 'AAAA...base64xdr...',
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('Open transaction failed')
   })
 })
