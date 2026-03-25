@@ -29,8 +29,10 @@ Client                          Server
 
 Two credential modes:
 
-- **Pull** (default) — client signs the transaction XDR, server broadcasts it
-- **Push** — client broadcasts the transaction itself, sends the tx hash for server verification
+- **Pull** (default) — client prepares the transaction, server submits it:
+  - *Sponsored* (`feePayer` configured on server): client signs only Soroban auth entries using an all-zeros placeholder source; server rebuilds the tx with its own account as source, signs, and broadcasts
+  - *Unsponsored*: client builds and signs the full transaction; server broadcasts as-is
+- **Push** — client broadcasts the transaction itself, sends the tx hash for server verification (not compatible with `feePayer`)
 
 ### Channel (off-chain commitments)
 

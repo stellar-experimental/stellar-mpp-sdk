@@ -37,7 +37,7 @@ Mppx.create({
             console.log(`[${ts}] ✍️  Signing transaction...`)
             break
           case 'signed':
-            console.log(`[${ts}] ✅ Transaction signed (${event.xdr.length} bytes XDR)`)
+            console.log(`[${ts}] ✅ Transaction signed (${event.transaction.length} bytes XDR)`)
             break
           case 'paying':
             console.log(`[${ts}] 📡 Broadcasting transaction...`)

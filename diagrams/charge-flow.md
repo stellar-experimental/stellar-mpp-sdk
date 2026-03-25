@@ -17,24 +17,46 @@ sequenceDiagram
 
     App->>CC: createCredential(challenge)
     CC->>CC: Resolve network, build SAC transfer(from, to, amount)
-    CC->>RPC: prepareTransaction(transferOp)
-    RPC-->>CC: Prepared TX with resources
 
-    CC->>CC: keypair.sign(preparedTx)
-
-    alt Pull Mode (default)
-        CC-->>App: Credential {type:'transaction', xdr}
-        App->>SC: Credential with signed XDR
+    alt Pull Mode — Sponsored (feePayer: true, default when server has feePayer)
+        Note over CC: Uses all-zeros source account (GAAA...WHF)<br/>so server can substitute its own account
+        CC->>RPC: prepareTransaction(tx with all-zeros source)
+        RPC-->>CC: Prepared TX with Soroban resource data
+        CC->>RPC: getLatestLedger()
+        RPC-->>CC: Current ledger sequence
+        CC->>CC: Sign only sorobanCredentialsAddress<br/>auth entries (not the envelope)
+        CC-->>App: Credential {type:'transaction', transaction: xdr}
+        App->>SC: Credential with auth-entry-signed XDR
         SC->>SC: verifySacInvocation(tx) — validate structure
-        opt feePayer configured
-            SC->>SC: Wrap in fee-bump transaction
+        SC->>SC: Detect all-zeros source → spec rebuild path
+        SC->>RPC: getAccount(feePayerKey)
+        RPC-->>SC: Server account with current sequence
+        SC->>SC: Rebuild TX with feePayer as source<br/>copy XDR ops + sorobanData + memo/timebounds
+        SC->>SC: feePayerKeypair.sign(rebuiltTx)
+        SC->>RPC: sendTransaction(rebuiltTx)
+        RPC->>Chain: Broadcast
+        SC->>RPC: Poll getTransaction(hash)
+        RPC-->>SC: TX confirmed
+        SC-->>App: Receipt {status:'success', reference:txHash}
+    else Pull Mode — Unsponsored (no feePayer)
+        CC->>RPC: prepareTransaction(tx with client source)
+        RPC-->>CC: Prepared TX with Soroban resource data
+        CC->>CC: keypair.sign(preparedTx)
+        CC-->>App: Credential {type:'transaction', transaction: xdr}
+        App->>SC: Credential with fully-signed XDR
+        SC->>SC: verifySacInvocation(tx) — validate structure
+        opt feePayer configured but source is not all-zeros
+            SC->>SC: Wrap in FeeBump transaction (compatibility fallback)
         end
         SC->>RPC: sendTransaction(signedTx)
         RPC->>Chain: Broadcast
         SC->>RPC: Poll getTransaction(hash)
         RPC-->>SC: TX confirmed
         SC-->>App: Receipt {status:'success', reference:txHash}
-    else Push Mode
+    else Push Mode (client opt-in, not compatible with feePayer)
+        CC->>RPC: prepareTransaction(tx with client source)
+        RPC-->>CC: Prepared TX with Soroban resource data
+        CC->>CC: keypair.sign(preparedTx)
         CC->>RPC: sendTransaction(signedTx)
         RPC->>Chain: Broadcast
         CC->>RPC: Poll getTransaction(hash)
