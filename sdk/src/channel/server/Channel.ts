@@ -127,25 +127,19 @@ export function channel(parameters: channel.Parameters) {
       const payload = credential.payload
       const action = payload.action ?? 'voucher'
 
-      // Dispatch open action to its own handler — it has completely
-      // different semantics (broadcasts an on-chain tx) compared to
-      // voucher/close which operate on existing channels.
-      if (action === 'open') {
-        return doVerifyOpen(credential)
-      }
-
-      // NM-001: Reject vouchers once the channel has been finalized (closed on-chain).
+      // NM-001: Reject credentials once the channel has been finalized (closed on-chain).
+      // Applied to all actions including 'open'.
       if (store) {
         const finalized = await store.get(`stellar:channel:finalized:${channelAddress}`)
         if (finalized) {
           throw new ChannelVerificationError(
-            'Channel has been finalized. No further vouchers accepted.',
+            'Channel has been finalized. No further credentials accepted.',
             { channel: channelAddress },
           )
         }
       }
 
-      // Replay protection.
+      // Replay protection — applied to all actions including 'open'.
       // NM-002: The verifyLock serializes calls so the get→put gap cannot
       // be exploited in a single-process deployment. Multi-process
       // deployments MUST use a store with atomic put-if-absent semantics.
@@ -157,6 +151,16 @@ export function channel(parameters: channel.Parameters) {
         }
         await store.put(replayKey, { usedAt: new Date().toISOString() })
       }
+
+      // Dispatch open action to its own handler — it has completely
+      // different semantics (broadcasts an on-chain tx) compared to
+      // voucher/close which operate on existing channels.
+      if (action === 'open') {
+        return doVerifyOpen(credential)
+      }
+
+      // NM-001 (voucher/close): finalized and replay checks are now applied
+      // earlier in doVerify() for all actions including 'open'.
 
       const commitmentAmount = BigInt(payload.amount)
       const signatureHex = payload.signature
@@ -456,6 +460,42 @@ export function channel(parameters: channel.Parameters) {
 
     const commitmentAmount = BigInt(amount)
     const signatureBytes = Buffer.from(signatureHex, 'hex')
+
+    // Enforce amount invariants: both the commitment and the requested amount
+    // must be positive, and the commitment must cover the requested amount.
+    const requestedAmount = BigInt(challenge.request.amount)
+    if (requestedAmount <= 0n) {
+      throw new ChannelVerificationError(
+        'Open action requires a positive requested amount.',
+        { requestedAmount: requestedAmount.toString() },
+      )
+    }
+    if (commitmentAmount <= 0n) {
+      throw new ChannelVerificationError(
+        'Open action requires a positive commitment amount.',
+        { commitmentAmount: commitmentAmount.toString() },
+      )
+    }
+    if (commitmentAmount < requestedAmount) {
+      throw new ChannelVerificationError(
+        'Commitment amount does not cover requested amount for open action.',
+        {
+          commitmentAmount: commitmentAmount.toString(),
+          requestedAmount: requestedAmount.toString(),
+        },
+      )
+    }
+
+    // Reject if the channel is already opened (cumulativeKey already set).
+    if (store) {
+      const existing = await store.get(cumulativeKey)
+      if (existing) {
+        throw new ChannelVerificationError(
+          'Channel is already open. Cannot replay an open credential.',
+          { channel: channelAddress },
+        )
+      }
+    }
 
     // Verify the initial commitment signature via prepare_commitment simulation
     const contract = new Contract(channelAddress)
