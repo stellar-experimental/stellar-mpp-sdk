@@ -17,6 +17,16 @@ export const channel = Method.from({
     credential: {
       payload: z.union([
         z.object({
+          /** Action discriminator — open the channel on-chain. */
+          action: z.literal('open'),
+          /** Signed channel-open transaction XDR (base64). */
+          transaction: z.string(),
+          /** Initial commitment amount in base units (stroops). */
+          amount: z.string().check(z.regex(/^\d+$/)),
+          /** Ed25519 signature over the initial commitment bytes (128 hex chars). */
+          signature: z.string().check(z.regex(/^[0-9a-f]{128}$/i)),
+        }),
+        z.object({
           /** Action discriminator — pay a voucher. */
           action: z.literal('voucher'),
           /** Cumulative amount authorised by this commitment (base units). */

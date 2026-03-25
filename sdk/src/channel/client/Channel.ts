@@ -57,8 +57,10 @@ export function channel(parameters: channel.Parameters) {
     context: z.object({
       /** Override the cumulative amount to commit. */
       cumulativeAmount: z.optional(z.string()),
-      /** Credential action: 'voucher' (default) or 'close'. */
-      action: z.optional(z.enum(['voucher', 'close'])),
+      /** Credential action: 'voucher' (default), 'close', or 'open'. */
+      action: z.optional(z.enum(['voucher', 'close', 'open'])),
+      /** Signed channel-open transaction XDR (base64). Required when action is 'open'. */
+      openTransaction: z.optional(z.string()),
     }),
     async createCredential({ challenge, context }) {
       const { request } = challenge
@@ -69,6 +71,16 @@ export function channel(parameters: channel.Parameters) {
       // The server tells us the cumulative amount via methodDetails,
       // or the caller can override via context.
       const action = context?.action ?? 'voucher'
+
+      // For open actions, default cumulative amount to the requested amount
+      // (first payment). The caller must also provide the signed open tx XDR.
+      if (action === 'open') {
+        if (!context?.openTransaction) {
+          throw new Error(
+            'openTransaction is required when action is "open".',
+          )
+        }
+      }
 
       const previousCumulative = BigInt(
         request.methodDetails?.cumulativeAmount ?? '0',
@@ -144,6 +156,7 @@ export function channel(parameters: channel.Parameters) {
         challenge,
         payload: {
           action,
+          ...(action === 'open' ? { transaction: context!.openTransaction! } : {}),
           amount: cumulativeAmount.toString(),
           signature: sigHex,
         },

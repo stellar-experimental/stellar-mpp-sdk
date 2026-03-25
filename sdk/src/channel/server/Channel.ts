@@ -124,18 +124,22 @@ export function channel(parameters: channel.Parameters) {
       const { challenge } = credential
       const { request: challengeRequest } = challenge
 
-      // NM-001: Reject vouchers once the channel has been finalized (closed on-chain).
+      const payload = credential.payload
+      const action = payload.action ?? 'voucher'
+
+      // NM-001: Reject credentials once the channel has been finalized (closed on-chain).
+      // Applied to all actions including 'open'.
       if (store) {
         const finalized = await store.get(`stellar:channel:finalized:${channelAddress}`)
         if (finalized) {
           throw new ChannelVerificationError(
-            'Channel has been finalized. No further vouchers accepted.',
+            'Channel has been finalized. No further credentials accepted.',
             { channel: channelAddress },
           )
         }
       }
 
-      // Replay protection.
+      // Replay protection — applied to all actions including 'open'.
       // NM-002: The verifyLock serializes calls so the get→put gap cannot
       // be exploited in a single-process deployment. Multi-process
       // deployments MUST use a store with atomic put-if-absent semantics.
@@ -148,7 +152,16 @@ export function channel(parameters: channel.Parameters) {
         await store.put(replayKey, { usedAt: new Date().toISOString() })
       }
 
-      const payload = credential.payload
+      // Dispatch open action to its own handler — it has completely
+      // different semantics (broadcasts an on-chain tx) compared to
+      // voucher/close which operate on existing channels.
+      if (action === 'open') {
+        return doVerifyOpen(credential)
+      }
+
+      // NM-001 (voucher/close): finalized and replay checks are now applied
+      // earlier in doVerify() for all actions including 'open'.
+
       const commitmentAmount = BigInt(payload.amount)
       const signatureHex = payload.signature
 
@@ -344,8 +357,6 @@ export function channel(parameters: channel.Parameters) {
       }
 
       // Dispatch on action
-      const action = payload.action ?? 'voucher'
-
       if (action === 'close') {
         if (!closeKeypair) {
           throw new ChannelVerificationError(
@@ -419,6 +430,176 @@ export function channel(parameters: channel.Parameters) {
         status: 'success',
         timestamp: new Date().toISOString(),
       })
+  }
+
+  /**
+   * Verify an "open" credential: the client sends a signed channel-open
+   * transaction XDR along with an initial commitment signature. The server
+   * broadcasts the transaction, waits for confirmation, then initialises
+   * the cumulative amount in the store.
+   */
+  async function doVerifyOpen(credential: any) {
+    const { challenge } = credential
+    const payload = credential.payload
+    const { transaction: txXdr, amount, signature: signatureHex } = payload
+
+    if (!txXdr || typeof txXdr !== 'string') {
+      throw new ChannelVerificationError(
+        'Open action requires a signed transaction XDR.',
+        {},
+      )
+    }
+
+    // Validate signature format
+    if (!/^[0-9a-f]+$/i.test(signatureHex) || signatureHex.length !== 128) {
+      throw new ChannelVerificationError(
+        'Invalid commitment signature for open action.',
+        { length: String(signatureHex?.length ?? 0) },
+      )
+    }
+
+    const commitmentAmount = BigInt(amount)
+    const signatureBytes = Buffer.from(signatureHex, 'hex')
+
+    // Enforce amount invariants: both the commitment and the requested amount
+    // must be positive, and the commitment must cover the requested amount.
+    const requestedAmount = BigInt(challenge.request.amount)
+    if (requestedAmount <= 0n) {
+      throw new ChannelVerificationError(
+        'Open action requires a positive requested amount.',
+        { requestedAmount: requestedAmount.toString() },
+      )
+    }
+    if (commitmentAmount <= 0n) {
+      throw new ChannelVerificationError(
+        'Open action requires a positive commitment amount.',
+        { commitmentAmount: commitmentAmount.toString() },
+      )
+    }
+    if (commitmentAmount < requestedAmount) {
+      throw new ChannelVerificationError(
+        'Commitment amount does not cover requested amount for open action.',
+        {
+          commitmentAmount: commitmentAmount.toString(),
+          requestedAmount: requestedAmount.toString(),
+        },
+      )
+    }
+
+    // Reject if the channel is already opened (cumulativeKey already set).
+    if (store) {
+      const existing = await store.get(cumulativeKey)
+      if (existing) {
+        throw new ChannelVerificationError(
+          'Channel is already open. Cannot replay an open credential.',
+          { channel: channelAddress },
+        )
+      }
+    }
+
+    // Verify the initial commitment signature via prepare_commitment simulation
+    const contract = new Contract(channelAddress)
+    const call = contract.call(
+      'prepare_commitment',
+      nativeToScVal(commitmentAmount, { type: 'i128' }),
+    )
+
+    const account = await server.getAccount(
+      sourceAccount ?? commitmentKeypair.publicKey(),
+    )
+    const simTx = new TransactionBuilder(account, {
+      fee: '100',
+      networkPassphrase,
+    })
+      .addOperation(call)
+      .setTimeout(30)
+      .build()
+
+    const simResult = await server.simulateTransaction(simTx)
+
+    if (!rpc.Api.isSimulationSuccess(simResult)) {
+      throw new ChannelVerificationError(
+        'Failed to simulate prepare_commitment for open verification.',
+        {
+          error:
+            'error' in simResult ? String(simResult.error) : 'unknown',
+        },
+      )
+    }
+
+    const returnValue = simResult.result?.retval
+    if (!returnValue) {
+      throw new ChannelVerificationError(
+        'prepare_commitment returned no value during open.',
+        {},
+      )
+    }
+
+    const commitmentBytes = returnValue.bytes()
+
+    const valid = commitmentKeypair.verify(
+      Buffer.from(commitmentBytes),
+      signatureBytes,
+    )
+
+    if (!valid) {
+      throw new ChannelVerificationError(
+        'Initial commitment signature verification failed.',
+        { amount: commitmentAmount.toString(), channel: channelAddress },
+      )
+    }
+
+    // Parse and broadcast the open transaction
+    const { TransactionBuilder: TxBuilder } = await import(
+      '@stellar/stellar-sdk'
+    )
+
+    let openTx: ReturnType<typeof TxBuilder.fromXDR>
+    try {
+      openTx = TxBuilder.fromXDR(txXdr, networkPassphrase)
+    } catch (err) {
+      throw new ChannelVerificationError(
+        'Invalid open transaction XDR.',
+        { error: err instanceof Error ? err.message : String(err) },
+      )
+    }
+
+    const sendResult = await server.sendTransaction(openTx)
+
+    const MAX_POLL_ATTEMPTS = 60
+    let txResult = await server.getTransaction(sendResult.hash)
+    let attempts = 0
+    while (txResult.status === 'NOT_FOUND') {
+      if (++attempts >= MAX_POLL_ATTEMPTS) {
+        throw new ChannelVerificationError(
+          `Open transaction not found after ${MAX_POLL_ATTEMPTS} attempts.`,
+          { hash: sendResult.hash },
+        )
+      }
+      await new Promise((r) => setTimeout(r, 1000))
+      txResult = await server.getTransaction(sendResult.hash)
+    }
+
+    if (txResult.status !== 'SUCCESS') {
+      throw new ChannelVerificationError(
+        `Open transaction failed: ${txResult.status}`,
+        { hash: sendResult.hash, status: txResult.status },
+      )
+    }
+
+    // Initialise cumulative amount in the store
+    if (store) {
+      await store.put(cumulativeKey, {
+        amount: commitmentAmount.toString(),
+      })
+    }
+
+    return Receipt.from({
+      method: 'stellar',
+      reference: sendResult.hash,
+      status: 'success',
+      timestamp: new Date().toISOString(),
+    })
   }
 }
 
