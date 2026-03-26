@@ -1,6 +1,8 @@
 import {
   Contract,
+  FeeBumpTransaction,
   Keypair,
+  Transaction,
   TransactionBuilder,
   nativeToScVal,
   rpc,
@@ -13,6 +15,7 @@ import {
   type NetworkId,
 } from '../../constants.js'
 import { toBaseUnits } from '../../Methods.js'
+import { resolveKeypair } from '../../signers.js'
 import { channel as ChannelMethod } from '../Methods.js'
 import { getChannelState, type ChannelState } from './State.js'
 
@@ -44,12 +47,13 @@ export function channel(parameters: channel.Parameters) {
   const {
     channel: channelAddress,
     checkOnChainState = false,
-    closeKey: closeKeyParam,
     commitmentKey: commitmentKeyParam,
     decimals = DEFAULT_DECIMALS,
+    feeBumpSigner: feeBumpSignerParam,
     network = 'testnet',
     onDisputeDetected,
     rpcUrl,
+    signer: signerParam,
     sourceAccount,
     store,
   } = parameters
@@ -66,14 +70,10 @@ export function channel(parameters: channel.Parameters) {
     return commitmentKeyParam
   })()
 
-  // Parse the optional close signer key
-  const closeKeypair = (() => {
-    if (!closeKeyParam) return undefined
-    if (typeof closeKeyParam === 'string') {
-      return Keypair.fromSecret(closeKeyParam)
-    }
-    return closeKeyParam
-  })()
+  const signerKeypair = signerParam ? resolveKeypair(signerParam) : undefined
+  const feeBumpKeypair = feeBumpSignerParam
+    ? resolveKeypair(feeBumpSignerParam)
+    : undefined
 
   // Track cumulative amounts per channel in the store
   const cumulativeKey = `stellar:channel:cumulative:${channelAddress}`
@@ -358,9 +358,9 @@ export function channel(parameters: channel.Parameters) {
 
       // Dispatch on action
       if (action === 'close') {
-        if (!closeKeypair) {
+        if (!signerKeypair) {
           throw new ChannelVerificationError(
-            'Close action requires a closeKey to be configured.',
+            'Close action requires a signer to be configured.',
             {},
           )
         }
@@ -372,7 +372,7 @@ export function channel(parameters: channel.Parameters) {
           nativeToScVal(Buffer.from(signatureBytes), { type: 'bytes' }),
         )
 
-        const closeAccount = await server.getAccount(closeKeypair.publicKey())
+        const closeAccount = await server.getAccount(signerKeypair.publicKey())
         const closeTx = new TransactionBuilder(closeAccount, {
           fee: '100',
           networkPassphrase,
@@ -382,9 +382,22 @@ export function channel(parameters: channel.Parameters) {
           .build()
 
         const prepared = await server.prepareTransaction(closeTx)
-        prepared.sign(closeKeypair)
+        prepared.sign(signerKeypair)
 
-        const sendResult = await server.sendTransaction(prepared)
+        let txToSubmit: Transaction | FeeBumpTransaction = prepared
+        if (feeBumpKeypair) {
+          const MAX_FEE_BUMP = 10_000_000
+          const bumpFee = Math.min(Number(prepared.fee) * 10, MAX_FEE_BUMP)
+          txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
+            feeBumpKeypair,
+            bumpFee.toString(),
+            prepared,
+            networkPassphrase,
+          )
+          txToSubmit.sign(feeBumpKeypair)
+        }
+
+        const sendResult = await server.sendTransaction(txToSubmit)
 
         const MAX_POLL_ATTEMPTS = 60
         let txResult = await server.getTransaction(sendResult.hash)
@@ -564,7 +577,22 @@ export function channel(parameters: channel.Parameters) {
       )
     }
 
-    const sendResult = await server.sendTransaction(openTx)
+    let txToSubmit = openTx
+    if (feeBumpKeypair) {
+      const innerTx = openTx instanceof FeeBumpTransaction
+        ? openTx.innerTransaction
+        : (openTx as Transaction)
+      const MAX_FEE_BUMP = 10_000_000
+      const bumpFee = Math.min(Number(innerTx.fee) * 10, MAX_FEE_BUMP)
+      txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
+        feeBumpKeypair,
+        bumpFee.toString(),
+        innerTx,
+        networkPassphrase,
+      )
+      ;(txToSubmit as FeeBumpTransaction).sign(feeBumpKeypair)
+    }
+    const sendResult = await server.sendTransaction(txToSubmit)
 
     const MAX_POLL_ATTEMPTS = 60
     let txResult = await server.getTransaction(sendResult.hash)
@@ -616,8 +644,10 @@ export async function close(parameters: {
   amount: bigint
   /** Ed25519 signature for the commitment. */
   signature: Uint8Array
-  /** Keypair to sign the close transaction. */
-  closeKey: Keypair
+  /** Keypair to sign the close transaction (source account). */
+  signer: Keypair
+  /** Optional fee bump signer. */
+  feeBumpSigner?: Keypair
   /** Network identifier. */
   network?: NetworkId
   /** Custom RPC URL. */
@@ -627,7 +657,8 @@ export async function close(parameters: {
     channel: channelAddress,
     amount,
     signature,
-    closeKey,
+    signer,
+    feeBumpSigner,
     network = 'testnet',
     rpcUrl,
   } = parameters
@@ -643,7 +674,7 @@ export async function close(parameters: {
     nativeToScVal(Buffer.from(signature), { type: 'bytes' }),
   )
 
-  const account = await server.getAccount(closeKey.publicKey())
+  const account = await server.getAccount(signer.publicKey())
   const tx = new TransactionBuilder(account, {
     fee: '100',
     networkPassphrase,
@@ -653,9 +684,22 @@ export async function close(parameters: {
     .build()
 
   const prepared = await server.prepareTransaction(tx)
-  prepared.sign(closeKey)
+  prepared.sign(signer)
 
-  const result = await server.sendTransaction(prepared)
+  let txToSubmit: Transaction | FeeBumpTransaction = prepared
+  if (feeBumpSigner) {
+    const MAX_FEE_BUMP = 10_000_000
+    const bumpFee = Math.min(Number(prepared.fee) * 10, MAX_FEE_BUMP)
+    txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
+      feeBumpSigner,
+      bumpFee.toString(),
+      prepared,
+      networkPassphrase,
+    )
+    txToSubmit.sign(feeBumpSigner)
+  }
+
+  const result = await server.sendTransaction(txToSubmit)
 
   const MAX_POLL_ATTEMPTS = 60
   let txResult = await server.getTransaction(result.hash)
@@ -697,11 +741,13 @@ export declare namespace channel {
      */
     checkOnChainState?: boolean
     /**
-     * Keypair for signing close transactions. Required when handling
-     * close credential actions. Accepts a Stellar secret key string (S...)
-     * or a Keypair instance.
+     * Keypair for signing close transactions (provides sequence number).
+     * Required when handling close credential actions.
+     * Accepts a Stellar secret key string (S...) or a Keypair instance.
      */
-    closeKey?: string | Keypair
+    signer?: Keypair | string
+    /** Optional fee bump signer for close/open transactions. */
+    feeBumpSigner?: Keypair | string
     /**
      * Ed25519 public key for verifying commitment signatures.
      * Accepts a Stellar public key string (G...) or a Keypair instance.

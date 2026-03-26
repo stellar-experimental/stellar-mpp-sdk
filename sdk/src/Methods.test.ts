@@ -119,11 +119,9 @@ describe('Methods.charge', () => {
       recipient: 'GBXYZ',
       methodDetails: {
         feePayer: true,
-        feePayerKey: 'GXYZ...',
       },
     })
     expect(result.methodDetails?.feePayer).toBe(true)
-    expect(result.methodDetails?.feePayerKey).toBe('GXYZ...')
   })
 
   it('request schema allows omitting methodDetails', () => {
@@ -135,12 +133,12 @@ describe('Methods.charge', () => {
     expect(result.methodDetails).toBeUndefined()
   })
 
-  it('credential payload accepts signature type (push)', () => {
+  it('credential payload accepts hash type (push)', () => {
     const result = Methods.charge.schema.credential.payload.parse({
-      type: 'signature',
+      type: 'hash',
       hash: 'abc123',
     })
-    expect(result.type).toBe('signature')
+    expect(result.type).toBe('hash')
     expect(result.hash).toBe('abc123')
   })
 

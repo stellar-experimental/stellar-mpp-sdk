@@ -15,3 +15,4 @@ export {
   type NetworkId,
 } from './constants.js'
 export { fromBaseUnits, toBaseUnits } from './Methods.js'
+export { resolveKeypair } from './signers.js'

@@ -67,20 +67,38 @@ describe('stellar server charge', () => {
     expect(method.name).toBe('stellar')
   })
 
-  it('accepts feePayer as secret key string', () => {
+  it('accepts signer as Keypair', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      feePayer: Keypair.random().secret(),
+      signer: Keypair.random(),
     })
     expect(method.name).toBe('stellar')
   })
 
-  it('accepts feePayer as Keypair', () => {
+  it('accepts signer as secret key string', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      feePayer: Keypair.random(),
+      signer: Keypair.random().secret(),
+    })
+    expect(method.name).toBe('stellar')
+  })
+
+  it('accepts feeBumpSigner as Keypair', () => {
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      feeBumpSigner: Keypair.random(),
+    })
+    expect(method.name).toBe('stellar')
+  })
+
+  it('accepts feeBumpSigner as secret key string', () => {
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      feeBumpSigner: Keypair.random().secret(),
     })
     expect(method.name).toBe('stellar')
   })
@@ -96,10 +114,10 @@ describe('stellar server charge', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Transaction hash dedup tests (signature flow with mocked RPC)
+// Transaction hash dedup tests (hash flow with mocked RPC)
 // ---------------------------------------------------------------------------
 
-function makeSignatureCredential(opts: { hash: string; challengeId?: string }) {
+function makeHashCredential(opts: { hash: string; challengeId?: string }) {
   const challenge = Challenge.from({
     id: opts.challengeId ?? `test-${crypto.randomUUID()}`,
     realm: 'localhost',
@@ -113,7 +131,7 @@ function makeSignatureCredential(opts: { hash: string; challengeId?: string }) {
   })
   return Credential.from({
     challenge,
-    payload: { type: 'signature', hash: opts.hash },
+    payload: { type: 'hash', hash: opts.hash },
   })
 }
 
@@ -136,7 +154,7 @@ describe('charge tx hash dedup', () => {
 
     // First attempt — will fail on envelope verification (no envelope),
     // which means the hash should NOT be marked as used (write is after verify).
-    const cred1 = makeSignatureCredential({ hash })
+    const cred1 = makeHashCredential({ hash })
     await expect(
       method.verify({ credential: cred1 as any, request: cred1.challenge.request }),
     ).rejects.toThrow()
@@ -159,7 +177,7 @@ describe('charge tx hash dedup', () => {
       store,
     })
 
-    const cred = makeSignatureCredential({ hash })
+    const cred = makeHashCredential({ hash })
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
     ).rejects.toThrow('Transaction hash already used')

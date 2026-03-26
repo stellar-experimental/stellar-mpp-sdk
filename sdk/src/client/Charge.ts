@@ -77,14 +77,11 @@ export function charge(parameters: charge.Parameters) {
       const network: NetworkId =
         (request.methodDetails?.network as NetworkId) ?? 'testnet'
       const memo = request.methodDetails?.memo as string | undefined
-      const feePayerKey = request.methodDetails?.feePayerKey
-
       onProgress?.({
         type: 'challenge',
         recipient,
         amount: fromBaseUnits(amount, decimals),
         currency,
-        ...(feePayerKey ? { feePayerKey } : {}),
       })
 
       const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
@@ -239,7 +236,7 @@ export function charge(parameters: charge.Parameters) {
 
         return Credential.serialize({
           challenge,
-          payload: { type: 'signature' as const, hash: result.hash },
+          payload: { type: 'hash' as const, hash: result.hash },
         })
       }
 
@@ -254,7 +251,7 @@ export function charge(parameters: charge.Parameters) {
 
 export declare namespace charge {
   type ProgressEvent =
-    | { type: 'challenge'; recipient: string; amount: string; currency: string; feePayerKey?: string }
+    | { type: 'challenge'; recipient: string; amount: string; currency: string }
     | { type: 'signing' }
     | { type: 'signed'; transaction: string }
     | { type: 'paying' }

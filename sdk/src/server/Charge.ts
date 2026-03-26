@@ -19,15 +19,17 @@ import {
 import * as Methods from '../Methods.js'
 import { toBaseUnits } from '../Methods.js'
 import { scValToBigInt } from '../scval.js'
+import { resolveKeypair } from '../signers.js'
 
 export function charge(parameters: charge.Parameters) {
   const {
     currency,
     decimals = DEFAULT_DECIMALS,
-    feePayer,
+    feeBumpSigner: feeBumpSignerParam,
     network = 'testnet',
     recipient,
     rpcUrl,
+    signer: signerParam,
     store,
   } = parameters
 
@@ -35,11 +37,10 @@ export function charge(parameters: charge.Parameters) {
   const networkPassphrase = NETWORK_PASSPHRASE[network]
   const server = new rpc.Server(resolvedRpcUrl)
 
-  const feePayerPublicKey = feePayer
-    ? (typeof feePayer === 'string'
-        ? Keypair.fromSecret(feePayer)
-        : feePayer
-      ).publicKey()
+  const signerKeypair = signerParam ? resolveKeypair(signerParam) : undefined
+
+  const feeBumpKeypair = feeBumpSignerParam
+    ? resolveKeypair(feeBumpSignerParam)
     : undefined
 
   // Serialize verify operations to prevent concurrent race conditions
@@ -59,9 +60,7 @@ export function charge(parameters: charge.Parameters) {
           ...request.methodDetails,
           reference: crypto.randomUUID(),
           network,
-          ...(feePayerPublicKey
-            ? { feePayer: true, feePayerKey: feePayerPublicKey }
-            : {}),
+          ...(signerKeypair ? { feePayer: true } : {}),
         },
       }
     },
@@ -100,7 +99,7 @@ export function charge(parameters: charge.Parameters) {
       const payload = credential.payload
 
       switch (payload.type) {
-        case 'signature': {
+        case 'hash': {
           const hash = payload.hash
 
           // Check tx hash dedup BEFORE verification to reject known replays
@@ -173,56 +172,54 @@ export function charge(parameters: charge.Parameters) {
             | Transaction
             | FeeBumpTransaction
 
-          if (feePayer && tx.source === ALL_ZEROS) {
-            // ── Spec-compliant sponsored path ──────────────────────────────
-            // Client used all-zeros source; server rebuilds the tx with its
-            // own account as source so it can sign and submit.
-            const feePayerKeypair =
-              typeof feePayer === 'string'
-                ? Keypair.fromSecret(feePayer)
-                : feePayer
-            const serverAccount = await server.getAccount(
-              feePayerKeypair.publicKey(),
+          if (!signerKeypair && tx.source === ALL_ZEROS) {
+            throw new PaymentVerificationError(
+              'Transaction uses a sponsored source account but the server is not configured with a signer.',
+              {},
             )
+          }
+
+          if (signerKeypair && tx.source === ALL_ZEROS) {
+            // ── Sponsored path ──────────────────────────────────────────
+            // Client used all-zeros source; rebuild the tx with the
+            // signer's account as source.
+            const serverAccount = await server.getAccount(signerKeypair.publicKey())
             const envelopeTx = tx.toEnvelope().v1().tx()
             const sorobanData = envelopeTx.ext().sorobanData()
             const rebuilt = new TransactionBuilder(serverAccount, {
               fee: tx.fee,
               networkPassphrase,
-              // Preserve envelope-level fields from the client-prepared tx so
-              // the server rebuild is semantically identical.
               memo: tx.memo,
               ...(tx.timeBounds ? { timebounds: tx.timeBounds } : {}),
             })
             for (const rawOp of envelopeTx.operations()) {
               rebuilt.addOperation(rawOp)
             }
-            // Only apply a default timeout if the client did not provide one.
             if (!tx.timeBounds) {
               rebuilt.setTimeout(DEFAULT_TIMEOUT)
             }
             const rebuiltTx = rebuilt.setSorobanData(sorobanData).build()
-            rebuiltTx.sign(feePayerKeypair)
+            rebuiltTx.sign(signerKeypair)
             txToSubmit = rebuiltTx
-          } else if (feePayer && !(parsed instanceof FeeBumpTransaction)) {
-            // ── FeeBump alternate (non-spec, kept for compatibility) ────────
-            // Client signed the tx with its own account as source; server
-            // wraps it in a fee-bump transaction.
-            const feePayerKeypair =
-              typeof feePayer === 'string'
-                ? Keypair.fromSecret(feePayer)
-                : feePayer
-            // NM-004: Cap the fee-bump to prevent a malicious client from
-            // inflating tx.fee and draining the fee payer account.
+          }
+
+          // ── Fee bump wrapping ───────────────────────────────────────
+          // When feeBumpSigner is set, wrap in a FeeBumpTransaction.
+          // Applies to both sponsored and unsponsored paths.
+          // NM-004: Cap the fee-bump to prevent draining the fee payer.
+          if (feeBumpKeypair && !(txToSubmit instanceof FeeBumpTransaction)) {
             const MAX_FEE_BUMP = 10_000_000 // 1 XLM in stroops
-            const bumpFee = Math.min(Number(tx.fee) * 10, MAX_FEE_BUMP)
+            const bumpFee = Math.min(
+              Number((txToSubmit as Transaction).fee) * 10,
+              MAX_FEE_BUMP,
+            )
             txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
-              feePayerKeypair,
+              feeBumpKeypair,
               bumpFee.toString(),
-              tx,
+              txToSubmit as Transaction,
               networkPassphrase,
             )
-            txToSubmit.sign(feePayerKeypair)
+            txToSubmit.sign(feeBumpKeypair)
           }
 
           const sendResult = await server.sendTransaction(txToSubmit)
@@ -396,7 +393,14 @@ export declare namespace charge {
     decimals?: number
     network?: NetworkId
     rpcUrl?: string
-    feePayer?: Keypair | string
+    /** Keypair providing source account for sponsored transactions. */
+    signer?: Keypair | string
+    /**
+     * Optional fee bump signer. Wraps non-fee-bump transactions in a
+     * FeeBumpTransaction; if a FeeBumpTransaction is already provided, it is
+     * submitted as-is.
+     */
+    feeBumpSigner?: Keypair | string
     store?: Store.Store
   }
 }
