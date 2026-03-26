@@ -22,6 +22,75 @@ pnpm test -- --run      # Run tests once without watch
 pnpm test -- sdk/src/client/Charge.test.ts   # Run a single test file
 ```
 
+## Verification Checklist
+
+After any code change, run **all** of the following to ensure nothing is broken:
+
+### 1. Offline checks (always run)
+
+```bash
+pnpm test -- --run       # 140 unit tests
+pnpm run check:types     # TypeScript type check
+pnpm run build           # Compile to dist/
+```
+
+### 2. Example scripts (always run)
+
+Each example must load and execute without import/type errors. Expected behavior noted inline.
+
+```bash
+# Charge server — should start and return 402 on requests
+PORT=3099 STELLAR_RECIPIENT=GBHEGW3KWOY2OFH767EDALFGCUTBOEVBDQMCKUVJ3LKEWI4ZNVPP5EFC \
+  npx tsx examples/server.ts
+# → "Stellar MPP server running on http://localhost:3099" — Ctrl+C to stop
+
+# Channel server — should start and return 402 on requests
+CHANNEL_CONTRACT=CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  COMMITMENT_PUBKEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+  SOURCE_ACCOUNT=GBHEGW3KWOY2OFH767EDALFGCUTBOEVBDQMCKUVJ3LKEWI4ZNVPP5EFC \
+  PORT=3098 \
+  npx tsx examples/channel-server.ts
+# → "Stellar MPP Channel server running on http://localhost:3098" — Ctrl+C to stop
+
+# Client — should load, create keypair, fail on network (no server running)
+STELLAR_SECRET=$(npx tsx -e "import{Keypair}from'@stellar/stellar-sdk';console.log(Keypair.random().secret())" 2>/dev/null) \
+  SERVER_URL=http://localhost:9999 \
+  npx tsx examples/client.ts
+# → "Using Stellar account: G..." then ECONNREFUSED (expected)
+
+# Channel client — should load, create commitment key, fail on network
+COMMITMENT_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+  SOURCE_ACCOUNT=GBHEGW3KWOY2OFH767EDALFGCUTBOEVBDQMCKUVJ3LKEWI4ZNVPP5EFC \
+  SERVER_URL=http://localhost:9999 \
+  npx tsx examples/channel-client.ts
+# → "Using commitment key: G..." then ECONNREFUSED (expected)
+
+# Channel open — should exit with env var validation error
+npx tsx examples/channel-open.ts
+# → "Set OPEN_TX_XDR to..." (expected)
+
+# Channel close — should exit with env var validation error
+npx tsx examples/channel-close.ts
+# → "Set CLOSE_SECRET to..." (expected)
+```
+
+### 3. E2E demo (run when channel logic changes)
+
+Requires: `stellar` CLI, Node.js 20+, and the one-way-channel WASM binary.
+
+```bash
+WASM_PATH=/Users/marcelosantos/Workspace/one-way-channel/target/wasm32v1-none/release/channel.wasm \
+  ./demo/run-channel-e2e.sh
+# Full lifecycle: deploy → 2 off-chain payments → on-chain close → balance verified at 0
+```
+
+### 4. Interactive demos (run manually with funded testnet accounts)
+
+```bash
+./demo/run.sh              # Charge demo — prompts for STELLAR_RECIPIENT + STELLAR_SECRET
+./demo/run-channel.sh      # Channel demo — prompts for CHANNEL_CONTRACT + COMMITMENT keys
+```
+
 ## Architecture
 
 ### Twin Client/Server Pattern
@@ -36,7 +105,7 @@ Methods.ts (Zod schema) → client/ (create credentials) + server/ (verify crede
 
 | Path | Role |
 |------|------|
-| `sdk/src/Methods.ts` | Charge method schema (Zod discriminated union: `xdr` vs `signature` credentials) |
+| `sdk/src/Methods.ts` | Charge method schema (Zod discriminated union: `transaction` vs `hash` credentials) |
 | `sdk/src/constants.ts` | SAC addresses (USDC/XLM), RPC URLs, network passphrases, defaults |
 | `sdk/src/scval.ts` | Soroban ScVal ↔ BigInt conversion |
 | `sdk/src/client/Charge.ts` | Creates SAC `transfer` invocations; handles pull (send XDR) and push (broadcast + send hash) flows |
