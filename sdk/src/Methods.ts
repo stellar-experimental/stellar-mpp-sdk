@@ -8,7 +8,7 @@ import { z } from 'zod/mini'
  * - `type: "transaction"` — **server-broadcast** (pull mode):
  *   Client signs a Soroban SAC `transfer` invocation and sends the
  *   serialised XDR as `payload.transaction`. The server broadcasts it.
- * - `type: "signature"` — **client-broadcast** (push mode):
+ * - `type: "hash"` — **client-broadcast** (push mode):
  *   Client broadcasts itself and sends the transaction hash.
  *   The server looks it up on-chain for verification.
  *
@@ -21,7 +21,7 @@ export const charge = Method.from({
     credential: {
       payload: z.discriminatedUnion('type', [
         /** Push mode: client broadcasts and sends the tx hash. */
-        z.object({ hash: z.string(), type: z.literal('signature') }),
+        z.object({ hash: z.string(), type: z.literal('hash') }),
         /** Pull mode: client sends signed XDR as `payload.transaction`, server broadcasts. */
         z.object({ transaction: z.string(), type: z.literal('transaction') }),
       ]),

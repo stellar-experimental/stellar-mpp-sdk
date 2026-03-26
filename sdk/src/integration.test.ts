@@ -103,11 +103,11 @@ describe('replay protection', () => {
 })
 
 describe('credential type validation', () => {
-  it('credential schema accepts signature type', () => {
+  it('credential schema accepts hash type', () => {
     const challenge = mockChallenge()
     const serialized = Credential.serialize({
       challenge,
-      payload: { type: 'signature' as const, hash: 'abc123' },
+      payload: { type: 'hash' as const, hash: 'abc123' },
     })
     expect(serialized).toContain('Payment')
   })

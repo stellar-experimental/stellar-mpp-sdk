@@ -135,12 +135,12 @@ describe('Methods.charge', () => {
     expect(result.methodDetails).toBeUndefined()
   })
 
-  it('credential payload accepts signature type (push)', () => {
+  it('credential payload accepts hash type (push)', () => {
     const result = Methods.charge.schema.credential.payload.parse({
-      type: 'signature',
+      type: 'hash',
       hash: 'abc123',
     })
-    expect(result.type).toBe('signature')
+    expect(result.type).toBe('hash')
     expect(result.hash).toBe('abc123')
   })
 
