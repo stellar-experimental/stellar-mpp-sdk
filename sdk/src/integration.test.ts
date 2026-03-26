@@ -116,7 +116,7 @@ describe('credential type validation', () => {
     const challenge = mockChallenge()
     const serialized = Credential.serialize({
       challenge,
-      payload: { type: 'transaction' as const, xdr: 'AAAA' },
+      payload: { type: 'transaction' as const, transaction: 'AAAA' },
     })
     expect(serialized).toContain('Payment')
   })

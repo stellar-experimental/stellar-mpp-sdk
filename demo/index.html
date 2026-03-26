@@ -354,7 +354,7 @@ STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/client.ts</div>
             let detail = ev.type
             if (ev.type === 'challenge') detail = '💳 challenge — ' + ev.amount + ' → ' + ev.recipient
             else if (ev.type === 'signing') detail = '✍️  signing transaction...'
-            else if (ev.type === 'signed') detail = '✅ signed (' + (ev.xdr || '').length + ' bytes XDR)'
+            else if (ev.type === 'signed') detail = '✅ signed (' + (ev.transaction || '').length + ' bytes XDR)'
             else if (ev.type === 'paying') detail = '📡 broadcasting...'
             else if (ev.type === 'confirming') detail = '⏳ confirming ' + (ev.hash || '').slice(0, 12) + '...'
             else if (ev.type === 'paid') detail = '🎉 confirmed: ' + (ev.hash || '')

@@ -147,9 +147,9 @@ describe('Methods.charge', () => {
   it('credential payload accepts transaction type (pull)', () => {
     const result = Methods.charge.schema.credential.payload.parse({
       type: 'transaction',
-      xdr: 'AAAA...',
+      transaction: 'AAAA...',
     })
     expect(result.type).toBe('transaction')
-    expect(result.xdr).toBe('AAAA...')
+    expect(result.transaction).toBe('AAAA...')
   })
 })

@@ -9,7 +9,9 @@ import {
 } from '@stellar/stellar-sdk'
 import { Method, Receipt, Store } from 'mppx'
 import {
+  ALL_ZEROS,
   DEFAULT_DECIMALS,
+  DEFAULT_TIMEOUT,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
   type NetworkId,
@@ -150,7 +152,7 @@ export function charge(parameters: charge.Parameters) {
         }
 
         case 'transaction': {
-          const txXdr = payload.xdr
+          const txXdr = payload.transaction
           const parsed = TransactionBuilder.fromXDR(
             txXdr,
             networkPassphrase,
@@ -171,7 +173,41 @@ export function charge(parameters: charge.Parameters) {
             | Transaction
             | FeeBumpTransaction
 
-          if (feePayer && !(parsed instanceof FeeBumpTransaction)) {
+          if (feePayer && tx.source === ALL_ZEROS) {
+            // ── Spec-compliant sponsored path ──────────────────────────────
+            // Client used all-zeros source; server rebuilds the tx with its
+            // own account as source so it can sign and submit.
+            const feePayerKeypair =
+              typeof feePayer === 'string'
+                ? Keypair.fromSecret(feePayer)
+                : feePayer
+            const serverAccount = await server.getAccount(
+              feePayerKeypair.publicKey(),
+            )
+            const envelopeTx = tx.toEnvelope().v1().tx()
+            const sorobanData = envelopeTx.ext().sorobanData()
+            const rebuilt = new TransactionBuilder(serverAccount, {
+              fee: tx.fee,
+              networkPassphrase,
+              // Preserve envelope-level fields from the client-prepared tx so
+              // the server rebuild is semantically identical.
+              memo: tx.memo,
+              ...(tx.timeBounds ? { timebounds: tx.timeBounds } : {}),
+            })
+            for (const rawOp of envelopeTx.operations()) {
+              rebuilt.addOperation(rawOp)
+            }
+            // Only apply a default timeout if the client did not provide one.
+            if (!tx.timeBounds) {
+              rebuilt.setTimeout(DEFAULT_TIMEOUT)
+            }
+            const rebuiltTx = rebuilt.setSorobanData(sorobanData).build()
+            rebuiltTx.sign(feePayerKeypair)
+            txToSubmit = rebuiltTx
+          } else if (feePayer && !(parsed instanceof FeeBumpTransaction)) {
+            // ── FeeBump alternate (non-spec, kept for compatibility) ────────
+            // Client signed the tx with its own account as source; server
+            // wraps it in a fee-bump transaction.
             const feePayerKeypair =
               typeof feePayer === 'string'
                 ? Keypair.fromSecret(feePayer)

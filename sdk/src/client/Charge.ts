@@ -1,16 +1,20 @@
 import {
+  Account,
   Address,
   BASE_FEE,
   Contract,
   Keypair,
   Memo,
   TransactionBuilder,
+  authorizeEntry,
   nativeToScVal,
   rpc,
+  xdr as StellarXdr,
 } from '@stellar/stellar-sdk'
 import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
 import {
+  ALL_ZEROS,
   DEFAULT_DECIMALS,
   DEFAULT_TIMEOUT,
   NETWORK_PASSPHRASE,
@@ -87,12 +91,95 @@ export function charge(parameters: charge.Parameters) {
       const networkPassphrase = NETWORK_PASSPHRASE[network]
       const server = new rpc.Server(resolvedRpcUrl)
 
-      // Load source account via Soroban RPC
-      const sourceAccount = await server.getAccount(keypair.publicKey())
-
       // Build SAC `transfer(from, to, amount)` invocation
       const contract = new Contract(currency)
       const stellarAmount = BigInt(amount)
+
+      const effectiveMode = context?.mode ?? defaultMode
+      const isServerSponsored = request.methodDetails?.feePayer === true
+
+      if (isServerSponsored && effectiveMode === 'push') {
+        throw new Error(
+          'Push mode is not supported for server-sponsored transactions. ' +
+          'The server must submit sponsored transactions. Use mode: \'pull\' (default).',
+        )
+      }
+
+      if (isServerSponsored) {
+        // ── Spec-compliant sponsored path ──────────────────────────────────
+        // Client uses an all-zeros source account so the server can swap in
+        // its own fee-payer account when rebuilding the transaction.
+        const placeholderSource = new Account(ALL_ZEROS, '0')
+
+        const transferOp = contract.call(
+          'transfer',
+          new Address(keypair.publicKey()).toScVal(),
+          new Address(recipient).toScVal(),
+          nativeToScVal(stellarAmount, { type: 'i128' }),
+        )
+
+        const sponsoredBuilder = new TransactionBuilder(placeholderSource, {
+          fee: BASE_FEE,
+          networkPassphrase,
+        })
+          .addOperation(transferOp)
+          .setTimeout(timeout)
+
+        if (memo) {
+          sponsoredBuilder.addMemo(Memo.text(memo))
+        }
+
+        const unsignedTx = sponsoredBuilder.build()
+        const prepared = await server.prepareTransaction(unsignedTx)
+
+        // Determine auth-entry expiry from the current ledger sequence
+        const latestLedger = await server.getLatestLedger()
+        const validUntilLedger =
+          latestLedger.sequence + Math.ceil(timeout / 5) + 10
+
+        onProgress?.({ type: 'signing' })
+
+        // Sign only the Soroban authorization entries — do NOT sign the
+        // transaction envelope (the server will do that after rebuilding).
+        const envelope = prepared.toEnvelope().v1()
+        for (const op of envelope.tx().operations()) {
+          const body = op.body()
+          if (
+            body.switch().value !==
+            StellarXdr.OperationType.invokeHostFunction().value
+          ) {
+            continue
+          }
+          const authEntries = body.invokeHostFunctionOp().auth()
+          for (let i = 0; i < authEntries.length; i++) {
+            const entry = authEntries[i]
+            if (
+              entry.credentials().switch().value ===
+              StellarXdr.SorobanCredentialsType.sorobanCredentialsAddress().value
+            ) {
+              authEntries[i] = await authorizeEntry(
+                entry,
+                keypair,
+                validUntilLedger,
+                networkPassphrase,
+              )
+            }
+          }
+        }
+
+        const signedXdr = prepared.toEnvelope().toXDR('base64')
+        onProgress?.({ type: 'signed', transaction: signedXdr })
+
+        return Credential.serialize({
+          challenge,
+          payload: { type: 'transaction' as const, transaction: signedXdr },
+        })
+      }
+
+      // ── Standard (unsponsored) path ────────────────────────────────────────
+      // Client builds and signs the full transaction; server submits as-is
+      // (or wraps it in a fee bump if it has a configured fee payer).
+      const sourceAccount = await server.getAccount(keypair.publicKey())
 
       const transferOp = contract.call(
         'transfer',
@@ -121,9 +208,7 @@ export function charge(parameters: charge.Parameters) {
       prepared.sign(keypair)
 
       const signedXdr = prepared.toXDR()
-      onProgress?.({ type: 'signed', xdr: signedXdr })
-
-      const effectiveMode = context?.mode ?? defaultMode
+      onProgress?.({ type: 'signed', transaction: signedXdr })
 
       if (effectiveMode === 'push') {
         // Client broadcasts
@@ -161,10 +246,7 @@ export function charge(parameters: charge.Parameters) {
       // Pull mode: send signed XDR for server to broadcast
       return Credential.serialize({
         challenge,
-        payload: {
-          type: 'transaction' as const,
-          xdr: signedXdr,
-        },
+        payload: { type: 'transaction' as const, transaction: signedXdr },
       })
     },
   })
@@ -174,7 +256,7 @@ export declare namespace charge {
   type ProgressEvent =
     | { type: 'challenge'; recipient: string; amount: string; currency: string; feePayerKey?: string }
     | { type: 'signing' }
-    | { type: 'signed'; xdr: string }
+    | { type: 'signed'; transaction: string }
     | { type: 'paying' }
     | { type: 'confirming'; hash: string }
     | { type: 'paid'; hash: string }

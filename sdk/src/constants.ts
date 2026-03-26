@@ -69,3 +69,17 @@ export const DEFAULT_FEE = '100'
 
 /** Default transaction timeout in seconds. */
 export const DEFAULT_TIMEOUT = 180
+
+// ---------------------------------------------------------------------------
+// Special accounts
+// ---------------------------------------------------------------------------
+
+/**
+ * All-zeros Stellar source account (`GAAA...WHF`).
+ *
+ * Used in the spec-compliant sponsored charge flow: the client sets this as
+ * the transaction source so the server can substitute its own fee-payer
+ * account when rebuilding the transaction.
+ */
+export const ALL_ZEROS =
+  'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
