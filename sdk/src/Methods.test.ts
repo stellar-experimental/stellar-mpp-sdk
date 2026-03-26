@@ -119,11 +119,9 @@ describe('Methods.charge', () => {
       recipient: 'GBXYZ',
       methodDetails: {
         feePayer: true,
-        feePayerKey: 'GXYZ...',
       },
     })
     expect(result.methodDetails?.feePayer).toBe(true)
-    expect(result.methodDetails?.feePayerKey).toBe('GXYZ...')
   })
 
   it('request schema allows omitting methodDetails', () => {

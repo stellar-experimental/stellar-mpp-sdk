@@ -48,8 +48,6 @@ export const charge = Method.from({
           memo: z.optional(z.string()),
           /** Whether the server will sponsor transaction fees. */
           feePayer: z.optional(z.boolean()),
-          /** Public key of the server's fee payer account. */
-          feePayerKey: z.optional(z.string()),
         }),
       ),
     }),
