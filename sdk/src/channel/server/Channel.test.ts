@@ -276,11 +276,32 @@ describe('stellar server channel', () => {
     expect(method.name).toBe('stellar')
   })
 
-  it('accepts closeKey parameter', () => {
+  it('accepts signers for close transaction signing', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
-      closeKey: Keypair.random(),
+      signers: Keypair.random(),
+      store: Store.memory(),
+    })
+    expect(method.name).toBe('stellar')
+  })
+
+  it('accepts signers as array', () => {
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY.publicKey(),
+      signers: [Keypair.random(), Keypair.random()],
+      store: Store.memory(),
+    })
+    expect(method.name).toBe('stellar')
+  })
+
+  it('accepts feeBumpSigner for channel transactions', () => {
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY.publicKey(),
+      feeBumpSigner: Keypair.random(),
+      store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
   })
@@ -538,7 +559,7 @@ describe('stellar server channel verification', () => {
     ).rejects.toThrow('Replay rejected')
   })
 
-  it('rejects close action when closeKey is not configured', async () => {
+  it('rejects close action when signers is not configured', async () => {
     const commitmentBytes = Buffer.from('close-test-bytes')
     mockSimulateTransaction.mockResolvedValueOnce(
       successSimResult(commitmentBytes),
@@ -561,7 +582,7 @@ describe('stellar server channel verification', () => {
         credential: credential as any,
         request: credential.challenge.request,
       }),
-    ).rejects.toThrow('Close action requires a closeKey')
+    ).rejects.toThrow('Close action requires signers')
   })
 })
 
