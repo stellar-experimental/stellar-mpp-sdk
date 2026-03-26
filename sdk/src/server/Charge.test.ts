@@ -67,29 +67,20 @@ describe('stellar server charge', () => {
     expect(method.name).toBe('stellar')
   })
 
-  it('accepts signers as single Keypair', () => {
+  it('accepts signer as Keypair', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      signers: Keypair.random(),
+      signer: Keypair.random(),
     })
     expect(method.name).toBe('stellar')
   })
 
-  it('accepts signers as array of Keypairs', () => {
+  it('accepts signer as secret key string', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      signers: [Keypair.random(), Keypair.random()],
-    })
-    expect(method.name).toBe('stellar')
-  })
-
-  it('accepts signers as secret key string', () => {
-    const method = charge({
-      recipient: RECIPIENT,
-      currency: USDC_SAC_TESTNET,
-      signers: Keypair.random().secret(),
+      signer: Keypair.random().secret(),
     })
     expect(method.name).toBe('stellar')
   })
@@ -108,16 +99,6 @@ describe('stellar server charge', () => {
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
       feeBumpSigner: Keypair.random().secret(),
-    })
-    expect(method.name).toBe('stellar')
-  })
-
-  it('accepts custom selectSigner', () => {
-    const method = charge({
-      recipient: RECIPIENT,
-      currency: USDC_SAC_TESTNET,
-      signers: [Keypair.random(), Keypair.random()],
-      selectSigner: (addrs) => addrs[0],
     })
     expect(method.name).toBe('stellar')
   })

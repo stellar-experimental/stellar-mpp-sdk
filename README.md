@@ -212,8 +212,7 @@ stellar.charge({
   network?: 'testnet' | 'public', // default: 'testnet'
   decimals?: number,              // default: 7
   rpcUrl?: string,                // custom Soroban RPC URL
-  signers?: SignerPool,           // source account(s) for sponsored tx signing
-  selectSigner?: (addrs) => string, // signer selection (default: round-robin)
+  signer?: Keypair | string,      // source account for sponsored tx signing
   feeBumpSigner?: Keypair | string, // wraps all txs in FeeBumpTransaction
   store?: Store.Store,            // replay protection
 })
@@ -285,17 +284,14 @@ The `onProgress` callback receives events at each stage:
 
 The server can decouple sequence-number management from fee payment:
 
-- **`signers`** — a pool of keypairs providing source accounts and sequence numbers for sponsored transactions. Accepts a single keypair or an array.
-- **`selectSigner`** — callback to pick which signer to use. Defaults to `roundRobinSelector()`.
+- **`signer`** — keypair providing the source account and sequence number for sponsored transactions.
 - **`feeBumpSigner`** — optional dedicated fee payer. When set, all submitted transactions are wrapped in a `FeeBumpTransaction` signed by this key.
 
 ```ts
-import { roundRobinSelector } from 'stellar-mpp-sdk'
-
 stellar.charge({
   recipient: 'G...',
   currency: USDC_SAC_TESTNET,
-  signers: [poolKeypair1, poolKeypair2],      // sequence number accounts
+  signer: Keypair.fromSecret('S...'),         // source account
   feeBumpSigner: Keypair.fromSecret('S...'),  // pays all fees
 })
 ```

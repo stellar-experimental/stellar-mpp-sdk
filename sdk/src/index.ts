@@ -15,4 +15,4 @@ export {
   type NetworkId,
 } from './constants.js'
 export { fromBaseUnits, toBaseUnits } from './Methods.js'
-export { resolveSigners, roundRobinSelector, type SignerPool } from './signers.js'
+export { resolveKeypair } from './signers.js'

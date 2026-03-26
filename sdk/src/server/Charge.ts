@@ -19,7 +19,7 @@ import {
 import * as Methods from '../Methods.js'
 import { toBaseUnits } from '../Methods.js'
 import { scValToBigInt } from '../scval.js'
-import { resolveKeypair, resolveSigners, roundRobinSelector, type SignerPool } from '../signers.js'
+import { resolveKeypair } from '../signers.js'
 
 export function charge(parameters: charge.Parameters) {
   const {
@@ -29,8 +29,7 @@ export function charge(parameters: charge.Parameters) {
     network = 'testnet',
     recipient,
     rpcUrl,
-    signers: signersParam,
-    selectSigner,
+    signer: signerParam,
     store,
   } = parameters
 
@@ -38,15 +37,11 @@ export function charge(parameters: charge.Parameters) {
   const networkPassphrase = NETWORK_PASSPHRASE[network]
   const server = new rpc.Server(resolvedRpcUrl)
 
-  const signerKeypairs = signersParam ? resolveSigners(signersParam) : []
-  const signerAddresses = signerKeypairs.map((kp) => kp.publicKey())
-  const pickSigner = selectSigner ?? roundRobinSelector()
+  const signerKeypair = signerParam ? resolveKeypair(signerParam) : undefined
 
   const feeBumpKeypair = feeBumpSignerParam
     ? resolveKeypair(feeBumpSignerParam)
     : undefined
-
-  const hasSigners = signerKeypairs.length > 0
 
   // Serialize verify operations to prevent concurrent race conditions
   // on tx hash deduplication (get/put is not atomic).
@@ -65,7 +60,7 @@ export function charge(parameters: charge.Parameters) {
           ...request.methodDetails,
           reference: crypto.randomUUID(),
           network,
-          ...(hasSigners ? { feePayer: true } : {}),
+          ...(signerKeypair ? { feePayer: true } : {}),
         },
       }
     },
@@ -177,15 +172,11 @@ export function charge(parameters: charge.Parameters) {
             | Transaction
             | FeeBumpTransaction
 
-          if (hasSigners && tx.source === ALL_ZEROS) {
+          if (signerKeypair && tx.source === ALL_ZEROS) {
             // ── Sponsored path ──────────────────────────────────────────
-            // Client used all-zeros source; pick a signer from the pool,
-            // rebuild the tx with that signer's account as source.
-            const selectedAddress = pickSigner(signerAddresses)
-            const selectedKeypair = signerKeypairs.find(
-              (kp) => kp.publicKey() === selectedAddress,
-            )!
-            const serverAccount = await server.getAccount(selectedAddress)
+            // Client used all-zeros source; rebuild the tx with the
+            // signer's account as source.
+            const serverAccount = await server.getAccount(signerKeypair.publicKey())
             const envelopeTx = tx.toEnvelope().v1().tx()
             const sorobanData = envelopeTx.ext().sorobanData()
             const rebuilt = new TransactionBuilder(serverAccount, {
@@ -201,7 +192,7 @@ export function charge(parameters: charge.Parameters) {
               rebuilt.setTimeout(DEFAULT_TIMEOUT)
             }
             const rebuiltTx = rebuilt.setSorobanData(sorobanData).build()
-            rebuiltTx.sign(selectedKeypair)
+            rebuiltTx.sign(signerKeypair)
             txToSubmit = rebuiltTx
           }
 
@@ -395,10 +386,8 @@ export declare namespace charge {
     decimals?: number
     network?: NetworkId
     rpcUrl?: string
-    /** Keypair(s) providing source accounts for sponsored transactions. */
-    signers?: SignerPool
-    /** Strategy for selecting which signer to use. Defaults to round-robin. */
-    selectSigner?: (addresses: readonly string[]) => string
+    /** Keypair providing source account for sponsored transactions. */
+    signer?: Keypair | string
     /** Optional fee bump signer. Wraps ALL submitted transactions in a FeeBumpTransaction. */
     feeBumpSigner?: Keypair | string
     store?: Store.Store

@@ -15,12 +15,7 @@ import {
   type NetworkId,
 } from '../../constants.js'
 import { toBaseUnits } from '../../Methods.js'
-import {
-  resolveKeypair,
-  resolveSigners,
-  roundRobinSelector,
-  type SignerPool,
-} from '../../signers.js'
+import { resolveKeypair } from '../../signers.js'
 import { channel as ChannelMethod } from '../Methods.js'
 import { getChannelState, type ChannelState } from './State.js'
 
@@ -58,8 +53,7 @@ export function channel(parameters: channel.Parameters) {
     network = 'testnet',
     onDisputeDetected,
     rpcUrl,
-    signers: signersParam,
-    selectSigner,
+    signer: signerParam,
     sourceAccount,
     store,
   } = parameters
@@ -76,9 +70,7 @@ export function channel(parameters: channel.Parameters) {
     return commitmentKeyParam
   })()
 
-  const signerKeypairs = signersParam ? resolveSigners(signersParam) : []
-  const signerAddresses = signerKeypairs.map((kp) => kp.publicKey())
-  const pickSigner = selectSigner ?? roundRobinSelector()
+  const signerKeypair = signerParam ? resolveKeypair(signerParam) : undefined
   const feeBumpKeypair = feeBumpSignerParam
     ? resolveKeypair(feeBumpSignerParam)
     : undefined
@@ -366,17 +358,12 @@ export function channel(parameters: channel.Parameters) {
 
       // Dispatch on action
       if (action === 'close') {
-        if (signerKeypairs.length === 0) {
+        if (!signerKeypair) {
           throw new ChannelVerificationError(
-            'Close action requires signers to be configured.',
+            'Close action requires a signer to be configured.',
             {},
           )
         }
-
-        const selectedAddress = pickSigner(signerAddresses)
-        const selectedKeypair = signerKeypairs.find(
-          (kp) => kp.publicKey() === selectedAddress,
-        )!
 
         // Submit the close transaction on-chain
         const closeOp = contract.call(
@@ -385,7 +372,7 @@ export function channel(parameters: channel.Parameters) {
           nativeToScVal(Buffer.from(signatureBytes), { type: 'bytes' }),
         )
 
-        const closeAccount = await server.getAccount(selectedKeypair.publicKey())
+        const closeAccount = await server.getAccount(signerKeypair.publicKey())
         const closeTx = new TransactionBuilder(closeAccount, {
           fee: '100',
           networkPassphrase,
@@ -395,7 +382,7 @@ export function channel(parameters: channel.Parameters) {
           .build()
 
         const prepared = await server.prepareTransaction(closeTx)
-        prepared.sign(selectedKeypair)
+        prepared.sign(signerKeypair)
 
         let txToSubmit: Transaction | FeeBumpTransaction = prepared
         if (feeBumpKeypair) {
@@ -754,13 +741,11 @@ export declare namespace channel {
      */
     checkOnChainState?: boolean
     /**
-     * Keypair(s) for signing close transactions (provides sequence numbers).
+     * Keypair for signing close transactions (provides sequence number).
      * Required when handling close credential actions.
-     * Accepts a single keypair/secret or array.
+     * Accepts a Stellar secret key string (S...) or a Keypair instance.
      */
-    signers?: SignerPool
-    /** Strategy for selecting which signer to use. Defaults to round-robin. */
-    selectSigner?: (addresses: readonly string[]) => string
+    signer?: Keypair | string
     /** Optional fee bump signer for close/open transactions. */
     feeBumpSigner?: Keypair | string
     /**
