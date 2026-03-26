@@ -172,6 +172,13 @@ export function charge(parameters: charge.Parameters) {
             | Transaction
             | FeeBumpTransaction
 
+          if (!signerKeypair && tx.source === ALL_ZEROS) {
+            throw new PaymentVerificationError(
+              'Transaction uses a sponsored source account but the server is not configured with a signer.',
+              {},
+            )
+          }
+
           if (signerKeypair && tx.source === ALL_ZEROS) {
             // ── Sponsored path ──────────────────────────────────────────
             // Client used all-zeros source; rebuild the tx with the
@@ -388,7 +395,11 @@ export declare namespace charge {
     rpcUrl?: string
     /** Keypair providing source account for sponsored transactions. */
     signer?: Keypair | string
-    /** Optional fee bump signer. Wraps ALL submitted transactions in a FeeBumpTransaction. */
+    /**
+     * Optional fee bump signer. Wraps non-fee-bump transactions in a
+     * FeeBumpTransaction; if a FeeBumpTransaction is already provided, it is
+     * submitted as-is.
+     */
     feeBumpSigner?: Keypair | string
     store?: Store.Store
   }
