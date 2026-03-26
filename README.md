@@ -10,21 +10,23 @@ Stellar blockchain payment method for the [Machine Payments Protocol (MPP)](http
 Each payment is a Soroban SAC `transfer` settled on-chain individually.
 
 ```
-Client                          Server
-  |                               |
-  |  GET /resource                |
-  |------------------------------>|
-  |                               |
-  |  402 Payment Required         |
-  |  (challenge: pay 0.01 USDC)   |
-  |<------------------------------|
-  |                               |
-  |  Sign SAC transfer on Soroban |
-  |  Send credential              |
-  |------------------------------>|
-  |                               |
-  |  Verify on-chain, return data |
-  |<------------------------------|
+Client                          Server                         Stellar
+  |                               |                               |
+  |  GET /resource                |                               |
+  |------------------------------>|                               |
+  |                               |                               |
+  |  402 Payment Required         |                               |
+  |  (challenge: pay 0.01 USDC)   |                               |
+  |<------------------------------|                               |
+  |                               |                               |
+  |  prepareTransaction ----------------- (simulate) ------------>|
+  |  Sign SAC transfer            |                               |
+  |  Send credential (XDR)        |                               |
+  |------------------------------>|                               |
+  |                               |  sendTransaction ------------>|
+  |                               |  getTransaction (poll) ------>|
+  |  200 OK + data                |                               |
+  |<------------------------------|                               |
 ```
 
 Two credential modes:
@@ -39,41 +41,45 @@ Two credential modes:
 Uses a [one-way payment channel](https://github.com/stellar-experimental/one-way-channel) contract. The funder deposits tokens into a channel once, then makes many off-chain payments by signing cumulative commitments — no per-payment on-chain transactions.
 
 ```
-Client (Funder)                 Server (Recipient)
-  |                               |
-  |  [Channel opened on-chain     |
-  |   with initial deposit]       |
-  |                               |
-  |  GET /resource                |
-  |------------------------------>|
-  |                               |
-  |  402 Payment Required         |
-  |  (challenge: pay 1 XLM via    |
-  |   channel, cumulative: 0)     |
-  |<------------------------------|
-  |                               |
-  |  Sign commitment off-chain    |
-  |  (cumulative amount + sig)    |
-  |------------------------------>|
-  |                               |
-  |  Verify ed25519 signature     |
-  |  200 OK + data                |
-  |<------------------------------|
-  |                               |
-  |  GET /resource (again)        |
-  |------------------------------>|
-  |                               |
-  |  402 (cumulative: 1000000)    |
-  |<------------------------------|
-  |                               |
-  |  Sign commitment (cum: 2M)    |
-  |------------------------------>|
-  |                               |
-  |  Verify, 200 OK               |
-  |<------------------------------|
-  |                               |
-  |  [Server closes channel      |
-  |   when convenient]            |
+Client (Funder)                 Server (Recipient)                Stellar
+  |                               |                                  |
+  |  [Channel opened on-chain     |                                  |
+  |   with initial deposit]       |                                  |
+  |  (see "open" action below)    |                                  |
+  |                               |                                  |
+  |  GET /resource                |                                  |
+  |------------------------------>|                                  |
+  |                               |                                  |
+  |  402 Payment Required         |                                  |
+  |  (pay 1 XLM, cumulative: 0)   |                                  |
+  |<------------------------------|                                  |
+  |                               |                                  |
+  |  simulate prepare_commitment------------------------------------>|
+  |  Sign commitment off-chain    |                                  |
+  |  (cumulative: 1 XLM + sig)    |                                  |
+  |------------------------------>|                                  |
+  |                               |  simulate prepare_commitment --->|
+  |                               |  Verify ed25519 signature        |
+  |  200 OK + data                |                                  |
+  |<------------------------------|                                  |
+  |                               |                                  |
+  |  GET /resource (again)        |                                  |
+  |------------------------------>|                                  |
+  |                               |                                  |
+  |  402 (pay 1 XLM,              |                                  |
+  |   cumulative: 1 XLM)          |                                  |
+  |<------------------------------|                                  |
+  |                               |                                  |
+  |  simulate prepare_commitment------------------------------------>|
+  |  Sign commitment              |                                  |
+  |  (cumulative: 2 XLM + sig)    |                                  |
+  |------------------------------>|                                  |
+  |                               |  simulate prepare_commitment --->|
+  |                               |  Verify, 200 OK                  |
+  |<------------------------------|                                  |
+  |                               |                                  |
+  |                               |  [close channel when convenient] |
+  |                               |  sendTransaction (close) ------->|
 ```
 
 ## Install
@@ -195,7 +201,7 @@ const data = await response.json()
 | `stellar-mpp-sdk/server` | `stellar`, `charge`, `Mppx`, `Store`, `Expires` |
 | `stellar-mpp-sdk/channel` | `channel` (method schema) |
 | `stellar-mpp-sdk/channel/client` | `stellar`, `channel`, `Mppx` |
-| `stellar-mpp-sdk/channel/server` | `stellar`, `channel`, `close`, `Mppx`, `Store`, `Expires` |
+| `stellar-mpp-sdk/channel/server` | `stellar`, `channel`, `close`, `getChannelState`, `watchChannel`, `Mppx`, `Store`, `Expires` |
 
 ### Server options (charge)
 
@@ -316,6 +322,10 @@ Payment channels allow many off-chain micro-payments with minimal on-chain trans
 - A `Store` is required on the server to track cumulative amounts across requests
 - The server can call `close()` on-chain at any time to settle accumulated payments
 
+**Opening a channel via the SDK:**
+
+The SDK also supports opening a channel through the MPP 402 flow using the `open` action. The client builds the deploy transaction externally (e.g., `stellar contract deploy --send=no`), then passes it as `openTransaction` context alongside an initial commitment. The server verifies the commitment signature and broadcasts the deploy transaction on-chain. See [`examples/channel-open.ts`](examples/channel-open.ts) for a complete example.
+
 **On-chain close (server-side):**
 
 ```ts
@@ -376,6 +386,7 @@ stellar-mpp-sdk/
 ├── sdk/src/
 │   ├── Methods.ts          # Method schema (name: 'stellar', intent: 'charge')
 │   ├── constants.ts        # SAC addresses, RPC URLs, network passphrases
+│   ├── scval.ts            # Soroban ScVal ↔ BigInt conversion
 │   ├── index.ts            # Root exports
 │   ├── client/
 │   │   ├── Charge.ts       # Client-side credential creation (SAC transfer)
@@ -394,6 +405,8 @@ stellar-mpp-sdk/
 │       │   └── index.ts
 │       └── server/
 │           ├── Channel.ts  # Server-side commitment verification + close
+│           ├── State.ts    # On-chain channel state queries
+│           ├── Watcher.ts  # Contract event polling (close, refund, top_up)
 │           ├── Methods.ts  # stellar.channel() convenience wrapper
 │           └── index.ts
 ├── examples/
@@ -401,6 +414,7 @@ stellar-mpp-sdk/
 │   ├── client.ts           # Example client with progress events
 │   ├── channel-server.ts   # Channel server example
 │   ├── channel-client.ts   # Channel client example
+│   ├── channel-open.ts     # Channel deployment example
 │   └── channel-close.ts    # On-chain channel close example
 ├── demo/
 │   ├── index.html          # Interactive browser UI (served at /demo)
