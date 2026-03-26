@@ -239,7 +239,7 @@ export function charge(parameters: charge.Parameters) {
 
         return Credential.serialize({
           challenge,
-          payload: { type: 'signature' as const, hash: result.hash },
+          payload: { type: 'hash' as const, hash: result.hash },
         })
       }
 

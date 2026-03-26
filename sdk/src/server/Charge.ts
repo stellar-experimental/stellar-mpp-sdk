@@ -100,7 +100,7 @@ export function charge(parameters: charge.Parameters) {
       const payload = credential.payload
 
       switch (payload.type) {
-        case 'signature': {
+        case 'hash': {
           const hash = payload.hash
 
           // Check tx hash dedup BEFORE verification to reject known replays
