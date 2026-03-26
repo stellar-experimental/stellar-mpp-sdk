@@ -212,7 +212,9 @@ stellar.charge({
   network?: 'testnet' | 'public', // default: 'testnet'
   decimals?: number,              // default: 7
   rpcUrl?: string,                // custom Soroban RPC URL
-  feePayer?: Keypair | string,    // sponsor tx fees via FeeBumpTransaction
+  signers?: SignerPool,           // source account(s) for sponsored tx signing
+  selectSigner?: (addrs) => string, // signer selection (default: round-robin)
+  feeBumpSigner?: Keypair | string, // wraps all txs in FeeBumpTransaction
   store?: Store.Store,            // replay protection
 })
 ```
@@ -264,9 +266,9 @@ The `onProgress` callback receives events at each stage:
 
 | Event | Fields | When |
 |-------|--------|------|
-| `challenge` | `recipient`, `amount`, `currency`, `feePayerKey?` | Challenge received |
+| `challenge` | `recipient`, `amount`, `currency` | Challenge received |
 | `signing` | — | Before signing |
-| `signed` | `xdr` | After signing |
+| `signed` | `transaction` | After signing |
 | `paying` | — | Before broadcast (push mode) |
 | `confirming` | `hash` | Polling for confirmation (push mode) |
 | `paid` | `hash` | Transaction confirmed (push mode) |
@@ -281,17 +283,24 @@ The `onProgress` callback receives events at each stage:
 
 ### Fee sponsorship
 
-The server can sponsor transaction fees using Stellar's `FeeBumpTransaction`:
+The server can decouple sequence-number management from fee payment:
+
+- **`signers`** — a pool of keypairs providing source accounts and sequence numbers for sponsored transactions. Accepts a single keypair or an array.
+- **`selectSigner`** — callback to pick which signer to use. Defaults to `roundRobinSelector()`.
+- **`feeBumpSigner`** — optional dedicated fee payer. When set, all submitted transactions are wrapped in a `FeeBumpTransaction` signed by this key.
 
 ```ts
+import { roundRobinSelector } from 'stellar-mpp-sdk'
+
 stellar.charge({
   recipient: 'G...',
   currency: USDC_SAC_TESTNET,
-  feePayer: Keypair.fromSecret('S...'),
+  signers: [poolKeypair1, poolKeypair2],      // sequence number accounts
+  feeBumpSigner: Keypair.fromSecret('S...'),  // pays all fees
 })
 ```
 
-The client is automatically informed via `methodDetails.feePayer` in the challenge.
+The client is automatically informed of fee sponsorship via `methodDetails.feePayer` in the challenge.
 
 ### Replay protection
 
