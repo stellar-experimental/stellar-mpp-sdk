@@ -16,3 +16,4 @@ export {
 } from './constants.js'
 export { fromBaseUnits, toBaseUnits } from './Methods.js'
 export { resolveKeypair } from './signers.js'
+export * as Env from './env.js'

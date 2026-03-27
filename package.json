@@ -33,6 +33,10 @@
     "./channel/server": {
       "types": "./dist/channel/server/index.d.ts",
       "default": "./dist/channel/server/index.js"
+    },
+    "./env": {
+      "types": "./dist/env.d.ts",
+      "default": "./dist/env.js"
     }
   },
   "files": [
