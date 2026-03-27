@@ -96,30 +96,31 @@ describe('Methods.charge', () => {
     expect(result.externalId).toBe('order-123')
   })
 
-  it('request schema accepts methodDetails with reference', () => {
+  it('request schema accepts methodDetails with network and feePayer', () => {
     const result = Methods.charge.schema.request.parse({
       amount: '100000',
       currency: 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
       recipient: 'GBXYZ',
       methodDetails: {
-        reference: 'abc-123',
-        network: 'testnet',
-      },
-    })
-    expect(result.methodDetails?.reference).toBe('abc-123')
-    expect(result.methodDetails?.network).toBe('testnet')
-  })
-
-  it('request schema accepts methodDetails with feePayer', () => {
-    const result = Methods.charge.schema.request.parse({
-      amount: '100000',
-      currency: 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
-      recipient: 'GBXYZ',
-      methodDetails: {
+        network: 'stellar:testnet',
         feePayer: true,
       },
     })
+    expect(result.methodDetails?.network).toBe('stellar:testnet')
     expect(result.methodDetails?.feePayer).toBe(true)
+  })
+
+  it('request schema accepts methodDetails with network only', () => {
+    const result = Methods.charge.schema.request.parse({
+      amount: '100000',
+      currency: 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
+      recipient: 'GBXYZ',
+      methodDetails: {
+        network: 'stellar:pubnet',
+      },
+    })
+    expect(result.methodDetails?.network).toBe('stellar:pubnet')
+    expect(result.methodDetails?.feePayer).toBeUndefined()
   })
 
   it('request schema allows omitting methodDetails', () => {
@@ -137,7 +138,9 @@ describe('Methods.charge', () => {
       hash: 'abc123',
     })
     expect(result.type).toBe('hash')
-    expect(result.hash).toBe('abc123')
+    if (result.type === 'hash') {
+      expect(result.hash).toBe('abc123')
+    }
   })
 
   it('credential payload accepts transaction type (pull)', () => {
@@ -146,6 +149,8 @@ describe('Methods.charge', () => {
       transaction: 'AAAA...',
     })
     expect(result.type).toBe('transaction')
-    expect(result.transaction).toBe('AAAA...')
+    if (result.type === 'transaction') {
+      expect(result.transaction).toBe('AAAA...')
+    }
   })
 })

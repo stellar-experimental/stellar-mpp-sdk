@@ -4,7 +4,6 @@ import {
   BASE_FEE,
   Contract,
   Keypair,
-  Memo,
   TransactionBuilder,
   authorizeEntry,
   nativeToScVal,
@@ -15,7 +14,9 @@ import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
 import {
   ALL_ZEROS,
+  CAIP2_TO_NETWORK,
   DEFAULT_DECIMALS,
+  DEFAULT_LEDGER_CLOSE_TIME,
   DEFAULT_TIMEOUT,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
@@ -85,8 +86,10 @@ export function charge(parameters: charge.Parameters) {
     async createCredential({ challenge, context }) {
       const { request } = challenge
       const { amount, currency, recipient } = request
-      const network: NetworkId = (request.methodDetails?.network as NetworkId) ?? 'testnet'
-      const memo = request.methodDetails?.memo as string | undefined
+
+      const caip2Network = request.methodDetails?.network ?? 'stellar:testnet'
+      const network: NetworkId = CAIP2_TO_NETWORK[caip2Network] ?? 'testnet'
+
       onProgress?.({
         type: 'challenge',
         recipient,
@@ -112,6 +115,10 @@ export function charge(parameters: charge.Parameters) {
         )
       }
 
+      const expiresTimestamp: number | undefined = challenge.expires
+        ? Math.floor(new Date(challenge.expires).getTime() / 1000)
+        : undefined
+
       if (isServerSponsored) {
         // ── Spec-compliant sponsored path ──────────────────────────────────
         // Client uses an all-zeros source account so the server can swap in
@@ -128,20 +135,27 @@ export function charge(parameters: charge.Parameters) {
         const sponsoredBuilder = new TransactionBuilder(placeholderSource, {
           fee: BASE_FEE,
           networkPassphrase,
-        })
-          .addOperation(transferOp)
-          .setTimeout(timeout)
+        }).addOperation(transferOp)
 
-        if (memo) {
-          sponsoredBuilder.addMemo(Memo.text(memo))
+        if (expiresTimestamp) {
+          sponsoredBuilder.setTimebounds(0, expiresTimestamp)
+        } else {
+          sponsoredBuilder.setTimeout(timeout)
         }
 
         const unsignedTx = sponsoredBuilder.build()
         const prepared = await server.prepareTransaction(unsignedTx)
 
-        // Determine auth-entry expiry from the current ledger sequence
         const latestLedger = await server.getLatestLedger()
-        const validUntilLedger = latestLedger.sequence + Math.ceil(timeout / 5) + 10
+        let validUntilLedger: number
+        if (expiresTimestamp) {
+          const nowSecs = Math.floor(Date.now() / 1000)
+          const secsUntilExpiry = Math.max(expiresTimestamp - nowSecs, 0)
+          validUntilLedger =
+            latestLedger.sequence + Math.ceil(secsUntilExpiry / DEFAULT_LEDGER_CLOSE_TIME)
+        } else {
+          validUntilLedger = latestLedger.sequence + Math.ceil(timeout / 5) + 10
+        }
 
         onProgress?.({ type: 'signing' })
 
@@ -173,9 +187,13 @@ export function charge(parameters: charge.Parameters) {
         const signedXdr = prepared.toEnvelope().toXDR('base64')
         onProgress?.({ type: 'signed', transaction: signedXdr })
 
+        const didComponent = network === 'public' ? 'pubnet' : network
+        const source = `did:pkh:stellar:${didComponent}:${keypair.publicKey()}`
+
         return Credential.serialize({
           challenge,
           payload: { type: 'transaction' as const, transaction: signedXdr },
+          source,
         })
       }
 
@@ -194,12 +212,12 @@ export function charge(parameters: charge.Parameters) {
       const builder = new TransactionBuilder(sourceAccount, {
         fee: BASE_FEE,
         networkPassphrase,
-      })
-        .addOperation(transferOp)
-        .setTimeout(timeout)
+      }).addOperation(transferOp)
 
-      if (memo) {
-        builder.addMemo(Memo.text(memo))
+      if (expiresTimestamp) {
+        builder.setTimebounds(0, expiresTimestamp)
+      } else {
+        builder.setTimeout(timeout)
       }
 
       const transaction = builder.build()
@@ -212,6 +230,9 @@ export function charge(parameters: charge.Parameters) {
 
       const signedXdr = prepared.toXDR()
       onProgress?.({ type: 'signed', transaction: signedXdr })
+
+      const didComponent = network === 'public' ? 'pubnet' : network
+      const source = `did:pkh:stellar:${didComponent}:${keypair.publicKey()}`
 
       if (effectiveMode === 'push') {
         // Client broadcasts
@@ -231,6 +252,7 @@ export function charge(parameters: charge.Parameters) {
         return Credential.serialize({
           challenge,
           payload: { type: 'hash' as const, hash: result.hash },
+          source,
         })
       }
 
@@ -238,6 +260,7 @@ export function charge(parameters: charge.Parameters) {
       return Credential.serialize({
         challenge,
         payload: { type: 'transaction' as const, transaction: signedXdr },
+        source,
       })
     },
   })

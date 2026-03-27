@@ -4,8 +4,12 @@ export * as ChannelMethods from './channel/Methods.js'
 
 // Constants (public)
 export {
+  CAIP2_NETWORK,
+  CAIP2_TO_NETWORK,
+  DEFAULT_CHALLENGE_EXPIRY,
   DEFAULT_DECIMALS,
   DEFAULT_FEE,
+  DEFAULT_LEDGER_CLOSE_TIME,
   DEFAULT_TIMEOUT,
   HORIZON_URLS,
   NETWORK_PASSPHRASE,
@@ -30,3 +34,6 @@ export * as Env from './env.js'
 
 // Logger interface (public — consumers need the type)
 export type { Logger } from './shared/logger.js'
+
+// Error types (public)
+export { SettlementError } from './shared/errors.js'

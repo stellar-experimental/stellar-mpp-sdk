@@ -37,15 +37,11 @@ export const charge = Method.from({
       description: z.optional(z.string()),
       /** Merchant-provided reconciliation ID (e.g. order ID, invoice number). */
       externalId: z.optional(z.string()),
-      /** Method-specific details injected by the server. */
+      /** Method-specific details injected by the server via request(). */
       methodDetails: z.optional(
         z.object({
-          /** Server-generated unique tracking ID. */
-          reference: z.optional(z.string()),
-          /** Stellar network identifier ("public" | "testnet"). */
-          network: z.optional(z.string()),
-          /** Optional memo text to attach to the transaction. */
-          memo: z.optional(z.string()),
+          /** CAIP-2 network identifier (e.g. "stellar:testnet", "stellar:pubnet"). */
+          network: z.string(),
           /** Whether the server will sponsor transaction fees. */
           feePayer: z.optional(z.boolean()),
         }),

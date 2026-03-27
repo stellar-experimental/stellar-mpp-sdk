@@ -58,6 +58,9 @@ import { getChannelState, type ChannelState } from './State.js'
  * })
  * ```
  */
+const LOG_PREFIX = '[stellar:channel]'
+const STORE_PREFIX = 'stellar:channel'
+
 export function channel(parameters: channel.Parameters) {
   const {
     channel: channelAddress,
@@ -95,7 +98,7 @@ export function channel(parameters: channel.Parameters) {
   const feeBumpKeypair = feeBumpSignerParam ? resolveKeypair(feeBumpSignerParam) : undefined
 
   // Track cumulative amounts per channel in the store
-  const cumulativeKey = `stellar:channel:cumulative:${channelAddress}`
+  const cumulativeKey = `${STORE_PREFIX}:cumulative:${channelAddress}`
 
   // Serialize verify operations to prevent concurrent double-acceptance.
   // Without a transactional store, two concurrent verify calls could both
@@ -149,13 +152,13 @@ export function channel(parameters: channel.Parameters) {
     // NM-001: Reject credentials once the channel has been closed on-chain.
     // Applied to all actions including 'open'.
     if (store) {
-      const closed = await store.get(`stellar:channel:closed:${channelAddress}`)
+      const closed = await store.get(`${STORE_PREFIX}:closed:${channelAddress}`)
       if (closed) {
-        logger.warn('[stellar:channel] Rejecting credential — channel already closed', {
+        logger.warn(`${LOG_PREFIX} Rejecting credential — channel already closed`, {
           channel: channelAddress,
         })
         throw new ChannelVerificationError(
-          '[stellar:channel] Channel has been closed. No further credentials accepted.',
+          `${LOG_PREFIX} Channel has been closed. No further credentials accepted.`,
           { channel: channelAddress },
         )
       }
@@ -166,7 +169,7 @@ export function channel(parameters: channel.Parameters) {
     // be exploited in a single-process deployment. Multi-process
     // deployments MUST use a store with atomic put-if-absent semantics.
     if (store) {
-      const replayKey = `stellar:channel:challenge:${challenge.id}`
+      const replayKey = `${STORE_PREFIX}:challenge:${challenge.id}`
       const existing = await store.get(replayKey)
       if (existing) {
         throw new ChannelVerificationError('Challenge already used. Replay rejected.', {
@@ -210,14 +213,14 @@ export function channel(parameters: channel.Parameters) {
           sourceAccount,
         })
 
-        logger.debug('[stellar:channel] On-chain state check', {
+        logger.debug(`${LOG_PREFIX} On-chain state check`, {
           balance: state.balance.toString(),
           closeAt: state.closeEffectiveAtLedger,
         })
 
         // Cache the on-chain state for the caller
         if (store) {
-          await store.put(`stellar:channel:state:${channelAddress}`, {
+          await store.put(`${STORE_PREFIX}:state:${channelAddress}`, {
             balance: state.balance.toString(),
             closeEffectiveAtLedger: state.closeEffectiveAtLedger,
             currentLedger: state.currentLedger,
@@ -229,12 +232,12 @@ export function channel(parameters: channel.Parameters) {
           onDisputeDetected?.(state)
 
           if (state.currentLedger >= state.closeEffectiveAtLedger) {
-            logger.warn('[stellar:channel] Channel is closed — effective ledger reached', {
+            logger.warn(`${LOG_PREFIX} Channel is closed — effective ledger reached`, {
               closeEffectiveAtLedger: state.closeEffectiveAtLedger,
               currentLedger: state.currentLedger,
             })
             throw new ChannelVerificationError(
-              '[stellar:channel] Channel is closed: close effective ledger has been reached.',
+              `${LOG_PREFIX} Channel is closed: close effective ledger has been reached.`,
               {
                 closeEffectiveAtLedger: String(state.closeEffectiveAtLedger),
                 currentLedger: String(state.currentLedger),
@@ -245,12 +248,12 @@ export function channel(parameters: channel.Parameters) {
 
         // NM-003: Reject commitments that exceed the channel's on-chain balance.
         if (commitmentAmount > state.balance) {
-          logger.warn('[stellar:channel] Commitment exceeds channel balance', {
+          logger.warn(`${LOG_PREFIX} Commitment exceeds channel balance`, {
             commitmentAmount: commitmentAmount.toString(),
             balance: state.balance.toString(),
           })
           throw new ChannelVerificationError(
-            `[stellar:channel] Commitment ${commitmentAmount} exceeds channel balance ${state.balance}.`,
+            `${LOG_PREFIX} Commitment ${commitmentAmount} exceeds channel balance ${state.balance}.`,
             {
               commitmentAmount: commitmentAmount.toString(),
               balance: state.balance.toString(),
@@ -262,11 +265,11 @@ export function channel(parameters: channel.Parameters) {
         if (error instanceof ChannelVerificationError) throw error
         // NM-005: Fail closed — reject the voucher when the on-chain
         // check cannot be completed rather than silently skipping it.
-        logger.warn('[stellar:channel] On-chain state check failed', {
+        logger.warn(`${LOG_PREFIX} On-chain state check failed`, {
           error: error instanceof Error ? error.message : String(error),
         })
         throw new ChannelVerificationError(
-          '[stellar:channel] On-chain state check failed. Cannot verify channel status.',
+          `${LOG_PREFIX} On-chain state check failed. Cannot verify channel status.`,
           { error: error instanceof Error ? error.message : String(error) },
         )
       }
@@ -276,12 +279,12 @@ export function channel(parameters: channel.Parameters) {
     try {
       validateHexSignature(signatureHex)
     } catch (err) {
-      logger.warn('[stellar:channel] Invalid signature format', {
+      logger.warn(`${LOG_PREFIX} Invalid signature format`, {
         signature: signatureHex,
         length: signatureHex?.length,
       })
       throw new ChannelVerificationError(
-        `[stellar:channel] ${err instanceof Error ? err.message : 'Invalid signature'}`,
+        `${LOG_PREFIX} ${err instanceof Error ? err.message : 'Invalid signature'}`,
         { signature: signatureHex, length: String(signatureHex?.length ?? 0) },
       )
     }
@@ -300,22 +303,22 @@ export function channel(parameters: channel.Parameters) {
     validateAmount(challengeRequest.amount)
     const requestedAmount = BigInt(challengeRequest.amount)
     if (requestedAmount <= 0n) {
-      logger.warn('[stellar:channel] Non-positive requested amount', {
+      logger.warn(`${LOG_PREFIX} Non-positive requested amount`, {
         requestedAmount: requestedAmount.toString(),
       })
-      throw new ChannelVerificationError('[stellar:channel] Requested amount must be positive.', {
+      throw new ChannelVerificationError(`${LOG_PREFIX} Requested amount must be positive.`, {
         requestedAmount: requestedAmount.toString(),
       })
     }
 
     // The new cumulative must be strictly greater than previous cumulative
     if (commitmentAmount <= previousCumulative) {
-      logger.warn('[stellar:channel] Commitment not greater than previous cumulative', {
+      logger.warn(`${LOG_PREFIX} Commitment not greater than previous cumulative`, {
         commitmentAmount: commitmentAmount.toString(),
         previousCumulative: previousCumulative.toString(),
       })
       throw new ChannelVerificationError(
-        `[stellar:channel] Commitment amount ${commitmentAmount} must be greater than previous cumulative ${previousCumulative}.`,
+        `${LOG_PREFIX} Commitment amount ${commitmentAmount} must be greater than previous cumulative ${previousCumulative}.`,
         {
           commitmentAmount: commitmentAmount.toString(),
           previousCumulative: previousCumulative.toString(),
@@ -325,13 +328,13 @@ export function channel(parameters: channel.Parameters) {
 
     // The commitment must cover the requested amount
     if (commitmentAmount < previousCumulative + requestedAmount) {
-      logger.warn('[stellar:channel] Commitment does not cover requested amount', {
+      logger.warn(`${LOG_PREFIX} Commitment does not cover requested amount`, {
         commitmentAmount: commitmentAmount.toString(),
         requestedAmount: requestedAmount.toString(),
         previousCumulative: previousCumulative.toString(),
       })
       throw new ChannelVerificationError(
-        `[stellar:channel] Commitment amount ${commitmentAmount} does not cover the requested amount ${requestedAmount} (previous cumulative: ${previousCumulative}).`,
+        `${LOG_PREFIX} Commitment amount ${commitmentAmount} does not cover the requested amount ${requestedAmount} (previous cumulative: ${previousCumulative}).`,
         {
           commitmentAmount: commitmentAmount.toString(),
           requestedAmount: requestedAmount.toString(),
@@ -343,7 +346,7 @@ export function channel(parameters: channel.Parameters) {
     // Verify: call prepare_commitment on the channel contract to
     // reconstruct the expected commitment bytes, then verify the
     // ed25519 signature.
-    logger.debug('[stellar:channel] Verifying commitment signature...')
+    logger.debug(`${LOG_PREFIX} Verifying commitment signature...`)
     const contract = new Contract(channelAddress)
     const call = contract.call(
       'prepare_commitment',
@@ -363,10 +366,7 @@ export function channel(parameters: channel.Parameters) {
 
     const returnValue = simResult.result?.retval
     if (!returnValue) {
-      throw new ChannelVerificationError(
-        '[stellar:channel] prepare_commitment returned no value.',
-        {},
-      )
+      throw new ChannelVerificationError(`${LOG_PREFIX} prepare_commitment returned no value.`, {})
     }
 
     const commitmentBytes = returnValue.bytes()
@@ -375,12 +375,12 @@ export function channel(parameters: channel.Parameters) {
     const valid = commitmentKeypair.verify(Buffer.from(commitmentBytes), signatureBytes)
 
     if (!valid) {
-      logger.warn('[stellar:channel] Commitment signature verification failed', {
+      logger.warn(`${LOG_PREFIX} Commitment signature verification failed`, {
         amount: commitmentAmount.toString(),
         channel: channelAddress,
       })
       throw new ChannelVerificationError(
-        '[stellar:channel] Commitment signature verification failed.',
+        `${LOG_PREFIX} Commitment signature verification failed.`,
         {
           amount: commitmentAmount.toString(),
           channel: channelAddress,
@@ -399,7 +399,7 @@ export function channel(parameters: channel.Parameters) {
     if (action === 'close') {
       if (!signerKeypair) {
         throw new ChannelVerificationError(
-          '[stellar:channel] Close action requires a signer to be configured.',
+          `${LOG_PREFIX} Close action requires a signer to be configured.`,
           {},
         )
       }
@@ -431,7 +431,7 @@ export function channel(parameters: channel.Parameters) {
         })
       }
 
-      logger.debug('[stellar:channel] Broadcasting close tx...')
+      logger.debug(`${LOG_PREFIX} Broadcasting close tx...`)
       const sendResult = await server.sendTransaction(txToSubmit)
 
       const txResult = await pollTransaction(server, sendResult.hash, {
@@ -442,7 +442,7 @@ export function channel(parameters: channel.Parameters) {
 
       if (txResult.status !== 'SUCCESS') {
         throw new ChannelVerificationError(
-          `[stellar:channel] Close transaction failed: ${txResult.status}`,
+          `${LOG_PREFIX} Close transaction failed: ${txResult.status}`,
           {
             hash: sendResult.hash,
             status: txResult.status,
@@ -451,9 +451,9 @@ export function channel(parameters: channel.Parameters) {
       }
 
       // Mark channel as closed in store
-      logger.debug('[stellar:channel] Channel closed, marking in store')
+      logger.debug(`${LOG_PREFIX} Channel closed, marking in store`)
       if (store) {
-        await store.put(`stellar:channel:closed:${channelAddress}`, {
+        await store.put(`${STORE_PREFIX}:closed:${channelAddress}`, {
           closedAt: new Date().toISOString(),
           txHash: sendResult.hash,
           amount: commitmentAmount.toString(),
@@ -489,7 +489,7 @@ export function channel(parameters: channel.Parameters) {
 
     if (!txXdr || typeof txXdr !== 'string') {
       throw new ChannelVerificationError(
-        '[stellar:channel] Open action requires a signed transaction XDR.',
+        `${LOG_PREFIX} Open action requires a signed transaction XDR.`,
         {},
       )
     }
@@ -498,11 +498,11 @@ export function channel(parameters: channel.Parameters) {
     try {
       validateHexSignature(signatureHex)
     } catch {
-      logger.warn('[stellar:channel] Invalid commitment signature for open action', {
+      logger.warn(`${LOG_PREFIX} Invalid commitment signature for open action`, {
         length: signatureHex?.length,
       })
       throw new ChannelVerificationError(
-        '[stellar:channel] Invalid commitment signature for open action.',
+        `${LOG_PREFIX} Invalid commitment signature for open action.`,
         {
           length: String(signatureHex?.length ?? 0),
         },
@@ -519,7 +519,7 @@ export function channel(parameters: channel.Parameters) {
     const requestedAmount = BigInt(challenge.request.amount)
     if (requestedAmount <= 0n) {
       throw new ChannelVerificationError(
-        '[stellar:channel] Open action requires a positive requested amount.',
+        `${LOG_PREFIX} Open action requires a positive requested amount.`,
         {
           requestedAmount: requestedAmount.toString(),
         },
@@ -527,7 +527,7 @@ export function channel(parameters: channel.Parameters) {
     }
     if (commitmentAmount <= 0n) {
       throw new ChannelVerificationError(
-        '[stellar:channel] Open action requires a positive commitment amount.',
+        `${LOG_PREFIX} Open action requires a positive commitment amount.`,
         {
           commitmentAmount: commitmentAmount.toString(),
         },
@@ -535,7 +535,7 @@ export function channel(parameters: channel.Parameters) {
     }
     if (commitmentAmount < requestedAmount) {
       throw new ChannelVerificationError(
-        '[stellar:channel] Commitment amount does not cover requested amount for open action.',
+        `${LOG_PREFIX} Commitment amount does not cover requested amount for open action.`,
         {
           commitmentAmount: commitmentAmount.toString(),
           requestedAmount: requestedAmount.toString(),
@@ -548,14 +548,14 @@ export function channel(parameters: channel.Parameters) {
       const existing = await store.get(cumulativeKey)
       if (existing) {
         throw new ChannelVerificationError(
-          '[stellar:channel] Channel is already open. Cannot replay an open credential.',
+          `${LOG_PREFIX} Channel is already open. Cannot replay an open credential.`,
           { channel: channelAddress },
         )
       }
     }
 
     // Verify the initial commitment signature via prepare_commitment simulation
-    logger.debug('[stellar:channel] Verifying commitment signature...')
+    logger.debug(`${LOG_PREFIX} Verifying commitment signature...`)
     const contract = new Contract(channelAddress)
     const call = contract.call(
       'prepare_commitment',
@@ -576,7 +576,7 @@ export function channel(parameters: channel.Parameters) {
     const returnValue = simResult.result?.retval
     if (!returnValue) {
       throw new ChannelVerificationError(
-        '[stellar:channel] prepare_commitment returned no value during open.',
+        `${LOG_PREFIX} prepare_commitment returned no value during open.`,
         {},
       )
     }
@@ -586,12 +586,12 @@ export function channel(parameters: channel.Parameters) {
     const valid = commitmentKeypair.verify(Buffer.from(commitmentBytes), signatureBytes)
 
     if (!valid) {
-      logger.warn('[stellar:channel] Initial commitment signature verification failed', {
+      logger.warn(`${LOG_PREFIX} Initial commitment signature verification failed`, {
         amount: commitmentAmount.toString(),
         channel: channelAddress,
       })
       throw new ChannelVerificationError(
-        '[stellar:channel] Initial commitment signature verification failed.',
+        `${LOG_PREFIX} Initial commitment signature verification failed.`,
         {
           amount: commitmentAmount.toString(),
           channel: channelAddress,
@@ -604,7 +604,7 @@ export function channel(parameters: channel.Parameters) {
     try {
       openTx = TransactionBuilder.fromXDR(txXdr, networkPassphrase)
     } catch (err) {
-      throw new ChannelVerificationError('[stellar:channel] Invalid open transaction XDR.', {
+      throw new ChannelVerificationError(`${LOG_PREFIX} Invalid open transaction XDR.`, {
         error: err instanceof Error ? err.message : String(err),
       })
     }
@@ -628,7 +628,7 @@ export function channel(parameters: channel.Parameters) {
 
     if (txResult.status !== 'SUCCESS') {
       throw new ChannelVerificationError(
-        `[stellar:channel] Open transaction failed: ${txResult.status}`,
+        `${LOG_PREFIX} Open transaction failed: ${txResult.status}`,
         {
           hash: sendResult.hash,
           status: txResult.status,
@@ -730,7 +730,7 @@ export async function close(parameters: {
     })
   }
 
-  log.debug('[stellar:channel] Broadcasting close tx...')
+  log.debug(`${LOG_PREFIX} Broadcasting close tx...`)
   const result = await server.sendTransaction(txToSubmit)
 
   const txResult = await pollTransaction(server, result.hash, {
@@ -741,7 +741,7 @@ export async function close(parameters: {
 
   if (txResult.status !== 'SUCCESS') {
     throw new ChannelVerificationError(
-      `[stellar:channel] Close transaction failed: ${txResult.status}`,
+      `${LOG_PREFIX} Close transaction failed: ${txResult.status}`,
       {
         hash: result.hash,
         status: txResult.status,
