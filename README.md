@@ -439,12 +439,12 @@ See [demo/README.md](demo/README.md) for full instructions. Quick start:
 ./demo/run.sh
 
 # Or two terminals:
-STELLAR_RECIPIENT=G... npx tsx examples/server.ts  # Terminal 1
-STELLAR_SECRET=S... npx tsx examples/client.ts      # Terminal 2
+STELLAR_RECIPIENT=G... npx tsx examples/charge-server.ts  # Terminal 1
+STELLAR_SECRET=S... npx tsx examples/charge-client.ts      # Terminal 2
 
 # Or npm scripts:
-STELLAR_RECIPIENT=G... pnpm demo:server  # Terminal 1
-STELLAR_SECRET=S... pnpm demo:client      # Terminal 2
+STELLAR_RECIPIENT=G... pnpm demo:charge-server  # Terminal 1
+STELLAR_SECRET=S... pnpm demo:charge-client      # Terminal 2
 ```
 
 Browser UI available at `http://localhost:3000/demo` once the server is running.
@@ -509,8 +509,8 @@ stellar-mpp-sdk/
 │           ├── Methods.ts  # stellar.channel() convenience wrapper
 │           └── index.ts
 ├── examples/
-│   ├── server.ts           # Charge server (Express + helmet/cors/rate-limit)
-│   ├── client.ts           # Example client with progress events
+│   ├── charge-server.ts    # Charge server (Express + helmet/cors/rate-limit)
+│   ├── charge-client.ts    # Charge client with progress events
 │   ├── channel-server.ts   # Channel server (Express + helmet/cors/rate-limit)
 │   ├── channel-client.ts   # Channel client example
 │   ├── channel-open.ts     # Channel deployment example

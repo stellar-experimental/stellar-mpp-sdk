@@ -26,7 +26,7 @@ Runs: install -> format-check -> lint -> typecheck -> test -> build.
 Verify all 6 example scripts start correctly (imports resolve, env parsing works):
 
 ```bash
-for f in examples/server.ts examples/client.ts examples/channel-server.ts examples/channel-client.ts examples/channel-open.ts examples/channel-close.ts; do
+for f in examples/charge-server.ts examples/charge-client.ts examples/channel-server.ts examples/channel-client.ts examples/channel-open.ts examples/channel-close.ts; do
   echo "--- $f ---"
   timeout 3 npx tsx "$f" 2>&1 | head -3
   echo ""
@@ -37,8 +37,8 @@ done
 
 | Script                       | Expected                                                        |
 | ---------------------------- | --------------------------------------------------------------- |
-| `examples/server.ts`         | Starts Express on port 3000 (pino JSON log)                     |
-| `examples/client.ts`         | Loads keypair, starts client                                    |
+| `examples/charge-server.ts`         | Starts Express on port 3000 (pino JSON log)                     |
+| `examples/charge-client.ts`         | Loads keypair, starts client                                    |
 | `examples/channel-server.ts` | Starts Express on port 3001 (pino JSON log)                     |
 | `examples/channel-client.ts` | Loads commitment key, starts client                             |
 | `examples/channel-open.ts`   | Env validation error: `OPEN_TX_XDR is required` (expected)      |

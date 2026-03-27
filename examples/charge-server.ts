@@ -5,10 +5,10 @@
  * Uses Express with security headers (helmet, CORS, rate limiting).
  *
  * Usage:
- *   STELLAR_RECIPIENT=GYOUR_PUBLIC_KEY npx tsx examples/server.ts
+ *   STELLAR_RECIPIENT=GYOUR_PUBLIC_KEY npx tsx examples/charge-server.ts
  *
  * Then test with:
- *   STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/client.ts
+ *   STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/charge-client.ts
  */
 
 import express from 'express'

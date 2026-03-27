@@ -5,7 +5,7 @@
  * via Soroban SAC transfer on Stellar testnet.
  *
  * Usage:
- *   STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/client.ts
+ *   STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/charge-client.ts
  */
 
 import { Keypair } from '@stellar/stellar-sdk'

@@ -38,22 +38,22 @@ This starts the server, runs the client end-to-end, then keeps the server alive 
 
 ```bash
 # Terminal 1 — start server
-STELLAR_RECIPIENT=GYOUR_PUBLIC_KEY npx tsx examples/server.ts
+STELLAR_RECIPIENT=GYOUR_PUBLIC_KEY npx tsx examples/charge-server.ts
 ```
 
 ```bash
 # Terminal 2 — run client
-STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/client.ts
+STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/charge-client.ts
 ```
 
 Or use npm scripts:
 
 ```bash
 # Terminal 1
-STELLAR_RECIPIENT=G... pnpm demo:server
+STELLAR_RECIPIENT=G... pnpm demo:charge-server
 
 # Terminal 2
-STELLAR_SECRET=S... pnpm demo:client
+STELLAR_SECRET=S... pnpm demo:charge-client
 ```
 
 ## Option 3: Browser UI

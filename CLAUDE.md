@@ -45,7 +45,7 @@ Each example must load and execute without import/type errors. Expected behavior
 ```bash
 # Charge server — should start and return 402 on requests
 PORT=3099 STELLAR_RECIPIENT=GBHEGW3KWOY2OFH767EDALFGCUTBOEVBDQMCKUVJ3LKEWI4ZNVPP5EFC \
-  npx tsx examples/server.ts
+  npx tsx examples/charge-server.ts
 # → "Stellar MPP server running on http://localhost:3099" — Ctrl+C to stop
 
 # Channel server — should start and return 402 on requests
@@ -59,7 +59,7 @@ CHANNEL_CONTRACT=CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
 # Client — should load, create keypair, fail on network (no server running)
 STELLAR_SECRET=$(npx tsx -e "import{Keypair}from'@stellar/stellar-sdk';console.log(Keypair.random().secret())" 2>/dev/null) \
   SERVER_URL=http://localhost:9999 \
-  npx tsx examples/client.ts
+  npx tsx examples/charge-client.ts
 # → "Using Stellar account: G..." then ECONNREFUSED (expected)
 
 # Channel client — should load, create commitment key, fail on network

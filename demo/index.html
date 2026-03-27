@@ -298,7 +298,7 @@
             style="color: #fbbf24; outline: none"
             >GAYF33NNNMI2Z6VNRFXQ64D4ISKL2PFOR3GDUM4H4PTJ63HAJBCZKA2N</span
           >
-          \ npx tsx examples/server.ts
+          \ npx tsx examples/charge-server.ts
         </div>
 
         <label style="margin-top: 1rem">Terminal 2 — Run Client</label>
@@ -307,14 +307,14 @@
           STELLAR_SECRET=<span id="cli-secret" contenteditable style="color: #fbbf24; outline: none"
             >SCZANGBA5YHTNYVVV3C7CAZMCLMXPXBDM42SZGFDJHSIA7FGXVCPTCGZ</span
           >
-          \ npx tsx examples/client.ts
+          \ npx tsx examples/charge-client.ts
         </div>
 
         <label style="margin-top: 1rem">All-in-one (single terminal)</label>
         <div class="cli-box">
           <span class="cli-comment"># Start server in background, wait, then run client</span>
-          STELLAR_RECIPIENT=GYOUR_PUBLIC_KEY npx tsx examples/server.ts & sleep 2
-          STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/client.ts
+          STELLAR_RECIPIENT=GYOUR_PUBLIC_KEY npx tsx examples/charge-server.ts & sleep 2
+          STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/charge-client.ts
         </div>
 
         <p class="warn">
@@ -452,7 +452,7 @@
             step(
               'fail',
               err.message +
-                '<br><br>Start the server first:<br><code>STELLAR_RECIPIENT=G... npx tsx examples/server.ts</code>',
+                '<br><br>Start the server first:<br><code>STELLAR_RECIPIENT=G... npx tsx examples/charge-server.ts</code>',
             )
         } finally {
           btn.disabled = false
