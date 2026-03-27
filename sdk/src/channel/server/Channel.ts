@@ -169,7 +169,9 @@ export function channel(parameters: channel.Parameters) {
       const replayKey = `stellar:channel:challenge:${challenge.id}`
       const existing = await store.get(replayKey)
       if (existing) {
-        throw new ChannelVerificationError('Challenge already used. Replay rejected.', { channel: channelAddress })
+        throw new ChannelVerificationError('Challenge already used. Replay rejected.', {
+          channel: channelAddress,
+        })
       }
       await store.put(replayKey, { usedAt: new Date().toISOString() })
     }

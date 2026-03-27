@@ -57,7 +57,9 @@ export async function pollTransaction(
     }
 
     if (result.status === 'FAILED') {
-      throw new StellarMppError(`Transaction ${hash} failed: ${result.resultXdr ?? 'unknown error'}`)
+      throw new StellarMppError(
+        `Transaction ${hash} failed: ${result.resultXdr ?? 'unknown error'}`,
+      )
     }
 
     attempts++

@@ -99,7 +99,9 @@ export function charge(parameters: charge.Parameters) {
       const key = `stellar:charge:challenge:${challenge.id}`
       const existing = await store.get(key)
       if (existing) {
-        throw new PaymentVerificationError('[stellar:charge] Challenge already used. Replay rejected.')
+        throw new PaymentVerificationError(
+          '[stellar:charge] Challenge already used. Replay rejected.',
+        )
       }
       await store.put(key, { usedAt: new Date().toISOString() })
     }
@@ -247,7 +249,9 @@ export function charge(parameters: charge.Parameters) {
       }
 
       default:
-        throw new PaymentVerificationError(`Unsupported credential type "${(payload as { type: string }).type}".`)
+        throw new PaymentVerificationError(
+          `Unsupported credential type "${(payload as { type: string }).type}".`,
+        )
     }
   }
 }

@@ -1,5 +1,10 @@
 import { Address, Contract, TransactionBuilder, rpc, xdr } from '@stellar/stellar-sdk'
-import { DEFAULT_FEE, NETWORK_PASSPHRASE, SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
+import {
+  DEFAULT_FEE,
+  NETWORK_PASSPHRASE,
+  SOROBAN_RPC_URLS,
+  type NetworkId,
+} from '../../constants.js'
 import { DEFAULT_SIM_TIMEOUT_SECS } from '../../shared/defaults.js'
 import { StellarMppError } from '../../shared/errors.js'
 import { scValToBigInt } from '../../shared/scval.js'
@@ -78,7 +83,9 @@ export async function getChannelState(
     const result = await server.simulateTransaction(tx)
     if (!rpc.Api.isSimulationSuccess(result)) {
       const errorMsg = 'error' in result ? String(result.error) : 'unknown'
-      throw new StellarMppError(`Failed to simulate ${fnName} on channel ${channelAddress}: ${errorMsg}`)
+      throw new StellarMppError(
+        `Failed to simulate ${fnName} on channel ${channelAddress}: ${errorMsg}`,
+      )
     }
     return result.result?.retval
   }
