@@ -1,4 +1,4 @@
-# stellar-mpp-sdk
+# @stellar/mpp
 
 Stellar blockchain payment method for the [Machine Payments Protocol (MPP)](https://mpp.dev). Enables machine-to-machine payments using Soroban SAC token transfers on the Stellar network, with optional support for [one-way payment channels](https://github.com/stellar-experimental/one-way-channel) for high-frequency off-chain payments.
 
@@ -100,7 +100,7 @@ pnpm install
 For end users:
 
 ```bash
-npm install stellar-mpp-sdk mppx @stellar/stellar-sdk
+npm install @stellar/mpp mppx @stellar/stellar-sdk
 ```
 
 ## Quick start
@@ -108,8 +108,8 @@ npm install stellar-mpp-sdk mppx @stellar/stellar-sdk
 ### Server (charge)
 
 ```ts
-import { Mppx, stellar } from 'stellar-mpp-sdk/charge/server'
-import { USDC_SAC_TESTNET } from 'stellar-mpp-sdk'
+import { Mppx, stellar } from '@stellar/mpp/charge/server'
+import { USDC_SAC_TESTNET } from '@stellar/mpp'
 
 const mppx = Mppx.create({
   secretKey: process.env.MPP_SECRET_KEY,
@@ -139,7 +139,7 @@ export async function handler(request: Request) {
 
 ```ts
 import { Keypair } from '@stellar/stellar-sdk'
-import { Mppx, stellar } from 'stellar-mpp-sdk/charge/client'
+import { Mppx, stellar } from '@stellar/mpp/charge/client'
 
 // Polyfills global fetch — 402 responses are handled automatically
 Mppx.create({
@@ -157,7 +157,7 @@ const data = await response.json()
 ### Server (channel)
 
 ```ts
-import { Mppx, stellar, Store } from 'stellar-mpp-sdk/channel/server'
+import { Mppx, stellar, Store } from '@stellar/mpp/channel/server'
 
 const mppx = Mppx.create({
   secretKey: process.env.MPP_SECRET_KEY,
@@ -187,7 +187,7 @@ export async function handler(request: Request) {
 
 ```ts
 import { Keypair } from '@stellar/stellar-sdk'
-import { Mppx, stellar } from 'stellar-mpp-sdk/channel/client'
+import { Mppx, stellar } from '@stellar/mpp/channel/client'
 
 Mppx.create({
   methods: [
@@ -207,14 +207,14 @@ const data = await response.json()
 
 | Path                             | Exports                                                                                                                                                                          |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stellar-mpp-sdk`                | `ChargeMethods`, `ChannelMethods`, constants (`USDC_SAC_TESTNET`, `XLM_SAC_MAINNET`, etc.), `toBaseUnits`, `fromBaseUnits`, `resolveKeypair`, `Logger` (type)                    |
-| `stellar-mpp-sdk/charge`         | `charge` (method schema)                                                                                                                                                         |
-| `stellar-mpp-sdk/charge/client`  | `stellar`, `charge`, `Mppx`                                                                                                                                                      |
-| `stellar-mpp-sdk/charge/server`  | `stellar`, `charge`, `Mppx`, `Store`, `Expires`, `resolveKeypair`                                                                                                                |
-| `stellar-mpp-sdk/channel`        | `channel` (method schema)                                                                                                                                                        |
-| `stellar-mpp-sdk/channel/client` | `stellar`, `channel`, `Mppx`                                                                                                                                                     |
-| `stellar-mpp-sdk/channel/server` | `stellar`, `channel`, `close`, `getChannelState`, `watchChannel`, `Mppx`, `Store`, `Expires`                                                                                     |
-| `stellar-mpp-sdk/env`            | `parseRequired`, `parseOptional`, `parsePort`, `parseStellarPublicKey`, `parseStellarSecretKey`, `parseContractAddress`, `parseHexKey`, `parseCommaSeparatedList`, `parseNumber` |
+| `@stellar/mpp`                | `ChargeMethods`, `ChannelMethods`, constants (`USDC_SAC_TESTNET`, `XLM_SAC_MAINNET`, etc.), `toBaseUnits`, `fromBaseUnits`, `resolveKeypair`, `Logger` (type)                    |
+| `@stellar/mpp/charge`         | `charge` (method schema)                                                                                                                                                         |
+| `@stellar/mpp/charge/client`  | `stellar`, `charge`, `Mppx`                                                                                                                                                      |
+| `@stellar/mpp/charge/server`  | `stellar`, `charge`, `Mppx`, `Store`, `Expires`, `resolveKeypair`                                                                                                                |
+| `@stellar/mpp/channel`        | `channel` (method schema)                                                                                                                                                        |
+| `@stellar/mpp/channel/client` | `stellar`, `channel`, `Mppx`                                                                                                                                                     |
+| `@stellar/mpp/channel/server` | `stellar`, `channel`, `close`, `getChannelState`, `watchChannel`, `Mppx`, `Store`, `Expires`                                                                                     |
+| `@stellar/mpp/env`            | `parseRequired`, `parseOptional`, `parsePort`, `parseStellarPublicKey`, `parseStellarSecretKey`, `parseContractAddress`, `parseHexKey`, `parseCommaSeparatedList`, `parseNumber` |
 
 ### Server options (charge)
 
@@ -323,7 +323,7 @@ The server can decouple sequence-number management from fee payment:
 - **`feeBumpSigner`** --- optional dedicated fee payer. When set, all submitted transactions are wrapped in a `FeeBumpTransaction` signed by this key.
 
 ```ts
-import { stellar } from 'stellar-mpp-sdk/charge/server'
+import { stellar } from '@stellar/mpp/charge/server'
 
 stellar.charge({
   recipient: 'G...',
@@ -340,7 +340,7 @@ The client is automatically informed of fee sponsorship via `methodDetails.feePa
 Provide an mppx `Store` to prevent challenge reuse:
 
 ```ts
-import { Store } from 'stellar-mpp-sdk/charge/server'
+import { Store } from '@stellar/mpp/charge/server'
 
 stellar.charge({
   recipient: 'G...',
@@ -355,7 +355,7 @@ Pass a `logger` to charge or channel servers for structured debug and warning ou
 
 ```ts
 import pino from 'pino'
-import { stellar } from 'stellar-mpp-sdk/charge/server'
+import { stellar } from '@stellar/mpp/charge/server'
 
 const logger = pino({ level: 'debug' })
 
@@ -390,7 +390,7 @@ The SDK also supports opening a channel through the MPP 402 flow using the `open
 **On-chain close (server-side):**
 
 ```ts
-import { close } from 'stellar-mpp-sdk/channel/server'
+import { close } from '@stellar/mpp/channel/server'
 
 await close({
   channel: 'CABC...', // channel contract address
@@ -412,10 +412,10 @@ await close({
 
 ## Breaking changes from 0.1.0
 
-- **Import paths changed**: `stellar-mpp-sdk/client` and `stellar-mpp-sdk/server` are no longer valid. Use `stellar-mpp-sdk/charge/client` and `stellar-mpp-sdk/charge/server` instead.
+- **Import paths changed**: `@stellar/mpp/client` and `@stellar/mpp/server` are no longer valid. Use `@stellar/mpp/charge/client` and `@stellar/mpp/charge/server` instead.
 - **Root export renamed**: `Methods` is now `ChargeMethods`.
 - **Store keys changed**: Store key format updated to `stellar:{intent}:{type}:{id}`. Existing stored data is not backwards compatible.
-- **`resolveKeypair` moved**: Now exported from the root (`stellar-mpp-sdk`) and from `stellar-mpp-sdk/charge/server`, no longer from `stellar-mpp-sdk/server`.
+- **`resolveKeypair` moved**: Now exported from the root (`@stellar/mpp`) and from `@stellar/mpp/charge/server`, no longer from `@stellar/mpp/server`.
 
 ## Environment variables
 
@@ -463,7 +463,7 @@ See [demo/channel-e2e-output.txt](demo/channel-e2e-output.txt) for example outpu
 ## Project structure
 
 ```
-stellar-mpp-sdk/
+@stellar/mpp/
 ├── eslint.config.mjs       # ESLint 9 flat config
 ├── .prettierrc             # Prettier configuration
 ├── Makefile                # Dev workflow targets (make help)
