@@ -5,3 +5,5 @@ dist/
 .claude/
 package-lock.json
 .env
+examples/.env.*
+!examples/.env.*.example
