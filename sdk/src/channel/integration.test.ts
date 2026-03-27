@@ -77,7 +77,7 @@ describe('channel replay protection', () => {
   it('store tracks used challenge IDs', async () => {
     const store = Store.memory()
 
-    const key = 'stellar:challenge:test-channel-id-123'
+    const key = 'stellar:channel:challenge:test-channel-id-123'
     const before = await store.get(key)
     expect(before).toBeNull()
 

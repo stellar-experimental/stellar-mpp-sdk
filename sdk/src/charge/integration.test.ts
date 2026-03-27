@@ -1,7 +1,7 @@
 import { Keypair } from '@stellar/stellar-sdk'
 import { Challenge, Credential, Store } from 'mppx'
 import { describe, expect, it } from 'vitest'
-import { USDC_SAC_TESTNET } from './constants.js'
+import { USDC_SAC_TESTNET } from '../constants.js'
 import { charge as serverCharge } from './server/Charge.js'
 import { charge as clientCharge } from './client/Charge.js'
 import { toBaseUnits } from './Methods.js'
@@ -80,7 +80,7 @@ describe('replay protection', () => {
   it('store tracks used challenge IDs', async () => {
     const store = Store.memory()
 
-    const key = 'stellar:challenge:test-id-123'
+    const key = 'stellar:charge:challenge:test-id-123'
     const before = await store.get(key)
     expect(before).toBeNull()
 
@@ -94,7 +94,7 @@ describe('replay protection', () => {
   it('store returns existing entry on replay attempt', async () => {
     const store = Store.memory()
 
-    const key = 'stellar:challenge:replay-test-id'
+    const key = 'stellar:charge:challenge:replay-test-id'
     await store.put(key, { usedAt: '2026-01-01T00:00:00.000Z' })
 
     const existing = await store.get(key)

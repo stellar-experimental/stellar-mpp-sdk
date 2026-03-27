@@ -3,12 +3,13 @@
 Interactive playground for testing the Stellar MPP payment flow — via browser UI or CLI.
 
 Two demo modes are available:
+
 - **Charge** — one-time on-chain SAC token transfers (default)
 - **Channel** — off-chain payment channel commitments (no on-chain tx per payment)
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - A funded Stellar **testnet** account (create one at [Stellar Laboratory](https://laboratory.stellar.org/#account-creator?network=test))
 - `pnpm install` (from project root)
 - For the **channel demo**: a deployed [one-way-channel](https://github.com/stellar-experimental/one-way-channel) contract on testnet
@@ -37,22 +38,22 @@ This starts the server, runs the client end-to-end, then keeps the server alive 
 
 ```bash
 # Terminal 1 — start server
-STELLAR_RECIPIENT=GYOUR_PUBLIC_KEY npx tsx examples/server.ts
+STELLAR_RECIPIENT=GYOUR_PUBLIC_KEY npx tsx examples/charge-server.ts
 ```
 
 ```bash
 # Terminal 2 — run client
-STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/client.ts
+STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/charge-client.ts
 ```
 
 Or use npm scripts:
 
 ```bash
 # Terminal 1
-STELLAR_RECIPIENT=G... pnpm demo:server
+STELLAR_RECIPIENT=G... pnpm demo:charge-server
 
 # Terminal 2
-STELLAR_SECRET=S... pnpm demo:client
+STELLAR_SECRET=S... pnpm demo:charge-client
 ```
 
 ## Option 3: Browser UI
@@ -92,13 +93,13 @@ Client                          Server
 
 ## Environment variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `STELLAR_RECIPIENT` | Charge server | Your Stellar public key (G..., 56 chars) |
-| `STELLAR_SECRET` | Charge client | Your Stellar secret key (S...) |
-| `MPP_SECRET_KEY` | No | MPP signing key (defaults to `stellar-mpp-demo-secret`) |
-| `PORT` | No | Server port (defaults to `3000` for charge, `3001` for channel) |
-| `SERVER_URL` | No | Client target URL (defaults to `http://localhost:3000` or `3001`) |
+| Variable            | Required      | Description                                                       |
+| ------------------- | ------------- | ----------------------------------------------------------------- |
+| `STELLAR_RECIPIENT` | Charge server | Your Stellar public key (G..., 56 chars)                          |
+| `STELLAR_SECRET`    | Charge client | Your Stellar secret key (S...)                                    |
+| `MPP_SECRET_KEY`    | No            | MPP signing key (defaults to `stellar-mpp-demo-secret`)           |
+| `PORT`              | No            | Server port (defaults to `3000` for charge, `3001` for channel)   |
+| `SERVER_URL`        | No            | Client target URL (defaults to `http://localhost:3000` or `3001`) |
 
 ---
 
@@ -110,9 +111,9 @@ Uses a [one-way payment channel](https://github.com/stellar-experimental/one-way
 
 You need a deployed channel contract. See the main [README](../README.md#one-way-payment-channels) for deployment instructions, or use these pre-deployed testnet values:
 
-| Item | Value |
-|------|-------|
-| Channel contract | `CBU3P5BAU6CYGPAVY7TGGGNEPCS7H73IA3L677Z3CFZSGFYB7UFK4IMS` |
+| Item                  | Value                                                              |
+| --------------------- | ------------------------------------------------------------------ |
+| Channel contract      | `CBU3P5BAU6CYGPAVY7TGGGNEPCS7H73IA3L677Z3CFZSGFYB7UFK4IMS`         |
 | Commitment public key | `b83ee77019d9ca0aac432139fe0159ec01b5d31f58905fdc089980be05b7c5fd` |
 | Commitment secret key | `73b51cad30e14119e78d9a3d5d143a55c07f57c53fe9b95aa6bb061d0d4afb4f` |
 
@@ -194,14 +195,15 @@ No on-chain transactions happen during payments. The server can close the channe
 
 ### Channel environment variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `CHANNEL_CONTRACT` | Server | Deployed channel contract address (C..., 56 chars) |
-| `COMMITMENT_PUBKEY` | Server | Ed25519 commitment public key (64 hex chars) |
-| `COMMITMENT_SECRET` | Client | Ed25519 commitment secret key (64 hex chars) |
-| `MPP_SECRET_KEY` | No | MPP signing key (defaults to `stellar-mpp-channel-demo-secret`) |
-| `PORT` | No | Server port (defaults to `3001`) |
-| `SERVER_URL` | No | Client target URL (defaults to `http://localhost:3001`) |
+| Variable            | Required | Description                                                     |
+| ------------------- | -------- | --------------------------------------------------------------- |
+| `CHANNEL_CONTRACT`  | Server   | Deployed channel contract address (C..., 56 chars)              |
+| `COMMITMENT_PUBKEY` | Server   | Ed25519 commitment public key (64 hex chars)                    |
+| `COMMITMENT_SECRET` | Client   | Ed25519 commitment secret key (64 hex chars)                    |
+| `SOURCE_ACCOUNT`    | No       | Funded Stellar account (G...) for contract simulations          |
+| `MPP_SECRET_KEY`    | No       | MPP signing key (defaults to `stellar-mpp-channel-demo-secret`) |
+| `PORT`              | No       | Server port (defaults to `3001`)                                |
+| `SERVER_URL`        | No       | Client target URL (defaults to `http://localhost:3001`)         |
 
 ---
 
@@ -233,6 +235,7 @@ WASM_PATH=path/to/channel.wasm ./demo/run-channel-e2e.sh
 ```
 
 The script will:
+
 1. Create fresh funded testnet accounts (funder + recipient)
 2. Generate a random ed25519 commitment keypair
 3. Upload WASM and deploy the channel contract (on-chain)
@@ -242,18 +245,18 @@ The script will:
 
 ### What happens on-chain
 
-| Step | Transaction | On-chain? |
-|------|------------|-----------|
-| Create accounts | Friendbot funding | Yes |
-| Upload WASM | `uploadWasm` | Yes |
-| Deploy contract | `__constructor` + deposit | Yes |
-| Payment 1 | Commitment signature only | **No** |
-| Payment 2 | Commitment signature only | **No** |
-| Close channel | `close(amount, sig)` | Yes |
+| Step            | Transaction               | On-chain? |
+| --------------- | ------------------------- | --------- |
+| Create accounts | Friendbot funding         | Yes       |
+| Upload WASM     | `uploadWasm`              | Yes       |
+| Deploy contract | `__constructor` + deposit | Yes       |
+| Payment 1       | Commitment signature only | **No**    |
+| Payment 2       | Commitment signature only | **No**    |
+| Close channel   | `close(amount, sig)`      | Yes       |
 
 ### E2E environment variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `WASM_PATH` | Yes | Path to the compiled `channel.wasm` file |
-| `PORT` | No | Server port (defaults to `3002`) |
+| Variable    | Required | Description                              |
+| ----------- | -------- | ---------------------------------------- |
+| `WASM_PATH` | Yes      | Path to the compiled `channel.wasm` file |
+| `PORT`      | No       | Server port (defaults to `3002`)         |

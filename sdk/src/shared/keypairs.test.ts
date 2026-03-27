@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveKeypair } from './signers.js'
+import { resolveKeypair } from './keypairs.js'
 import { Keypair } from '@stellar/stellar-sdk'
 
 describe('resolveKeypair', () => {

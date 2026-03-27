@@ -26,12 +26,12 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
     ),
     rpc: {
       ...actual.rpc,
-      Server: vi.fn().mockImplementation(() => ({
-        getAccount: mockGetAccount,
-        simulateTransaction: mockSimulateTransaction,
-        sendTransaction: mockSendTransaction,
-        getTransaction: mockGetTransaction,
-      })),
+      Server: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+        this.getAccount = mockGetAccount
+        this.simulateTransaction = mockSimulateTransaction
+        this.sendTransaction = mockSendTransaction
+        this.getTransaction = mockGetTransaction
+      }),
     },
   }
 })
@@ -424,14 +424,12 @@ describe('stellar server channel verification', () => {
         credential: credential as any,
         request: credential.challenge.request,
       }),
-    ).rejects.toThrow('Invalid signature length')
+    ).rejects.toThrow('Invalid signature')
   })
 
   it('rejects invalid ed25519 signature (bad sig, valid hex)', async () => {
     const commitmentBytes = Buffer.from('test-commitment-data')
-    mockSimulateTransaction.mockResolvedValueOnce(
-      successSimResult(commitmentBytes),
-    )
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
 
     // Use a valid-length hex string that is NOT a valid signature
     const credential = makeCredential({
@@ -455,9 +453,7 @@ describe('stellar server channel verification', () => {
 
   it('accepts valid commitment and updates cumulative in store', async () => {
     const commitmentBytes = Buffer.from('valid-commitment-bytes')
-    mockSimulateTransaction.mockResolvedValueOnce(
-      successSimResult(commitmentBytes),
-    )
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
 
     const store = Store.memory()
     const cumulativeKey = `stellar:channel:cumulative:${CHANNEL_ADDRESS}`
@@ -516,9 +512,7 @@ describe('stellar server channel verification', () => {
 
   it('rejects replay of same challenge ID', async () => {
     const commitmentBytes = Buffer.from('replay-test-bytes')
-    mockSimulateTransaction.mockResolvedValue(
-      successSimResult(commitmentBytes),
-    )
+    mockSimulateTransaction.mockResolvedValue(successSimResult(commitmentBytes))
 
     const store = Store.memory()
 
@@ -551,9 +545,7 @@ describe('stellar server channel verification', () => {
 
   it('rejects close action when signer is not configured', async () => {
     const commitmentBytes = Buffer.from('close-test-bytes')
-    mockSimulateTransaction.mockResolvedValueOnce(
-      successSimResult(commitmentBytes),
-    )
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
 
     const credential = makeSignedCredential({
       action: 'close',
@@ -621,9 +613,7 @@ describe('stellar server channel dispute detection', () => {
     mockGetChannelState.mockResolvedValueOnce(disputeState)
 
     const commitmentBytes = Buffer.from('dispute-test-bytes')
-    mockSimulateTransaction.mockResolvedValueOnce(
-      successSimResult(commitmentBytes),
-    )
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
 
     const onDisputeDetected = vi.fn()
 
@@ -688,9 +678,7 @@ describe('stellar server channel dispute detection', () => {
     })
 
     const commitmentBytes = Buffer.from('cache-test-bytes')
-    mockSimulateTransaction.mockResolvedValueOnce(
-      successSimResult(commitmentBytes),
-    )
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
 
     const store = Store.memory()
 
@@ -713,9 +701,10 @@ describe('stellar server channel dispute detection', () => {
       request: credential.challenge.request,
     })
 
-    const cached = (await store.get(
-      `stellar:channel:state:${CHANNEL_ADDRESS}`,
-    )) as { balance: string; currentLedger: number }
+    const cached = (await store.get(`stellar:channel:state:${CHANNEL_ADDRESS}`)) as {
+      balance: string
+      currentLedger: number
+    }
     expect(cached).not.toBeNull()
     expect(cached.balance).toBe('5000000')
     expect(cached.currentLedger).toBe(4000)
@@ -725,9 +714,7 @@ describe('stellar server channel dispute detection', () => {
     mockGetChannelState.mockClear()
 
     const commitmentBytes = Buffer.from('skip-check-bytes')
-    mockSimulateTransaction.mockResolvedValueOnce(
-      successSimResult(commitmentBytes),
-    )
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
 
     const credential = makeSignedCredential({
       commitmentBytes,
@@ -770,10 +757,10 @@ describe('stellar server channel dispute detection', () => {
     ).rejects.toThrow('checkOnChainState requires sourceAccount to be set')
   })
 
-  it('rejects voucher after channel finalization (NM-001)', async () => {
+  it('rejects voucher after channel closure (NM-001)', async () => {
     const store = Store.memory()
-    await store.put(`stellar:channel:finalized:${CHANNEL_ADDRESS}`, {
-      finalizedAt: new Date().toISOString(),
+    await store.put(`stellar:channel:closed:${CHANNEL_ADDRESS}`, {
+      closedAt: new Date().toISOString(),
       txHash: 'abc123',
       amount: '5000000',
     })
@@ -794,7 +781,7 @@ describe('stellar server channel dispute detection', () => {
         credential: credential as any,
         request: credential.challenge.request,
       }),
-    ).rejects.toThrow('Channel has been finalized')
+    ).rejects.toThrow('Channel has been closed')
   })
 
   it('rejects commitment that exceeds on-chain balance (NM-003)', async () => {
@@ -872,9 +859,7 @@ describe('stellar server channel open action', () => {
 
   it('rejects open action with invalid commitment signature (bad sig)', async () => {
     const commitmentBytes = Buffer.from('open-test-commitment')
-    mockSimulateTransaction.mockResolvedValueOnce(
-      successSimResult(commitmentBytes),
-    )
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
 
     const credential = makeOpenCredential({
       transaction: 'AAAA...base64xdr...',
@@ -897,9 +882,7 @@ describe('stellar server channel open action', () => {
 
   it('accepts valid open credential, broadcasts tx, and initialises store', async () => {
     const commitmentBytes = Buffer.from('open-valid-commitment')
-    mockSimulateTransaction.mockResolvedValueOnce(
-      successSimResult(commitmentBytes),
-    )
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
     mockFromXDR.mockReturnValueOnce({ toXDR: () => 'mock-xdr' })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'open-tx-hash-123' })
     mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
@@ -928,17 +911,15 @@ describe('stellar server channel open action', () => {
     expect(receipt.reference).toBe('open-tx-hash-123')
 
     // Verify cumulative was initialised in the store
-    const stored = (await store.get(
-      `stellar:channel:cumulative:${CHANNEL_ADDRESS}`,
-    )) as { amount: string }
+    const stored = (await store.get(`stellar:channel:cumulative:${CHANNEL_ADDRESS}`)) as {
+      amount: string
+    }
     expect(stored.amount).toBe('1000000')
   })
 
   it('rejects open when transaction broadcast fails', async () => {
     const commitmentBytes = Buffer.from('open-fail-broadcast')
-    mockSimulateTransaction.mockResolvedValueOnce(
-      successSimResult(commitmentBytes),
-    )
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
     mockFromXDR.mockReturnValueOnce({ toXDR: () => 'mock-xdr' })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'fail-hash' })
     mockGetTransaction.mockResolvedValueOnce({ status: 'FAILED' })
@@ -960,6 +941,6 @@ describe('stellar server channel open action', () => {
         credential: credential as any,
         request: credential.challenge.request,
       }),
-    ).rejects.toThrow('Open transaction failed')
+    ).rejects.toThrow('failed')
   })
 })

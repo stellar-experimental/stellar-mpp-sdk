@@ -1,8 +1,6 @@
 import { channel as channel_ } from './Channel.js'
 
-export function stellar(
-  parameters: stellar.Parameters,
-): ReturnType<typeof channel_> {
+export function stellar(parameters: stellar.Parameters): ReturnType<typeof channel_> {
   return stellar.channel(parameters)
 }
 

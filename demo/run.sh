@@ -50,7 +50,7 @@ if lsof -ti:$PORT &>/dev/null; then
 fi
 
 echo "▶ Starting server..."
-npx tsx examples/server.ts &
+npx tsx examples/charge-server.ts &
 SERVER_PID=$!
 trap "kill $SERVER_PID 2>/dev/null" EXIT
 
@@ -67,7 +67,7 @@ echo "▶ Running client..."
 echo ""
 
 # ── Run client ────────────────────────────────────────────────────────────────
-npx tsx examples/client.ts
+npx tsx examples/charge-client.ts
 
 echo ""
 echo "══════════════════════════════════════════════════"

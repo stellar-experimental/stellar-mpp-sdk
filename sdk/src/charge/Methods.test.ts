@@ -82,9 +82,7 @@ describe('Methods.charge', () => {
       recipient: 'GBXYZ',
     })
     expect(result.amount).toBe('100000')
-    expect(result.currency).toBe(
-      'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
-    )
+    expect(result.currency).toBe('CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC')
     expect(result.recipient).toBe('GBXYZ')
   })
 

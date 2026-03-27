@@ -1,4 +1,5 @@
 import { xdr } from '@stellar/stellar-sdk'
+import { StellarMppError } from './errors.js'
 
 /**
  * Convert a Soroban ScVal to a BigInt.
@@ -29,15 +30,15 @@ export function scValToBigInt(val: xdr.ScVal): bigint {
   if (switchValue === xdr.ScValType.scvU128().value) {
     const parts = val.u128()
     const hi = BigInt(parts.hi().toString())
-    const lo = BigInt(parts.lo().toString()) & 0xFFFFFFFFFFFFFFFFn
+    const lo = BigInt(parts.lo().toString()) & 0xffffffffffffffffn
     return (hi << 64n) | lo
   }
   // scvI128 = 10
   if (switchValue === xdr.ScValType.scvI128().value) {
     const parts = val.i128()
     const hi = BigInt(parts.hi().toString())
-    const lo = BigInt(parts.lo().toString()) & 0xFFFFFFFFFFFFFFFFn
+    const lo = BigInt(parts.lo().toString()) & 0xffffffffffffffffn
     return (hi << 64n) | lo
   }
-  throw new Error(`Cannot convert ScVal type ${switchValue} to BigInt`)
+  throw new StellarMppError(`Cannot convert ScVal type ${switchValue} to BigInt`)
 }

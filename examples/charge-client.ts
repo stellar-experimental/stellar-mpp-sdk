@@ -5,20 +5,15 @@
  * via Soroban SAC transfer on Stellar testnet.
  *
  * Usage:
- *   STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/client.ts
+ *   STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/charge-client.ts
  */
 
 import { Keypair } from '@stellar/stellar-sdk'
 import { Mppx } from 'mppx/client'
-import { stellar } from '../sdk/src/client/index.js'
+import { stellar } from '../sdk/src/charge/client/index.js'
+import { Env } from './config/charge-client.js'
 
-const secretKey = process.env.STELLAR_SECRET
-if (!secretKey) {
-  console.error('Usage: STELLAR_SECRET=S... npx tsx examples/client.ts')
-  process.exit(1)
-}
-
-const keypair = Keypair.fromSecret(secretKey)
+const keypair = Keypair.fromSecret(Env.stellarSecret)
 console.log(`Using Stellar account: ${keypair.publicKey()}`)
 
 // Polyfill global fetch with automatic 402 handling
@@ -55,7 +50,7 @@ Mppx.create({
 })
 
 // Make a request to the payment-gated server
-const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:3000'
+const SERVER_URL = Env.serverUrl
 
 console.log(`\nRequesting ${SERVER_URL}...\n`)
 const response = await fetch(SERVER_URL)

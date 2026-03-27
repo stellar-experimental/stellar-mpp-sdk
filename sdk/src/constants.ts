@@ -30,20 +30,16 @@ export const HORIZON_URLS: Record<NetworkId, string> = {
 // ---------------------------------------------------------------------------
 
 /** USDC SAC contract address on Stellar mainnet. */
-export const USDC_SAC_MAINNET =
-  'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI'
+export const USDC_SAC_MAINNET = 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI'
 
 /** USDC SAC contract address on Stellar testnet. */
-export const USDC_SAC_TESTNET =
-  'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA'
+export const USDC_SAC_TESTNET = 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA'
 
 /** Native XLM SAC contract address on mainnet. */
-export const XLM_SAC_MAINNET =
-  'CAS3J7GYLGVE45MR3HPSFG352DAANEV5GGMFTO3IZIE4JMCDALQO57Y'
+export const XLM_SAC_MAINNET = 'CAS3J7GYLGVE45MR3HPSFG352DAANEV5GGMFTO3IZIE4JMCDALQO57Y'
 
 /** Native XLM SAC contract address on testnet. */
-export const XLM_SAC_TESTNET =
-  'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC'
+export const XLM_SAC_TESTNET = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC'
 
 /** Map from network to well-known SAC addresses. */
 export const SAC_ADDRESSES = {
@@ -81,5 +77,4 @@ export const DEFAULT_TIMEOUT = 180
  * the transaction source so the server can substitute its own fee-payer
  * account when rebuilding the transaction.
  */
-export const ALL_ZEROS =
-  'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+export const ALL_ZEROS = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'

@@ -1,16 +1,15 @@
-import {
-  Contract,
-  Keypair,
-  nativeToScVal,
-  rpc,
-} from '@stellar/stellar-sdk'
+import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stellar/stellar-sdk'
 import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
 import {
+  DEFAULT_FEE,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
   type NetworkId,
 } from '../../constants.js'
+import { DEFAULT_SIMULATION_TIMEOUT_MS } from '../../shared/defaults.js'
+import { StellarMppError } from '../../shared/errors.js'
+import { simulateCall } from '../../shared/simulate.js'
 import { channel as ChannelMethod } from '../Methods.js'
 
 /**
@@ -41,17 +40,15 @@ export function channel(parameters: channel.Parameters) {
     commitmentSecret,
     onProgress,
     rpcUrl,
+    simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
     sourceAccount,
   } = parameters
 
   if (!commitmentKeyParam && !commitmentSecret) {
-    throw new Error(
-      'Either commitmentKey or commitmentSecret must be provided.',
-    )
+    throw new StellarMppError('Either commitmentKey or commitmentSecret must be provided.')
   }
 
-  const commitmentKey =
-    commitmentKeyParam ?? Keypair.fromSecret(commitmentSecret!)
+  const commitmentKey = commitmentKeyParam ?? Keypair.fromSecret(commitmentSecret!)
 
   return Method.toClient(ChannelMethod, {
     context: z.object({
@@ -65,8 +62,7 @@ export function channel(parameters: channel.Parameters) {
     async createCredential({ challenge, context }) {
       const { request } = challenge
       const { amount, channel: channelAddress } = request
-      const network: NetworkId =
-        (request.methodDetails?.network as NetworkId) ?? 'testnet'
+      const network: NetworkId = (request.methodDetails?.network as NetworkId) ?? 'testnet'
 
       // The server tells us the cumulative amount via methodDetails,
       // or the caller can override via context.
@@ -76,15 +72,11 @@ export function channel(parameters: channel.Parameters) {
       // (first payment). The caller must also provide the signed open tx XDR.
       if (action === 'open') {
         if (!context?.openTransaction) {
-          throw new Error(
-            'openTransaction is required when action is "open".',
-          )
+          throw new StellarMppError('openTransaction is required when action is "open".')
         }
       }
 
-      const previousCumulative = BigInt(
-        request.methodDetails?.cumulativeAmount ?? '0',
-      )
+      const previousCumulative = BigInt(request.methodDetails?.cumulativeAmount ?? '0')
       const cumulativeAmount =
         context?.cumulativeAmount !== undefined
           ? BigInt(context.cumulativeAmount)
@@ -109,32 +101,21 @@ export function channel(parameters: channel.Parameters) {
       )
 
       // Simulate the call to get the commitment bytes
-      const account = await server.getAccount(
-        sourceAccount ?? commitmentKey.publicKey(),
-      )
-      const { TransactionBuilder } = await import('@stellar/stellar-sdk')
+      const account = await server.getAccount(sourceAccount ?? commitmentKey.publicKey())
       const simTx = new TransactionBuilder(account, {
-        fee: '100',
+        fee: DEFAULT_FEE,
         networkPassphrase,
       })
         .addOperation(call)
-        .setTimeout(30)
+        .setTimeout(simulationTimeoutMs / 1000)
         .build()
 
-      const simResult = await server.simulateTransaction(simTx)
-
-      if (!rpc.Api.isSimulationSuccess(simResult)) {
-        throw new Error(
-          `Failed to simulate prepare_commitment: ${
-            'error' in simResult ? simResult.error : 'unknown error'
-          }`,
-        )
-      }
+      const simResult = await simulateCall(server, simTx, { timeoutMs: simulationTimeoutMs })
 
       // Extract the commitment bytes from the simulation result
       const returnValue = simResult.result?.retval
       if (!returnValue) {
-        throw new Error('prepare_commitment returned no value')
+        throw new StellarMppError('prepare_commitment returned no value')
       }
 
       const commitmentBytes = returnValue.bytes()
@@ -183,6 +164,8 @@ export declare namespace channel {
     commitmentKey?: Keypair
     /** Custom Soroban RPC URL. Defaults based on network. */
     rpcUrl?: string
+    /** Simulation timeout in milliseconds. @default 10_000 */
+    simulationTimeoutMs?: number
     /**
      * Funded Stellar account address (G...) used as the source for
      * read-only transaction simulations. If omitted, the commitment

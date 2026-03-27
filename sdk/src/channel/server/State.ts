@@ -1,16 +1,13 @@
+import { Address, Contract, TransactionBuilder, rpc, xdr } from '@stellar/stellar-sdk'
 import {
-  Address,
-  Contract,
-  TransactionBuilder,
-  rpc,
-  xdr,
-} from '@stellar/stellar-sdk'
-import {
+  DEFAULT_FEE,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
   type NetworkId,
 } from '../../constants.js'
-import { scValToBigInt } from '../../scval.js'
+import { DEFAULT_SIM_TIMEOUT_SECS } from '../../shared/defaults.js'
+import { StellarMppError } from '../../shared/errors.js'
+import { scValToBigInt } from '../../shared/scval.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,12 +61,7 @@ export type ChannelState = {
 export async function getChannelState(
   parameters: getChannelState.Parameters,
 ): Promise<ChannelState> {
-  const {
-    channel: channelAddress,
-    network = 'testnet',
-    rpcUrl,
-    sourceAccount,
-  } = parameters
+  const { channel: channelAddress, network = 'testnet', rpcUrl, sourceAccount } = parameters
 
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
   const networkPassphrase = NETWORK_PASSPHRASE[network]
@@ -81,18 +73,17 @@ export async function getChannelState(
   async function simulateGetter(fnName: string, ...args: xdr.ScVal[]) {
     const call = contract.call(fnName, ...args)
     const tx = new TransactionBuilder(account, {
-      fee: '100',
+      fee: DEFAULT_FEE,
       networkPassphrase,
     })
       .addOperation(call)
-      .setTimeout(30)
+      .setTimeout(DEFAULT_SIM_TIMEOUT_SECS)
       .build()
 
     const result = await server.simulateTransaction(tx)
     if (!rpc.Api.isSimulationSuccess(result)) {
-      const errorMsg =
-        'error' in result ? String(result.error) : 'unknown'
-      throw new Error(
+      const errorMsg = 'error' in result ? String(result.error) : 'unknown'
+      throw new StellarMppError(
         `Failed to simulate ${fnName} on channel ${channelAddress}: ${errorMsg}`,
       )
     }
@@ -100,18 +91,17 @@ export async function getChannelState(
   }
 
   // Run getter simulations in parallel
-  const [balanceVal, waitingPeriodVal, tokenVal, fromVal, toVal] =
-    await Promise.all([
-      simulateGetter('balance'),
-      simulateGetter('refund_waiting_period'),
-      simulateGetter('token'),
-      simulateGetter('from'),
-      simulateGetter('to'),
-    ])
+  const [balanceVal, waitingPeriodVal, tokenVal, fromVal, toVal] = await Promise.all([
+    simulateGetter('balance'),
+    simulateGetter('refund_waiting_period'),
+    simulateGetter('token'),
+    simulateGetter('from'),
+    simulateGetter('to'),
+  ])
 
   const balance = scValToBigInt(balanceVal!)
   if (!waitingPeriodVal) {
-    throw new Error(
+    throw new StellarMppError(
       `Failed to simulate refund_waiting_period on channel ${channelAddress}: missing return value`,
     )
   }
@@ -123,10 +113,7 @@ export async function getChannelState(
   // Read CloseEffectiveAtLedger from contract instance storage.
   // The contract uses DataKey::CloseEffectiveAtLedger (enum variant index 5)
   // stored in instance storage.
-  const closeEffectiveAtLedger = await readCloseEffectiveAtLedger(
-    server,
-    channelAddress,
-  )
+  const closeEffectiveAtLedger = await readCloseEffectiveAtLedger(server, channelAddress)
 
   const latestLedger = await server.getLatestLedger()
 
@@ -191,8 +178,11 @@ async function readCloseEffectiveAtLedger(
     }
 
     const entry = response.entries[0]
-    const contractData = entry.val.contractData()
-    const instance = contractData.val().instance()
+    const ledgerData = entry.val
+    const contractData = ledgerData?.contractData?.()
+    if (!contractData) return null
+    const instance = contractData.val?.()?.instance?.()
+    if (!instance) return null
     const storage = instance.storage()
 
     if (!storage) return null
@@ -219,10 +209,7 @@ function isEnumVariant(scVal: xdr.ScVal, name: string): boolean {
   try {
     if (scVal.switch().value === xdr.ScValType.scvVec().value) {
       const vec = scVal.vec()!
-      if (
-        vec.length === 1 &&
-        vec[0].switch().value === xdr.ScValType.scvSymbol().value
-      ) {
+      if (vec.length === 1 && vec[0].switch().value === xdr.ScValType.scvSymbol().value) {
         return vec[0].sym().toString() === name
       }
     }

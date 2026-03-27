@@ -1,8 +1,12 @@
 {
   "name": "stellar-mpp-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Stellar blockchain payment method for the Machine Payments Protocol (MPP)",
   "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -10,13 +14,17 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./client": {
-      "types": "./dist/client/index.d.ts",
-      "default": "./dist/client/index.js"
+    "./charge": {
+      "types": "./dist/charge/index.d.ts",
+      "default": "./dist/charge/index.js"
     },
-    "./server": {
-      "types": "./dist/server/index.d.ts",
-      "default": "./dist/server/index.js"
+    "./charge/client": {
+      "types": "./dist/charge/client/index.d.ts",
+      "default": "./dist/charge/client/index.js"
+    },
+    "./charge/server": {
+      "types": "./dist/charge/server/index.d.ts",
+      "default": "./dist/charge/server/index.js"
     },
     "./channel": {
       "types": "./dist/channel/index.d.ts",
@@ -29,6 +37,10 @@
     "./channel/server": {
       "types": "./dist/channel/server/index.d.ts",
       "default": "./dist/channel/server/index.js"
+    },
+    "./env": {
+      "types": "./dist/env.d.ts",
+      "default": "./dist/env.js"
     }
   },
   "files": [
@@ -39,25 +51,40 @@
     "build": "tsc",
     "check:types": "tsc --noEmit",
     "test": "vitest",
-    "demo:server": "tsx examples/server.ts",
-    "demo:client": "tsx examples/client.ts",
+    "demo:charge-server": "tsx examples/charge-server.ts",
+    "demo:charge-client": "tsx examples/charge-client.ts",
     "demo:channel-server": "tsx examples/channel-server.ts",
-    "demo:channel-client": "tsx examples/channel-client.ts"
+    "demo:channel-client": "tsx examples/channel-client.ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "peerDependencies": {
     "@stellar/stellar-sdk": ">=14.0.0",
     "mppx": ">=0.4.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@stellar/stellar-sdk": "^14.6.1",
+    "@types/express": "^5.0.6",
     "@types/node": "^25.5.0",
-    "mppx": "^0.4.7",
+    "@vitest/coverage-v8": "^4.1.2",
+    "eslint": "^10.1.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.3.1",
+    "helmet": "^8.1.0",
+    "mppx": "^0.4.11",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
+    "prettier": "^3.8.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.8.0",
-    "vitest": "^3.1.0"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.57.2",
+    "vitest": "^4.1.2"
   },
   "license": "MIT",
   "dependencies": {
-    "zod": "4.3.6"
+    "zod": "^4.3.6"
   }
 }

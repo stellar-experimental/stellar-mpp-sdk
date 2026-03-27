@@ -1,389 +1,548 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stellar MPP Demo</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      background: #0a0a0a;
-      color: #e5e5e5;
-      padding: 2rem;
-      max-width: 720px;
-      margin: 0 auto;
-    }
-    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
-    .subtitle { color: #888; margin-bottom: 1.5rem; font-size: 0.9rem; }
-    .card {
-      background: #1a1a1a;
-      border: 1px solid #333;
-      border-radius: 8px;
-      padding: 1.5rem;
-      margin-bottom: 1rem;
-    }
-    .card h2 { font-size: 1rem; margin-bottom: 1rem; color: #ccc; }
-    label { display: block; font-size: 0.8rem; color: #999; margin-bottom: 0.25rem; }
-    input, select {
-      width: 100%;
-      padding: 0.5rem 0.75rem;
-      border: 1px solid #444;
-      border-radius: 6px;
-      background: #111;
-      color: #fff;
-      font-size: 0.85rem;
-      margin-bottom: 0.75rem;
-      outline: none;
-    }
-    input:focus, select:focus { border-color: #2563eb; }
-    .row { display: flex; gap: 0.75rem; }
-    .row > * { flex: 1; }
-    button {
-      background: #2563eb;
-      color: white;
-      border: none;
-      padding: 0.625rem 1.5rem;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      font-weight: 500;
-      width: 100%;
-    }
-    button:hover { background: #1d4ed8; }
-    button:disabled { background: #333; cursor: not-allowed; color: #666; }
-    .btn-secondary {
-      background: #374151;
-      margin-top: 0.5rem;
-    }
-    .btn-secondary:hover { background: #4b5563; }
-    .btn-secondary:disabled { background: #333; }
-    pre {
-      background: #111;
-      padding: 1rem;
-      border-radius: 6px;
-      overflow-x: auto;
-      font-size: 0.75rem;
-      line-height: 1.5;
-      white-space: pre-wrap;
-      word-break: break-all;
-      margin-top: 0.75rem;
-      border: 1px solid #222;
-    }
-    .badge {
-      display: inline-block;
-      padding: 0.2rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-    }
-    .badge.b402 { background: #78350f; color: #fbbf24; }
-    .badge.b200 { background: #064e3b; color: #6ee7b7; }
-    .badge.error { background: #7f1d1d; color: #fca5a5; }
-    .step {
-      padding: 0.75rem;
-      border-radius: 6px;
-      margin-top: 0.5rem;
-      font-size: 0.85rem;
-      border-left: 3px solid;
-    }
-    .step.pending { background: #1c1917; border-color: #78716c; color: #d6d3d1; }
-    .step.success { background: #022c22; border-color: #059669; color: #6ee7b7; }
-    .step.fail    { background: #2c0b0e; border-color: #dc2626; color: #fca5a5; }
-    .step.info    { background: #0c1929; border-color: #2563eb; color: #93c5fd; }
-    .divider { border: none; border-top: 1px solid #333; margin: 1rem 0; }
-    .event-list { list-style: none; margin-top: 0.5rem; }
-    .event-list li {
-      padding: 0.3rem 0.5rem;
-      font-size: 0.75rem;
-      font-family: monospace;
-      border-left: 2px solid #444;
-      margin-bottom: 0.25rem;
-      color: #aaa;
-    }
-    .event-list li.ev-challenge { border-color: #f59e0b; color: #fbbf24; }
-    .event-list li.ev-signing   { border-color: #8b5cf6; color: #a78bfa; }
-    .event-list li.ev-signed    { border-color: #10b981; color: #6ee7b7; }
-    .event-list li.ev-paying    { border-color: #3b82f6; color: #60a5fa; }
-    .event-list li.ev-confirming{ border-color: #f97316; color: #fb923c; }
-    .event-list li.ev-paid      { border-color: #22c55e; color: #4ade80; }
-    a { color: #60a5fa; }
-    .footer { text-align: center; color: #555; font-size: 0.75rem; margin-top: 2rem; }
-    .warn { color: #fbbf24; font-size: 0.75rem; margin-top: 0.5rem; }
-    .tabs { display: flex; gap: 0; margin-bottom: 1rem; }
-    .tab {
-      flex: 1;
-      padding: 0.5rem;
-      text-align: center;
-      background: #111;
-      border: 1px solid #333;
-      cursor: pointer;
-      font-size: 0.8rem;
-      color: #999;
-    }
-    .tab:first-child { border-radius: 6px 0 0 6px; }
-    .tab:last-child { border-radius: 0 6px 6px 0; }
-    .tab.active { background: #2563eb; color: white; border-color: #2563eb; }
-    .hidden { display: none; }
-    code {
-      background: #222;
-      padding: 0.15rem 0.4rem;
-      border-radius: 3px;
-      font-size: 0.8rem;
-    }
-    .cli-box {
-      background: #111;
-      border: 1px solid #333;
-      border-radius: 6px;
-      padding: 1rem;
-      font-family: monospace;
-      font-size: 0.8rem;
-      line-height: 1.6;
-      margin-top: 0.75rem;
-      color: #10b981;
-      white-space: pre-wrap;
-    }
-    .cli-comment { color: #666; }
-  </style>
-</head>
-<body>
-  <h1>Stellar MPP Demo</h1>
-  <p class="subtitle">
-    Interactive playground for Stellar payment method on
-    <a href="https://mpp.dev" target="_blank">MPP</a>
-  </p>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stellar MPP Demo</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: #0a0a0a;
+        color: #e5e5e5;
+        padding: 2rem;
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.5rem;
+        margin-bottom: 0.25rem;
+      }
+      .subtitle {
+        color: #888;
+        margin-bottom: 1.5rem;
+        font-size: 0.9rem;
+      }
+      .card {
+        background: #1a1a1a;
+        border: 1px solid #333;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+      }
+      .card h2 {
+        font-size: 1rem;
+        margin-bottom: 1rem;
+        color: #ccc;
+      }
+      label {
+        display: block;
+        font-size: 0.8rem;
+        color: #999;
+        margin-bottom: 0.25rem;
+      }
+      input,
+      select {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #444;
+        border-radius: 6px;
+        background: #111;
+        color: #fff;
+        font-size: 0.85rem;
+        margin-bottom: 0.75rem;
+        outline: none;
+      }
+      input:focus,
+      select:focus {
+        border-color: #2563eb;
+      }
+      .row {
+        display: flex;
+        gap: 0.75rem;
+      }
+      .row > * {
+        flex: 1;
+      }
+      button {
+        background: #2563eb;
+        color: white;
+        border: none;
+        padding: 0.625rem 1.5rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+        width: 100%;
+      }
+      button:hover {
+        background: #1d4ed8;
+      }
+      button:disabled {
+        background: #333;
+        cursor: not-allowed;
+        color: #666;
+      }
+      .btn-secondary {
+        background: #374151;
+        margin-top: 0.5rem;
+      }
+      .btn-secondary:hover {
+        background: #4b5563;
+      }
+      .btn-secondary:disabled {
+        background: #333;
+      }
+      pre {
+        background: #111;
+        padding: 1rem;
+        border-radius: 6px;
+        overflow-x: auto;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-all;
+        margin-top: 0.75rem;
+        border: 1px solid #222;
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+      }
+      .badge.b402 {
+        background: #78350f;
+        color: #fbbf24;
+      }
+      .badge.b200 {
+        background: #064e3b;
+        color: #6ee7b7;
+      }
+      .badge.error {
+        background: #7f1d1d;
+        color: #fca5a5;
+      }
+      .step {
+        padding: 0.75rem;
+        border-radius: 6px;
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        border-left: 3px solid;
+      }
+      .step.pending {
+        background: #1c1917;
+        border-color: #78716c;
+        color: #d6d3d1;
+      }
+      .step.success {
+        background: #022c22;
+        border-color: #059669;
+        color: #6ee7b7;
+      }
+      .step.fail {
+        background: #2c0b0e;
+        border-color: #dc2626;
+        color: #fca5a5;
+      }
+      .step.info {
+        background: #0c1929;
+        border-color: #2563eb;
+        color: #93c5fd;
+      }
+      .divider {
+        border: none;
+        border-top: 1px solid #333;
+        margin: 1rem 0;
+      }
+      .event-list {
+        list-style: none;
+        margin-top: 0.5rem;
+      }
+      .event-list li {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.75rem;
+        font-family: monospace;
+        border-left: 2px solid #444;
+        margin-bottom: 0.25rem;
+        color: #aaa;
+      }
+      .event-list li.ev-challenge {
+        border-color: #f59e0b;
+        color: #fbbf24;
+      }
+      .event-list li.ev-signing {
+        border-color: #8b5cf6;
+        color: #a78bfa;
+      }
+      .event-list li.ev-signed {
+        border-color: #10b981;
+        color: #6ee7b7;
+      }
+      .event-list li.ev-paying {
+        border-color: #3b82f6;
+        color: #60a5fa;
+      }
+      .event-list li.ev-confirming {
+        border-color: #f97316;
+        color: #fb923c;
+      }
+      .event-list li.ev-paid {
+        border-color: #22c55e;
+        color: #4ade80;
+      }
+      a {
+        color: #60a5fa;
+      }
+      .footer {
+        text-align: center;
+        color: #555;
+        font-size: 0.75rem;
+        margin-top: 2rem;
+      }
+      .warn {
+        color: #fbbf24;
+        font-size: 0.75rem;
+        margin-top: 0.5rem;
+      }
+      .tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 1rem;
+      }
+      .tab {
+        flex: 1;
+        padding: 0.5rem;
+        text-align: center;
+        background: #111;
+        border: 1px solid #333;
+        cursor: pointer;
+        font-size: 0.8rem;
+        color: #999;
+      }
+      .tab:first-child {
+        border-radius: 6px 0 0 6px;
+      }
+      .tab:last-child {
+        border-radius: 0 6px 6px 0;
+      }
+      .tab.active {
+        background: #2563eb;
+        color: white;
+        border-color: #2563eb;
+      }
+      .hidden {
+        display: none;
+      }
+      code {
+        background: #222;
+        padding: 0.15rem 0.4rem;
+        border-radius: 3px;
+        font-size: 0.8rem;
+      }
+      .cli-box {
+        background: #111;
+        border: 1px solid #333;
+        border-radius: 6px;
+        padding: 1rem;
+        font-family: monospace;
+        font-size: 0.8rem;
+        line-height: 1.6;
+        margin-top: 0.75rem;
+        color: #10b981;
+        white-space: pre-wrap;
+      }
+      .cli-comment {
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Stellar MPP Demo</h1>
+    <p class="subtitle">
+      Interactive playground for Stellar payment method on
+      <a href="https://mpp.dev" target="_blank">MPP</a>
+    </p>
 
-  <!-- Tabs: UI vs CLI -->
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('ui')">Interactive UI</div>
-    <div class="tab" onclick="switchTab('cli')">CLI Scripts</div>
-  </div>
-
-  <!-- ================================================================ -->
-  <!-- CLI Tab -->
-  <!-- ================================================================ -->
-  <div id="tab-cli" class="hidden">
-    <div class="card">
-      <h2>Quick Start (Terminal)</h2>
-      <p style="color:#aaa;font-size:0.85rem;margin-bottom:1rem;">
-        Run these two commands in separate terminals. Replace the keys with your own testnet keys.
-      </p>
-
-      <label>Terminal 1 — Start Server</label>
-      <div class="cli-box"><span class="cli-comment"># Set your Stellar public key as the payment recipient</span>
-STELLAR_RECIPIENT=<span id="cli-recipient" contenteditable style="color:#fbbf24;outline:none;">GAYF33NNNMI2Z6VNRFXQ64D4ISKL2PFOR3GDUM4H4PTJ63HAJBCZKA2N</span> \
-  npx tsx examples/server.ts</div>
-
-      <label style="margin-top:1rem">Terminal 2 — Run Client</label>
-      <div class="cli-box"><span class="cli-comment"># Set your Stellar secret key to sign the payment</span>
-STELLAR_SECRET=<span id="cli-secret" contenteditable style="color:#fbbf24;outline:none;">SCZANGBA5YHTNYVVV3C7CAZMCLMXPXBDM42SZGFDJHSIA7FGXVCPTCGZ</span> \
-  npx tsx examples/client.ts</div>
-
-      <label style="margin-top:1rem">All-in-one (single terminal)</label>
-      <div class="cli-box"><span class="cli-comment"># Start server in background, wait, then run client</span>
-STELLAR_RECIPIENT=GYOUR_PUBLIC_KEY npx tsx examples/server.ts &
-sleep 2
-STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/client.ts</div>
-
-      <p class="warn">
-        Need testnet keys? Create them at
-        <a href="https://laboratory.stellar.org/#account-creator?network=test" target="_blank">Stellar Laboratory</a>
-        and fund with Friendbot.
-      </p>
+    <!-- Tabs: UI vs CLI -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('ui')">Interactive UI</div>
+      <div class="tab" onclick="switchTab('cli')">CLI Scripts</div>
     </div>
-  </div>
 
-  <!-- ================================================================ -->
-  <!-- UI Tab -->
-  <!-- ================================================================ -->
-  <div id="tab-ui">
-    <div class="card">
-      <h2>Server</h2>
-      <label>Server URL</label>
-      <input id="serverUrl" value="http://localhost:3000" />
-    </div>
+    <!-- ================================================================ -->
+    <!-- CLI Tab -->
+    <!-- ================================================================ -->
+    <div id="tab-cli" class="hidden">
+      <div class="card">
+        <h2>Quick Start (Terminal)</h2>
+        <p style="color: #aaa; font-size: 0.85rem; margin-bottom: 1rem">
+          Run these two commands in separate terminals. Replace the keys with your own testnet keys.
+        </p>
 
-    <div class="card">
-      <h2>Client</h2>
-      <label>Stellar Secret Key (S...)</label>
-      <input id="secretKey" type="password" placeholder="SCZANGBA5YHTNYVVV..." />
-      <div class="row">
-        <div>
-          <label>Mode</label>
-          <select id="mode">
-            <option value="pull">Pull (server broadcasts)</option>
-            <option value="push">Push (client broadcasts)</option>
-          </select>
+        <label>Terminal 1 — Start Server</label>
+        <div class="cli-box">
+          <span class="cli-comment"># Set your Stellar public key as the payment recipient</span>
+          STELLAR_RECIPIENT=<span
+            id="cli-recipient"
+            contenteditable
+            style="color: #fbbf24; outline: none"
+            >GAYF33NNNMI2Z6VNRFXQ64D4ISKL2PFOR3GDUM4H4PTJ63HAJBCZKA2N</span
+          >
+          \ npx tsx examples/charge-server.ts
         </div>
-        <div>
-          <label>Network</label>
-          <select id="network">
-            <option value="testnet">Testnet</option>
-            <option value="public">Public</option>
-          </select>
+
+        <label style="margin-top: 1rem">Terminal 2 — Run Client</label>
+        <div class="cli-box">
+          <span class="cli-comment"># Set your Stellar secret key to sign the payment</span>
+          STELLAR_SECRET=<span id="cli-secret" contenteditable style="color: #fbbf24; outline: none"
+            >SCZANGBA5YHTNYVVV3C7CAZMCLMXPXBDM42SZGFDJHSIA7FGXVCPTCGZ</span
+          >
+          \ npx tsx examples/charge-client.ts
         </div>
+
+        <label style="margin-top: 1rem">All-in-one (single terminal)</label>
+        <div class="cli-box">
+          <span class="cli-comment"># Start server in background, wait, then run client</span>
+          STELLAR_RECIPIENT=GYOUR_PUBLIC_KEY npx tsx examples/charge-server.ts & sleep 2
+          STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/charge-client.ts
+        </div>
+
+        <p class="warn">
+          Need testnet keys? Create them at
+          <a href="https://laboratory.stellar.org/#account-creator?network=test" target="_blank"
+            >Stellar Laboratory</a
+          >
+          and fund with Friendbot.
+        </p>
       </div>
     </div>
 
-    <div class="card">
-      <button id="challengeBtn">Step 1: Get Payment Challenge</button>
-      <div id="challengeOutput"></div>
+    <!-- ================================================================ -->
+    <!-- UI Tab -->
+    <!-- ================================================================ -->
+    <div id="tab-ui">
+      <div class="card">
+        <h2>Server</h2>
+        <label>Server URL</label>
+        <input id="serverUrl" value="http://localhost:3000" />
+      </div>
 
-      <hr class="divider" />
+      <div class="card">
+        <h2>Client</h2>
+        <label>Stellar Secret Key (S...)</label>
+        <input id="secretKey" type="password" placeholder="SCZANGBA5YHTNYVVV..." />
+        <div class="row">
+          <div>
+            <label>Mode</label>
+            <select id="mode">
+              <option value="pull">Pull (server broadcasts)</option>
+              <option value="push">Push (client broadcasts)</option>
+            </select>
+          </div>
+          <div>
+            <label>Network</label>
+            <select id="network">
+              <option value="testnet">Testnet</option>
+              <option value="public">Public</option>
+            </select>
+          </div>
+        </div>
+      </div>
 
-      <button id="payBtn" class="btn-secondary" disabled>Step 2: Sign &amp; Pay</button>
-      <div id="payOutput"></div>
+      <div class="card">
+        <button id="challengeBtn">Step 1: Get Payment Challenge</button>
+        <div id="challengeOutput"></div>
+
+        <hr class="divider" />
+
+        <button id="payBtn" class="btn-secondary" disabled>Step 2: Sign &amp; Pay</button>
+        <div id="payOutput"></div>
+      </div>
     </div>
-  </div>
 
-  <p class="footer">
-    stellar-mpp-sdk &middot;
-    <a href="https://stellar.org" target="_blank">Stellar</a>
-  </p>
+    <p class="footer">
+      stellar-mpp-sdk &middot;
+      <a href="https://stellar.org" target="_blank">Stellar</a>
+    </p>
 
-  <script>
-    const $ = id => document.getElementById(id)
+    <script>
+      const $ = (id) => document.getElementById(id)
 
-    // Tab switching
-    function switchTab(tab) {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
-      document.querySelector(`.tab[onclick="switchTab('${tab}')"]`).classList.add('active')
-      $('tab-ui').classList.toggle('hidden', tab !== 'ui')
-      $('tab-cli').classList.toggle('hidden', tab !== 'cli')
-    }
+      // Escape HTML meta-characters to prevent DOM XSS
+      function esc(str) {
+        const div = document.createElement('div')
+        div.textContent = String(str)
+        return div.innerHTML
+      }
 
-    function step(cls, text) {
-      return '<div class="step ' + cls + '">' + text + '</div>'
-    }
+      // Tab switching
+      function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'))
+        document.querySelector(`.tab[onclick="switchTab('${tab}')"]`).classList.add('active')
+        $('tab-ui').classList.toggle('hidden', tab !== 'ui')
+        $('tab-cli').classList.toggle('hidden', tab !== 'cli')
+      }
 
-    // Step 1: Fetch the 402 challenge
-    $('challengeBtn').addEventListener('click', async () => {
-      const btn = $('challengeBtn')
-      const output = $('challengeOutput')
-      const serverUrl = $('serverUrl').value.replace(/\/+$/, '')
+      function step(cls, text) {
+        return '<div class="step ' + cls + '">' + text + '</div>'
+      }
 
-      btn.disabled = true
-      output.innerHTML = step('pending', 'Sending request to ' + serverUrl + ' ...')
+      // Step 1: Fetch the 402 challenge
+      $('challengeBtn').addEventListener('click', async () => {
+        const btn = $('challengeBtn')
+        const output = $('challengeOutput')
+        const serverUrl = $('serverUrl').value.replace(/\/+$/, '')
 
-      try {
-        const res = await fetch(serverUrl)
+        btn.disabled = true
+        output.innerHTML = step('pending', 'Sending request to ' + esc(serverUrl) + ' ...')
 
-        if (res.status === 402) {
-          const wwwAuth = res.headers.get('WWW-Authenticate') || ''
-          let challenge = {}
-          try {
-            const params = {}
-            const re = /(\w+)="([^"]*)"/g
-            let m
-            while ((m = re.exec(wwwAuth)) !== null) {
-              params[m[1]] = m[2]
+        try {
+          const res = await fetch(serverUrl)
+
+          if (res.status === 402) {
+            const wwwAuth = res.headers.get('WWW-Authenticate') || ''
+            let challenge = {}
+            try {
+              const params = {}
+              const re = /(\w+)="([^"]*)"/g
+              let m
+              while ((m = re.exec(wwwAuth)) !== null) {
+                params[m[1]] = m[2]
+              }
+              if (params.request) {
+                try {
+                  params.request = JSON.parse(atob(params.request))
+                } catch (_) {}
+              }
+              challenge = params
+            } catch (_) {
+              challenge = { raw: wwwAuth }
             }
-            if (params.request) {
-              try { params.request = JSON.parse(atob(params.request)) } catch (_) {}
-            }
-            challenge = params
-          } catch (_) {
-            challenge = { raw: wwwAuth }
+
+            output.innerHTML =
+              '<span class="badge b402">402 Payment Required</span>' +
+              step('success', 'Server returned a payment challenge.') +
+              '<pre>' +
+              esc(JSON.stringify(challenge, null, 2)) +
+              '</pre>'
+
+            // Enable Step 2
+            $('payBtn').disabled = false
+          } else if (res.ok) {
+            const data = await res.json().catch(() => res.text())
+            output.innerHTML =
+              '<span class="badge b200">200 OK</span>' +
+              step('success', 'Server returned content (no payment needed).') +
+              '<pre>' +
+              esc(JSON.stringify(data, null, 2)) +
+              '</pre>'
+          } else {
+            output.innerHTML =
+              '<span class="badge error">' +
+              esc(res.status) +
+              '</span>' +
+              step('fail', 'Unexpected response: ' + esc(res.status))
           }
-
-          output.innerHTML =
-            '<span class="badge b402">402 Payment Required</span>' +
-            step('success', 'Server returned a payment challenge.') +
-            '<pre>' + JSON.stringify(challenge, null, 2) + '</pre>'
-
-          // Enable Step 2
-          $('payBtn').disabled = false
-        } else if (res.ok) {
-          const data = await res.json().catch(() => res.text())
-          output.innerHTML =
-            '<span class="badge b200">200 OK</span>' +
-            step('success', 'Server returned content (no payment needed).') +
-            '<pre>' + JSON.stringify(data, null, 2) + '</pre>'
-        } else {
-          output.innerHTML =
-            '<span class="badge error">' + res.status + '</span>' +
-            step('fail', 'Unexpected response: ' + res.status)
-        }
-      } catch (err) {
-        output.innerHTML =
-          '<span class="badge error">Error</span>' +
-          step('fail', err.message + '<br><br>Start the server first:<br><code>STELLAR_RECIPIENT=G... npx tsx examples/server.ts</code>')
-      } finally {
-        btn.disabled = false
-      }
-    })
-
-    // Step 2: Sign & pay via the demo proxy endpoint
-    $('payBtn').addEventListener('click', async () => {
-      const btn = $('payBtn')
-      const output = $('payOutput')
-      const serverUrl = $('serverUrl').value.replace(/\/+$/, '')
-      const secretKey = $('secretKey').value.trim()
-      const mode = $('mode').value
-
-      if (!secretKey || !secretKey.startsWith('S')) {
-        output.innerHTML = step('fail', 'Enter your Stellar secret key (starts with S).')
-        return
-      }
-
-      btn.disabled = true
-      output.innerHTML = step('pending', 'Signing and submitting payment...')
-
-      try {
-        const res = await fetch(serverUrl + '/demo/pay', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ secretKey, mode }),
-        })
-
-        const result = await res.json()
-
-        if (result.error) {
+        } catch (err) {
           output.innerHTML =
             '<span class="badge error">Error</span>' +
-            step('fail', result.error)
+            step(
+              'fail',
+              esc(err.message) +
+                '<br><br>Start the server first:<br><code>STELLAR_RECIPIENT=G... npx tsx examples/charge-server.ts</code>',
+            )
+        } finally {
+          btn.disabled = false
+        }
+      })
+
+      // Step 2: Sign & pay via the demo proxy endpoint
+      $('payBtn').addEventListener('click', async () => {
+        const btn = $('payBtn')
+        const output = $('payOutput')
+        const serverUrl = $('serverUrl').value.replace(/\/+$/, '')
+        const secretKey = $('secretKey').value.trim()
+        const mode = $('mode').value
+
+        if (!secretKey || !secretKey.startsWith('S')) {
+          output.innerHTML = step('fail', 'Enter your Stellar secret key (starts with S).')
           return
         }
 
-        // Show events timeline
-        let eventsHtml = ''
-        if (result.events && result.events.length) {
-          eventsHtml = '<ul class="event-list">'
-          for (const ev of result.events) {
-            let detail = ev.type
-            if (ev.type === 'challenge') detail = '💳 challenge — ' + ev.amount + ' → ' + ev.recipient
-            else if (ev.type === 'signing') detail = '✍️  signing transaction...'
-            else if (ev.type === 'signed') detail = '✅ signed (' + (ev.transaction || '').length + ' bytes XDR)'
-            else if (ev.type === 'paying') detail = '📡 broadcasting...'
-            else if (ev.type === 'confirming') detail = '⏳ confirming ' + (ev.hash || '').slice(0, 12) + '...'
-            else if (ev.type === 'paid') detail = '🎉 confirmed: ' + (ev.hash || '')
-            eventsHtml += '<li class="ev-' + ev.type + '">' + detail + '</li>'
-          }
-          eventsHtml += '</ul>'
-        }
+        btn.disabled = true
+        output.innerHTML = step('pending', 'Signing and submitting payment...')
 
-        if (result.status === 200) {
+        try {
+          const res = await fetch(serverUrl + '/demo/pay', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ secretKey, mode }),
+          })
+
+          const result = await res.json()
+
+          if (result.error) {
+            output.innerHTML =
+              '<span class="badge error">Error</span>' + step('fail', esc(result.error))
+            return
+          }
+
+          // Show events timeline
+          let eventsHtml = ''
+          if (result.events && result.events.length) {
+            eventsHtml = '<ul class="event-list">'
+            for (const ev of result.events) {
+              let detail = esc(ev.type)
+              if (ev.type === 'challenge')
+                detail = '💳 challenge — ' + esc(ev.amount) + ' → ' + esc(ev.recipient)
+              else if (ev.type === 'signing') detail = '✍️  signing transaction...'
+              else if (ev.type === 'signed')
+                detail = '✅ signed (' + esc((ev.transaction || '').length) + ' bytes XDR)'
+              else if (ev.type === 'paying') detail = '📡 broadcasting...'
+              else if (ev.type === 'confirming')
+                detail = '⏳ confirming ' + esc((ev.hash || '').slice(0, 12)) + '...'
+              else if (ev.type === 'paid') detail = '🎉 confirmed: ' + esc(ev.hash || '')
+              eventsHtml += '<li class="ev-' + esc(ev.type) + '">' + detail + '</li>'
+            }
+            eventsHtml += '</ul>'
+          }
+
+          if (result.status === 200) {
+            output.innerHTML =
+              '<span class="badge b200">200 OK — Payment Verified!</span>' +
+              step('success', 'End-to-end payment completed successfully.') +
+              eventsHtml +
+              '<pre>' +
+              esc(JSON.stringify(result.data, null, 2)) +
+              '</pre>'
+          } else {
+            output.innerHTML =
+              '<span class="badge error">' +
+              esc(result.status) +
+              '</span>' +
+              step('fail', 'Payment flow returned status ' + esc(result.status)) +
+              eventsHtml +
+              '<pre>' +
+              esc(JSON.stringify(result, null, 2)) +
+              '</pre>'
+          }
+        } catch (err) {
           output.innerHTML =
-            '<span class="badge b200">200 OK — Payment Verified!</span>' +
-            step('success', 'End-to-end payment completed successfully.') +
-            eventsHtml +
-            '<pre>' + JSON.stringify(result.data, null, 2) + '</pre>'
-        } else {
-          output.innerHTML =
-            '<span class="badge error">' + result.status + '</span>' +
-            step('fail', 'Payment flow returned status ' + result.status) +
-            eventsHtml +
-            '<pre>' + JSON.stringify(result, null, 2) + '</pre>'
+            '<span class="badge error">Error</span>' + step('fail', esc(err.message))
+        } finally {
+          btn.disabled = false
         }
-      } catch (err) {
-        output.innerHTML =
-          '<span class="badge error">Error</span>' +
-          step('fail', err.message)
-      } finally {
-        btn.disabled = false
-      }
-    })
-  </script>
-</body>
+      })
+    </script>
+  </body>
 </html>

@@ -3,5 +3,8 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .claude/
+!.claude/skills/
 package-lock.json
 .env
+examples/.env.*
+!examples/.env.*.example
