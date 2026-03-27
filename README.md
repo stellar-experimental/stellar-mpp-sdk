@@ -205,8 +205,8 @@ const data = await response.json()
 
 ### Exports
 
-| Path                             | Exports                                                                                                                                                                          |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Path                          | Exports                                                                                                                                                                          |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@stellar/mpp`                | `ChargeMethods`, `ChannelMethods`, constants (`USDC_SAC_TESTNET`, `XLM_SAC_MAINNET`, etc.), `toBaseUnits`, `fromBaseUnits`, `resolveKeypair`, `Logger` (type)                    |
 | `@stellar/mpp/charge`         | `charge` (method schema)                                                                                                                                                         |
 | `@stellar/mpp/charge/client`  | `stellar`, `charge`, `Mppx`                                                                                                                                                      |
