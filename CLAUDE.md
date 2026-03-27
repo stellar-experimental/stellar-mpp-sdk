@@ -135,14 +135,14 @@ Methods.ts (Zod schema) → client/ (create credentials) + server/ (verify crede
 
 Package.json exports allow selective imports to avoid bundling unused code:
 
-- `stellar-mpp-sdk` — root (schemas + constants + `resolveKeypair` + `Logger` type + unit conversion)
-- `stellar-mpp-sdk/charge` — charge method schema
-- `stellar-mpp-sdk/charge/client` — charge client only
-- `stellar-mpp-sdk/charge/server` — charge server only
-- `stellar-mpp-sdk/channel` — channel schema
-- `stellar-mpp-sdk/channel/client` — channel client
-- `stellar-mpp-sdk/channel/server` — channel server
-- `stellar-mpp-sdk/env` — env parsing primitives
+- `@stellar/mpp` — root (schemas + constants + `resolveKeypair` + `Logger` type + unit conversion)
+- `@stellar/mpp/charge` — charge method schema
+- `@stellar/mpp/charge/client` — charge client only
+- `@stellar/mpp/charge/server` — charge server only
+- `@stellar/mpp/channel` — channel schema
+- `@stellar/mpp/channel/client` — channel client
+- `@stellar/mpp/channel/server` — channel server
+- `@stellar/mpp/env` — env parsing primitives
 
 ### Shared Utilities Convention
 
@@ -165,7 +165,7 @@ All other `shared/` modules are strictly internal and consumed only by `charge/`
 - **Logger interface**: Matches pino's API (`debug`, `info`, `warn`, `error` methods). A `noopLogger` is used when no logger is provided.
 - **Store key naming**: Keys follow the convention `stellar:{intent}:{type}:{id}` (e.g., `stellar:charge:nonce:abc123`).
 - **Express + security headers**: Example servers use Express with helmet and rate limiting middleware. Env vars configure rate limits and trust proxy.
-- **Env parsing**: Published as `stellar-mpp-sdk/env`. Core primitives read from `process.env` with validation. Per-example `Env` classes compose these into static getters.
+- **Env parsing**: Published as `@stellar/mpp/env`. Core primitives read from `process.env` with validation. Per-example `Env` classes compose these into static getters.
 
 ### Test Setup
 
