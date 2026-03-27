@@ -1,5 +1,6 @@
 import { Address, Contract, TransactionBuilder, rpc, xdr } from '@stellar/stellar-sdk'
-import { NETWORK_PASSPHRASE, SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
+import { DEFAULT_FEE, NETWORK_PASSPHRASE, SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
+import { DEFAULT_SIM_TIMEOUT_SECS } from '../../shared/defaults.js'
 import { StellarMppError } from '../../shared/errors.js'
 import { scValToBigInt } from '../../shared/scval.js'
 
@@ -67,11 +68,11 @@ export async function getChannelState(
   async function simulateGetter(fnName: string, ...args: xdr.ScVal[]) {
     const call = contract.call(fnName, ...args)
     const tx = new TransactionBuilder(account, {
-      fee: '100',
+      fee: DEFAULT_FEE,
       networkPassphrase,
     })
       .addOperation(call)
-      .setTimeout(30)
+      .setTimeout(DEFAULT_SIM_TIMEOUT_SECS)
       .build()
 
     const result = await server.simulateTransaction(tx)

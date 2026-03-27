@@ -10,6 +10,8 @@ import {
 import { Method, Receipt, Store } from 'mppx'
 import {
   DEFAULT_DECIMALS,
+  DEFAULT_FEE,
+  DEFAULT_TIMEOUT,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
   type NetworkId,
@@ -348,7 +350,7 @@ export function channel(parameters: channel.Parameters) {
 
     const account = await server.getAccount(sourceAccount ?? commitmentKeypair.publicKey())
     const simTx = new TransactionBuilder(account, {
-      fee: '100',
+      fee: DEFAULT_FEE,
       networkPassphrase,
     })
       .addOperation(call)
@@ -409,11 +411,11 @@ export function channel(parameters: channel.Parameters) {
 
       const closeAccount = await server.getAccount(signerKeypair.publicKey())
       const closeTx = new TransactionBuilder(closeAccount, {
-        fee: '100',
+        fee: DEFAULT_FEE,
         networkPassphrase,
       })
         .addOperation(closeOp)
-        .setTimeout(180)
+        .setTimeout(DEFAULT_TIMEOUT)
         .build()
 
       const prepared = await server.prepareTransaction(closeTx)
@@ -560,7 +562,7 @@ export function channel(parameters: channel.Parameters) {
 
     const account = await server.getAccount(sourceAccount ?? commitmentKeypair.publicKey())
     const simTx = new TransactionBuilder(account, {
-      fee: '100',
+      fee: DEFAULT_FEE,
       networkPassphrase,
     })
       .addOperation(call)
@@ -712,7 +714,7 @@ export async function close(parameters: {
     networkPassphrase,
   })
     .addOperation(closeOp)
-    .setTimeout(180)
+    .setTimeout(DEFAULT_TIMEOUT)
     .build()
 
   const prepared = await server.prepareTransaction(tx)

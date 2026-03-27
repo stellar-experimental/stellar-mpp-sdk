@@ -5,3 +5,10 @@ export const DEFAULT_POLL_BACKOFF_MULTIPLIER = 1.2
 export const DEFAULT_POLL_JITTER_MS = 200
 export const DEFAULT_POLL_TIMEOUT_MS = 30_000
 export const DEFAULT_SIMULATION_TIMEOUT_MS = 10_000
+
+/**
+ * Default timeout in seconds for read-only contract getter simulations (State.ts).
+ * This is distinct from DEFAULT_SIMULATION_TIMEOUT_MS which is the RPC call timeout
+ * in milliseconds. This value is the Soroban transaction `setTimeout()` parameter.
+ */
+export const DEFAULT_SIM_TIMEOUT_SECS = 30

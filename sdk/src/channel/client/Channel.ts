@@ -1,7 +1,7 @@
 import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stellar/stellar-sdk'
 import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
-import { NETWORK_PASSPHRASE, SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
+import { DEFAULT_FEE, NETWORK_PASSPHRASE, SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
 import { DEFAULT_SIMULATION_TIMEOUT_MS } from '../../shared/defaults.js'
 import { StellarMppError } from '../../shared/errors.js'
 import { simulateCall } from '../../shared/simulate.js'
@@ -98,7 +98,7 @@ export function channel(parameters: channel.Parameters) {
       // Simulate the call to get the commitment bytes
       const account = await server.getAccount(sourceAccount ?? commitmentKey.publicKey())
       const simTx = new TransactionBuilder(account, {
-        fee: '100',
+        fee: DEFAULT_FEE,
         networkPassphrase,
       })
         .addOperation(call)
