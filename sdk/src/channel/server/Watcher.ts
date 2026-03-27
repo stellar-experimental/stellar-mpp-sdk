@@ -25,7 +25,7 @@ const KNOWN_TOPICS = new Set(['close', 'close_start', 'refund', 'top_up'])
  *
  * @example
  * ```ts
- * import { watchChannel } from 'stellar-mpp-sdk/channel/server'
+ * import { watchChannel } from '@stellar/mpp/channel/server'
  *
  * const stop = watchChannel({
  *   channel: 'CABC...',

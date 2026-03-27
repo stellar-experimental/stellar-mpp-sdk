@@ -44,7 +44,7 @@ import {
  * ```ts
  * import { Keypair } from '@stellar/stellar-sdk'
  * import { Mppx } from 'mppx/client'
- * import { stellar } from 'stellar-mpp-sdk/client'
+ * import { stellar } from '@stellar/mpp/client'
  *
  * Mppx.create({
  *   methods: [
