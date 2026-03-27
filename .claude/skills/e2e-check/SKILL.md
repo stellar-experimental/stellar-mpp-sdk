@@ -82,13 +82,24 @@ CHANNEL_CONTRACT="$CHANNEL_CONTRACT" COMMITMENT_PUBKEY="$COMMITMENT_PUBKEY" COMM
 
 ## Check 5: Channel E2E with On-Chain Settlement
 
-> **TODO:** Requires compiled one-way-channel WASM from https://github.com/stellar-experimental/one-way-channel.
->
-> ```bash
-> WASM_PATH=path/to/channel.wasm ./demo/run-channel-e2e.sh
-> ```
->
-> Full lifecycle: deploy -> off-chain payments -> on-chain close. Not automated yet.
+Requires the compiled one-way-channel WASM from https://github.com/stellar-experimental/one-way-channel.
+
+```bash
+WASM_PATH=/Users/marcelosantos/Workspace/one-way-channel/target/wasm32v1-none/release/channel.wasm \
+  ./demo/run-channel-e2e.sh
+```
+
+Full lifecycle: deploy contract -> 2 off-chain payments -> on-chain close -> balance verified at 0.
+
+**Expected flow:**
+
+1. Deploys one-way-channel contract on Stellar testnet
+2. Funder opens channel with initial deposit
+3. 2 off-chain payment commitments via MPP 402 flow
+4. Recipient closes channel on-chain with latest commitment
+5. Final balance verified at 0 (all funds claimed)
+
+**Pass:** Script completes with `Channel balance after close: 0` and exit code 0.
 
 ## Reporting
 
@@ -100,4 +111,4 @@ After running all checks, report:
 | Example script validation (6 scripts)              | PASS/FAIL | which scripts failed              |
 | Charge E2E (`demo/run.sh`)                         | PASS/FAIL | final HTTP status                 |
 | Channel E2E (`demo/run-channel.sh`)                | PASS/FAIL | request count, cumulative amounts |
-| Channel E2E settlement (`demo/run-channel-e2e.sh`) | TODO      | requires WASM file                |
+| Channel E2E settlement (`demo/run-channel-e2e.sh`) | PASS/FAIL | balance after close               |

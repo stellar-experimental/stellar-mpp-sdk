@@ -396,7 +396,7 @@ await close({
   channel: 'CABC...', // channel contract address
   amount: 8000000n, // commitment amount to close with
   signature: commitmentSigBytes, // ed25519 signature from the latest commitment
-  closeKey: recipientKeypair, // keypair to sign the close transaction
+  signer: recipientKeypair, // keypair to sign the close transaction
   network: 'testnet',
 })
 ```

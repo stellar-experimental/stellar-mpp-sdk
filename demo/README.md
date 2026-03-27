@@ -9,7 +9,7 @@ Two demo modes are available:
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - A funded Stellar **testnet** account (create one at [Stellar Laboratory](https://laboratory.stellar.org/#account-creator?network=test))
 - `pnpm install` (from project root)
 - For the **channel demo**: a deployed [one-way-channel](https://github.com/stellar-experimental/one-way-channel) contract on testnet
@@ -200,6 +200,7 @@ No on-chain transactions happen during payments. The server can close the channe
 | `CHANNEL_CONTRACT`  | Server   | Deployed channel contract address (C..., 56 chars)              |
 | `COMMITMENT_PUBKEY` | Server   | Ed25519 commitment public key (64 hex chars)                    |
 | `COMMITMENT_SECRET` | Client   | Ed25519 commitment secret key (64 hex chars)                    |
+| `SOURCE_ACCOUNT`    | No       | Funded Stellar account (G...) for contract simulations          |
 | `MPP_SECRET_KEY`    | No       | MPP signing key (defaults to `stellar-mpp-channel-demo-secret`) |
 | `PORT`              | No       | Server port (defaults to `3001`)                                |
 | `SERVER_URL`        | No       | Client target URL (defaults to `http://localhost:3001`)         |
