@@ -16,71 +16,71 @@
 
 ### New files
 
-| File | Responsibility |
-|------|---------------|
-| `sdk/src/shared/defaults.ts` | Internal default constants (poll, fee bump, simulation) |
-| `sdk/src/shared/logger.ts` | Logger interface + noopLogger |
-| `sdk/src/shared/errors.ts` | StellarMppError base class + PaymentVerificationError + ChannelVerificationError |
-| `sdk/src/shared/errors.test.ts` | Error class tests |
-| `sdk/src/shared/units.ts` | toBaseUnits() + fromBaseUnits() extracted from Methods.ts |
-| `sdk/src/shared/keypairs.ts` | resolveKeypair() moved from signers.ts |
-| `sdk/src/shared/keypairs.test.ts` | Migrated from signers.test.ts |
-| `sdk/src/shared/validation.ts` | validateHexSignature() + validateAmount() |
-| `sdk/src/shared/validation.test.ts` | Validation tests |
-| `sdk/src/shared/simulate.ts` | simulateCall() with timeout + error classification |
-| `sdk/src/shared/simulate.test.ts` | Simulation wrapper tests |
-| `sdk/src/shared/poll.ts` | pollTransaction() with backoff + jitter |
-| `sdk/src/shared/poll.test.ts` | Polling tests |
-| `sdk/src/shared/fee-bump.ts` | wrapFeeBump() |
-| `sdk/src/shared/fee-bump.test.ts` | Fee bump tests |
-| `sdk/src/charge/Methods.ts` | Charge Zod schema (moved from root) |
-| `sdk/src/charge/index.ts` | Charge root exports |
-| `sdk/src/charge/client/` | Charge client (moved from root client/) |
-| `sdk/src/charge/server/` | Charge server (moved from root server/) |
+| File                                | Responsibility                                                                   |
+| ----------------------------------- | -------------------------------------------------------------------------------- |
+| `sdk/src/shared/defaults.ts`        | Internal default constants (poll, fee bump, simulation)                          |
+| `sdk/src/shared/logger.ts`          | Logger interface + noopLogger                                                    |
+| `sdk/src/shared/errors.ts`          | StellarMppError base class + PaymentVerificationError + ChannelVerificationError |
+| `sdk/src/shared/errors.test.ts`     | Error class tests                                                                |
+| `sdk/src/shared/units.ts`           | toBaseUnits() + fromBaseUnits() extracted from Methods.ts                        |
+| `sdk/src/shared/keypairs.ts`        | resolveKeypair() moved from signers.ts                                           |
+| `sdk/src/shared/keypairs.test.ts`   | Migrated from signers.test.ts                                                    |
+| `sdk/src/shared/validation.ts`      | validateHexSignature() + validateAmount()                                        |
+| `sdk/src/shared/validation.test.ts` | Validation tests                                                                 |
+| `sdk/src/shared/simulate.ts`        | simulateCall() with timeout + error classification                               |
+| `sdk/src/shared/simulate.test.ts`   | Simulation wrapper tests                                                         |
+| `sdk/src/shared/poll.ts`            | pollTransaction() with backoff + jitter                                          |
+| `sdk/src/shared/poll.test.ts`       | Polling tests                                                                    |
+| `sdk/src/shared/fee-bump.ts`        | wrapFeeBump()                                                                    |
+| `sdk/src/shared/fee-bump.test.ts`   | Fee bump tests                                                                   |
+| `sdk/src/charge/Methods.ts`         | Charge Zod schema (moved from root)                                              |
+| `sdk/src/charge/index.ts`           | Charge root exports                                                              |
+| `sdk/src/charge/client/`            | Charge client (moved from root client/)                                          |
+| `sdk/src/charge/server/`            | Charge server (moved from root server/)                                          |
 
 ### Moved files
 
-| From | To |
-|------|-----|
-| `sdk/src/Methods.ts` | `sdk/src/charge/Methods.ts` |
-| `sdk/src/Methods.test.ts` | `sdk/src/charge/Methods.test.ts` |
-| `sdk/src/client/*` | `sdk/src/charge/client/*` |
-| `sdk/src/server/*` | `sdk/src/charge/server/*` |
-| `sdk/src/integration.test.ts` | `sdk/src/charge/integration.test.ts` |
-| `sdk/src/scval.ts` | `sdk/src/shared/scval.ts` |
-| `sdk/src/signers.ts` | `sdk/src/shared/keypairs.ts` (expanded) |
-| `sdk/src/signers.test.ts` | `sdk/src/shared/keypairs.test.ts` |
+| From                          | To                                      |
+| ----------------------------- | --------------------------------------- |
+| `sdk/src/Methods.ts`          | `sdk/src/charge/Methods.ts`             |
+| `sdk/src/Methods.test.ts`     | `sdk/src/charge/Methods.test.ts`        |
+| `sdk/src/client/*`            | `sdk/src/charge/client/*`               |
+| `sdk/src/server/*`            | `sdk/src/charge/server/*`               |
+| `sdk/src/integration.test.ts` | `sdk/src/charge/integration.test.ts`    |
+| `sdk/src/scval.ts`            | `sdk/src/shared/scval.ts`               |
+| `sdk/src/signers.ts`          | `sdk/src/shared/keypairs.ts` (expanded) |
+| `sdk/src/signers.test.ts`     | `sdk/src/shared/keypairs.test.ts`       |
 
 ### Modified files
 
-| File | Changes |
-|------|---------|
-| `sdk/src/index.ts` | Rewrite: new export structure (ChargeMethods, Logger type, units from shared) |
-| `sdk/src/charge/server/Charge.ts` | Replace inline polling/fee-bump/verification with shared utils, add configurable params, update store keys, add logger, error prefixes |
-| `sdk/src/charge/client/Charge.ts` | Replace inline polling with shared util, add configurable params, use resolveKeypair |
+| File                                | Changes                                                                                                                                                                    |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sdk/src/index.ts`                  | Rewrite: new export structure (ChargeMethods, Logger type, units from shared)                                                                                              |
+| `sdk/src/charge/server/Charge.ts`   | Replace inline polling/fee-bump/verification with shared utils, add configurable params, update store keys, add logger, error prefixes                                     |
+| `sdk/src/charge/client/Charge.ts`   | Replace inline polling with shared util, add configurable params, use resolveKeypair                                                                                       |
 | `sdk/src/channel/server/Channel.ts` | Replace inline polling/fee-bump/validation with shared utils, add configurable params, update store keys (finalized→closed), add logger, error prefixes, fix error classes |
-| `sdk/src/channel/client/Channel.ts` | Fix dynamic import, add simulationTimeoutMs param |
-| `sdk/src/channel/server/State.ts` | Update import path for scval |
-| `sdk/src/channel/server/Watcher.ts` | Update import path for scval |
-| `sdk/src/channel/server/index.ts` | Update import for resolveKeypair |
-| `package.json` | Version 0.2.0, updated exports |
-| `examples/server.ts` | Add pino + pino-http |
-| `examples/channel-server.ts` | Add pino + pino-http |
-| `README.md` | Updated paths, exports, options tables, pino example |
-| `CLAUDE.md` | Updated module map, commands, patterns |
+| `sdk/src/channel/client/Channel.ts` | Fix dynamic import, add simulationTimeoutMs param                                                                                                                          |
+| `sdk/src/channel/server/State.ts`   | Update import path for scval                                                                                                                                               |
+| `sdk/src/channel/server/Watcher.ts` | Update import path for scval                                                                                                                                               |
+| `sdk/src/channel/server/index.ts`   | Update import for resolveKeypair                                                                                                                                           |
+| `package.json`                      | Version 0.2.0, updated exports                                                                                                                                             |
+| `examples/server.ts`                | Add pino + pino-http                                                                                                                                                       |
+| `examples/channel-server.ts`        | Add pino + pino-http                                                                                                                                                       |
+| `README.md`                         | Updated paths, exports, options tables, pino example                                                                                                                       |
+| `CLAUDE.md`                         | Updated module map, commands, patterns                                                                                                                                     |
 
 ### Deleted files
 
-| File | Reason |
-|------|--------|
-| `sdk/src/Methods.ts` | Moved to `sdk/src/charge/Methods.ts` |
-| `sdk/src/Methods.test.ts` | Moved to `sdk/src/charge/Methods.test.ts` |
-| `sdk/src/client/` (entire dir) | Moved to `sdk/src/charge/client/` |
-| `sdk/src/server/` (entire dir) | Moved to `sdk/src/charge/server/` |
-| `sdk/src/scval.ts` | Moved to `sdk/src/shared/scval.ts` |
-| `sdk/src/signers.ts` | Replaced by `sdk/src/shared/keypairs.ts` |
-| `sdk/src/signers.test.ts` | Replaced by `sdk/src/shared/keypairs.test.ts` |
-| `sdk/src/integration.test.ts` | Moved to `sdk/src/charge/integration.test.ts` |
+| File                           | Reason                                        |
+| ------------------------------ | --------------------------------------------- |
+| `sdk/src/Methods.ts`           | Moved to `sdk/src/charge/Methods.ts`          |
+| `sdk/src/Methods.test.ts`      | Moved to `sdk/src/charge/Methods.test.ts`     |
+| `sdk/src/client/` (entire dir) | Moved to `sdk/src/charge/client/`             |
+| `sdk/src/server/` (entire dir) | Moved to `sdk/src/charge/server/`             |
+| `sdk/src/scval.ts`             | Moved to `sdk/src/shared/scval.ts`            |
+| `sdk/src/signers.ts`           | Replaced by `sdk/src/shared/keypairs.ts`      |
+| `sdk/src/signers.test.ts`      | Replaced by `sdk/src/shared/keypairs.test.ts` |
+| `sdk/src/integration.test.ts`  | Moved to `sdk/src/charge/integration.test.ts` |
 
 ---
 
@@ -91,6 +91,7 @@ Create the simple shared modules that have no dependencies on the rest of the co
 > **Important:** During Tasks 1-5, the old files (`sdk/src/signers.ts`, `sdk/src/scval.ts`, `sdk/src/Methods.ts`, etc.) remain untouched and in use. The shared modules are purely additive — no existing code references them yet. Task 6 performs the file moves and import path updates. Do NOT delete or modify old files during Tasks 1-5.
 
 ### Files
+
 - Create: `sdk/src/shared/defaults.ts`
 - Create: `sdk/src/shared/logger.ts`
 - Create: `sdk/src/shared/errors.ts`
@@ -133,11 +134,7 @@ Create `sdk/src/shared/errors.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest'
-import {
-  StellarMppError,
-  PaymentVerificationError,
-  ChannelVerificationError,
-} from './errors.js'
+import { StellarMppError, PaymentVerificationError, ChannelVerificationError } from './errors.js'
 
 describe('StellarMppError', () => {
   it('stores message and details', () => {
@@ -240,6 +237,7 @@ git commit -m "feat: add shared foundation modules (defaults, logger, errors, un
 ## Task 2: Shared Keypairs + Validation
 
 ### Files
+
 - Create: `sdk/src/shared/keypairs.ts`
 - Create: `sdk/src/shared/keypairs.test.ts`
 - Create: `sdk/src/shared/validation.ts`
@@ -365,6 +363,7 @@ git commit -m "feat: add shared keypairs and validation utilities"
 ## Task 3: Shared Simulate
 
 ### Files
+
 - Create: `sdk/src/shared/simulate.ts`
 - Create: `sdk/src/shared/simulate.test.ts`
 
@@ -376,7 +375,7 @@ Create `sdk/src/shared/simulate.test.ts`. Test cases:
 2. Throws `SimulationContractError` when simulation has error field (contract revert)
 3. Throws `SimulationNetworkError` when RPC call throws
 4. Throws `SimulationTimeoutError` when simulation exceeds timeout
-Mock `rpc.Server` and `rpc.Api.isSimulationSuccess`.
+   Mock `rpc.Server` and `rpc.Api.isSimulationSuccess`.
 
 > Note: `rpc.Server.simulateTransaction()` may not accept AbortSignal natively. Use `Promise.race` with a timeout timer for the timeout mechanism. Do not assume AbortSignal support in the RPC client.
 
@@ -389,6 +388,7 @@ pnpm test -- --run sdk/src/shared/simulate.test.ts
 - [ ] **Step 3: Implement `sdk/src/shared/simulate.ts`**
 
 Key implementation details:
+
 - `simulateCall(rpcServer, tx, opts?)` where opts has `timeoutMs` (default `DEFAULT_SIMULATION_TIMEOUT_MS` = 10_000)
 - Use `Promise.race` between `rpcServer.simulateTransaction(tx)` and a timeout promise
 - On timeout, throw `SimulationTimeoutError`
@@ -414,6 +414,7 @@ git commit -m "feat: add simulateCall with timeout and error classification"
 ## Task 4: Shared Poll
 
 ### Files
+
 - Create: `sdk/src/shared/poll.ts`
 - Create: `sdk/src/shared/poll.test.ts`
 
@@ -443,6 +444,7 @@ pnpm test -- --run sdk/src/shared/poll.test.ts
 - [ ] **Step 3: Implement `sdk/src/shared/poll.ts`**
 
 Key implementation details:
+
 - `pollTransaction(rpcServer, hash, opts?)` — opts: `maxAttempts`, `delayMs`, `backoffMultiplier`, `jitterMs`, `timeoutMs` (all with defaults from `shared/defaults.ts`)
 - Loop: call `rpcServer.getTransaction(hash)`, check status
   - `SUCCESS` → return result
@@ -471,6 +473,7 @@ git commit -m "feat: add pollTransaction with exponential backoff and jitter"
 ## Task 5: Shared Fee Bump
 
 ### Files
+
 - Create: `sdk/src/shared/fee-bump.ts`
 - Create: `sdk/src/shared/fee-bump.test.ts`
 
@@ -499,6 +502,7 @@ pnpm test -- --run sdk/src/shared/fee-bump.test.ts
 - [ ] **Step 3: Implement `sdk/src/shared/fee-bump.ts`**
 
 Key implementation details:
+
 - `wrapFeeBump(tx, signer, opts)` — opts requires `networkPassphrase: string` and optional `maxFeeStroops` (default `DEFAULT_MAX_FEE_BUMP_STROOPS`)
 - If tx is already FeeBumpTransaction, return as-is (skip wrapping)
 - Calculate fee: `Math.min(Number(tx.fee) * 10, maxFeeStroops).toString()`
@@ -526,6 +530,7 @@ git commit -m "feat: add wrapFeeBump utility with configurable max fee"
 Move charge code from root into `charge/` folder. Move scval to shared. This is a large mechanical task — many file moves and import path updates.
 
 ### Files
+
 - Move: `sdk/src/Methods.ts` → `sdk/src/charge/Methods.ts`
 - Move: `sdk/src/Methods.test.ts` → `sdk/src/charge/Methods.test.ts`
 - Move: `sdk/src/client/*` → `sdk/src/charge/client/*`
@@ -666,6 +671,7 @@ Update version: `"version": "0.2.0"`
 - [ ] **Step 8: Update all import paths in moved charge files**
 
 Files to update (all under `sdk/src/charge/`):
+
 - `Methods.ts`: imports from `../constants.js` → same (already correct relative to charge/)
   - But `toBaseUnits`/`fromBaseUnits` are still defined here — update to re-export from `../shared/units.js`
 - `client/Charge.ts`: update imports:
@@ -685,6 +691,7 @@ Files to update (all under `sdk/src/charge/`):
 - [ ] **Step 9: Update import paths in channel files that reference moved modules**
 
 Files under `sdk/src/channel/` that import scval or signers:
+
 - `server/Channel.ts`: `'../../scval.js'` → `'../../shared/scval.js'`, `'../../signers.js'` → `'../../shared/keypairs.js'`
 - `server/State.ts`: `'../../scval.js'` → `'../../shared/scval.js'`
 - `server/Watcher.ts`: `'../../scval.js'` → `'../../shared/scval.js'`
@@ -693,6 +700,7 @@ Files under `sdk/src/channel/` that import scval or signers:
 - [ ] **Step 10: Update import paths in test files**
 
 All moved test files need their imports updated:
+
 - `charge/Methods.test.ts`: `'./Methods.js'` stays
 - `charge/client/Charge.test.ts`: imports may reference `'../Methods.js'` etc. — update relative paths
 - `charge/server/Charge.test.ts`: same
@@ -702,6 +710,7 @@ All moved test files need their imports updated:
 - [ ] **Step 11: Update import paths in example files**
 
 All example files under `examples/` import from `'../sdk/src/...'`:
+
 - `server.ts`: `'../sdk/src/server/index.js'` → `'../sdk/src/charge/server/index.js'`, `'../sdk/src/client/index.js'` → `'../sdk/src/charge/client/index.js'`
 - `client.ts`: `'../sdk/src/client/index.js'` → `'../sdk/src/charge/client/index.js'`
 - `channel-server.ts`: `'../sdk/src/channel/server/index.js'` stays
@@ -731,6 +740,7 @@ git commit -m "refactor: move charge code into charge/ folder, restructure share
 Replace inline patterns in charge implementation with shared utilities. Add configurable parameters, store key updates, error prefixes, logger integration, and keypair standardization.
 
 ### Files
+
 - Modify: `sdk/src/charge/server/Charge.ts`
 - Modify: `sdk/src/charge/client/Charge.ts`
 - Modify: `sdk/src/charge/Methods.ts` (re-export units from shared)
@@ -748,6 +758,7 @@ In `sdk/src/charge/Methods.ts`, the `toBaseUnits` and `fromBaseUnits` functions 
 In `sdk/src/charge/server/Charge.ts`:
 
 1. Add new imports:
+
    ```ts
    import { pollTransaction } from '../../shared/poll.js'
    import { wrapFeeBump } from '../../shared/fee-bump.js'
@@ -764,6 +775,7 @@ In `sdk/src/charge/server/Charge.ts`:
    ```
 
 2. Add new parameters to the `charge` function destructuring with explicit defaults:
+
    ```ts
    maxFeeBumpStroops = DEFAULT_MAX_FEE_BUMP_STROOPS,
    pollMaxAttempts = DEFAULT_POLL_MAX_ATTEMPTS,
@@ -782,6 +794,7 @@ In `sdk/src/charge/server/Charge.ts`:
 Replace all inline `while (txResult.status === 'NOT_FOUND')` loops with `pollTransaction()`:
 
 1. **Hash verification path** (~line 98-120): Replace the `while` loop and retry logic with:
+
    ```ts
    const txResult = await pollTransaction(rpcServer, credential.payload.hash, {
      maxAttempts: pollMaxAttempts,
@@ -795,6 +808,7 @@ Replace all inline `while (txResult.status === 'NOT_FOUND')` loops with `pollTra
 - [ ] **Step 4: Refactor charge server — replace inline fee bump**
 
 Replace the inline fee bump block (~lines 204-214) with:
+
 ```ts
 if (feeBumpSignerKeypair) {
   prepared = wrapFeeBump(prepared, feeBumpSignerKeypair, {
@@ -807,6 +821,7 @@ if (feeBumpSignerKeypair) {
 - [ ] **Step 5: Refactor charge server — update store keys**
 
 Replace store key strings:
+
 - `stellar:tx:${hash}` → `stellar:charge:hash:${hash}`
 - `stellar:challenge:${challengeId}` → `stellar:charge:challenge:${challengeId}`
 
@@ -851,6 +866,7 @@ git commit -m "refactor: charge server+client use shared utils, configurable par
 Replace inline patterns in channel implementation with shared utilities. Add configurable parameters, store key updates (finalized→closed), error prefixes, logger integration, fix dynamic import.
 
 ### Files
+
 - Modify: `sdk/src/channel/server/Channel.ts`
 - Modify: `sdk/src/channel/client/Channel.ts`
 
@@ -859,6 +875,7 @@ Replace inline patterns in channel implementation with shared utilities. Add con
 In `sdk/src/channel/server/Channel.ts`:
 
 1. Add new imports (same pattern as charge server):
+
    ```ts
    import { pollTransaction } from '../../shared/poll.js'
    import { wrapFeeBump } from '../../shared/fee-bump.js'
@@ -878,6 +895,7 @@ In `sdk/src/channel/server/Channel.ts`:
 - [ ] **Step 2: Refactor channel server — rename finalized → closed**
 
 Global find-and-replace in `sdk/src/channel/server/Channel.ts`:
+
 - `finalized` → `closed` (variable names)
 - `stellar:channel:finalized:` → `stellar:channel:closed:`
 - `'Channel has been finalized'` → `'Channel has been closed'`
@@ -902,6 +920,7 @@ All use the configurable polling params.
 - [ ] **Step 5: Refactor channel server — replace inline hex validation**
 
 Replace the duplicated regex checks in:
+
 1. **Voucher/close path** (~lines 231-238): Replace with `validateHexSignature(signatureHex)`
 2. **Open path** (~lines 440-444): Replace with `validateHexSignature(signatureHex)`
 
@@ -918,6 +937,7 @@ Replace the duplicated regex checks in:
 - [ ] **Step 7: Refactor channel server — update standalone close() params**
 
 The standalone `close()` function should also accept configurable params:
+
 - `maxFeeBumpStroops`, `pollMaxAttempts`, `pollDelayMs`, `pollTimeoutMs`, `logger`
 
 - [ ] **Step 8: Refactor channel client — fix dynamic import + add simulationTimeoutMs**
@@ -935,6 +955,7 @@ pnpm format && pnpm lint && pnpm check:types && pnpm test -- --run
 ```
 
 The existing channel tests should still pass. The channel server tests at `sdk/src/channel/server/Channel.test.ts` (946 lines) will need store key assertion updates:
+
 - `stellar:channel:finalized:` → `stellar:channel:closed:` in all mock expectations
 - `stellar:challenge:` → `stellar:channel:challenge:` in channel replay protection assertions
 - `finalizedAt` → `closedAt` in stored value assertions
@@ -953,6 +974,7 @@ git commit -m "refactor: channel server+client use shared utils, finalized→clo
 ## Task 9: Pino in Example Servers
 
 ### Files
+
 - Modify: `examples/server.ts`
 - Modify: `examples/channel-server.ts`
 - Modify: `examples/config/charge-server.ts`
@@ -979,22 +1001,26 @@ Same in `examples/config/channel-server.ts`.
 - [ ] **Step 3: Update examples/server.ts with pino**
 
 Add imports:
+
 ```ts
 import pino from 'pino'
 import pinoHttp from 'pino-http'
 ```
 
 Create logger after Env setup:
+
 ```ts
 const logger = pino({ level: Env.logLevel })
 ```
 
 Add pino-http middleware:
+
 ```ts
 app.use(pinoHttp({ logger }))
 ```
 
 Pass logger to stellar.charge():
+
 ```ts
 stellar.charge({
   recipient: Env.stellarRecipient,
@@ -1030,12 +1056,14 @@ git commit -m "feat: add pino logging to example servers"
 ## Task 10: Documentation Updates
 
 ### Files
+
 - Modify: `README.md`
 - Modify: `CLAUDE.md`
 
 - [ ] **Step 1: Update README.md**
 
 Key changes:
+
 1. Update all import paths in code examples: `stellar-mpp-sdk/client` → `stellar-mpp-sdk/charge/client`, `stellar-mpp-sdk/server` → `stellar-mpp-sdk/charge/server`
 2. Update exports table — remove `stellar-mpp-sdk/client` and `stellar-mpp-sdk/server`, add `stellar-mpp-sdk/charge`, `stellar-mpp-sdk/charge/client`, `stellar-mpp-sdk/charge/server`
 3. Update project structure tree to show `charge/`, `shared/` folders
@@ -1047,6 +1075,7 @@ Key changes:
 - [ ] **Step 2: Update CLAUDE.md**
 
 Key changes:
+
 1. Update module map with `shared/` entries (defaults, logger, errors, units, keypairs, validation, simulate, poll, fee-bump, scval)
 2. Add `charge/` to module map (Methods.ts, client/Charge.ts, server/Charge.ts)
 3. Update subpath exports list

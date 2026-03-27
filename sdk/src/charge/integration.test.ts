@@ -1,7 +1,7 @@
 import { Keypair } from '@stellar/stellar-sdk'
 import { Challenge, Credential, Store } from 'mppx'
 import { describe, expect, it } from 'vitest'
-import { USDC_SAC_TESTNET } from './constants.js'
+import { USDC_SAC_TESTNET } from '../constants.js'
 import { charge as serverCharge } from './server/Charge.js'
 import { charge as clientCharge } from './client/Charge.js'
 import { toBaseUnits } from './Methods.js'

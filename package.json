@@ -1,6 +1,6 @@
 {
   "name": "stellar-mpp-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Stellar blockchain payment method for the Machine Payments Protocol (MPP)",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
@@ -14,13 +14,17 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./client": {
-      "types": "./dist/client/index.d.ts",
-      "default": "./dist/client/index.js"
+    "./charge": {
+      "types": "./dist/charge/index.d.ts",
+      "default": "./dist/charge/index.js"
     },
-    "./server": {
-      "types": "./dist/server/index.d.ts",
-      "default": "./dist/server/index.js"
+    "./charge/client": {
+      "types": "./dist/charge/client/index.d.ts",
+      "default": "./dist/charge/client/index.js"
+    },
+    "./charge/server": {
+      "types": "./dist/charge/server/index.d.ts",
+      "default": "./dist/charge/server/index.js"
     },
     "./channel": {
       "types": "./dist/channel/index.d.ts",

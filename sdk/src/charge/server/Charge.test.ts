@@ -1,7 +1,7 @@
 import { Keypair } from '@stellar/stellar-sdk'
 import { Challenge, Credential, Store } from 'mppx'
 import { describe, expect, it, vi } from 'vitest'
-import { USDC_SAC_TESTNET } from '../constants.js'
+import { USDC_SAC_TESTNET } from '../../constants.js'
 
 const mockGetTransaction = vi.fn()
 

@@ -14,8 +14,8 @@ import {
   SOROBAN_RPC_URLS,
   type NetworkId,
 } from '../../constants.js'
-import { toBaseUnits } from '../../Methods.js'
-import { resolveKeypair } from '../../signers.js'
+import { toBaseUnits } from '../../shared/units.js'
+import { resolveKeypair } from '../../shared/keypairs.js'
 import { channel as ChannelMethod } from '../Methods.js'
 import { getChannelState, type ChannelState } from './State.js'
 

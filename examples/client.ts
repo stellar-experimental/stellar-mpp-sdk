@@ -10,7 +10,7 @@
 
 import { Keypair } from '@stellar/stellar-sdk'
 import { Mppx } from 'mppx/client'
-import { stellar } from '../sdk/src/client/index.js'
+import { stellar } from '../sdk/src/charge/client/index.js'
 import { Env } from './config/charge-client.js'
 
 const keypair = Keypair.fromSecret(Env.stellarSecret)

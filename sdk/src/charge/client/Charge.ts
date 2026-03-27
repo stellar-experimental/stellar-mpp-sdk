@@ -20,7 +20,7 @@ import {
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
   type NetworkId,
-} from '../constants.js'
+} from '../../constants.js'
 import * as Methods from '../Methods.js'
 import { fromBaseUnits } from '../Methods.js'
 

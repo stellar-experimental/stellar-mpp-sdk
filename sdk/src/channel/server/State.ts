@@ -1,6 +1,6 @@
 import { Address, Contract, TransactionBuilder, rpc, xdr } from '@stellar/stellar-sdk'
 import { NETWORK_PASSPHRASE, SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
-import { scValToBigInt } from '../../scval.js'
+import { scValToBigInt } from '../../shared/scval.js'
 
 // ---------------------------------------------------------------------------
 // Types

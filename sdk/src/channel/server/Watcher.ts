@@ -1,6 +1,6 @@
 import { rpc, xdr } from '@stellar/stellar-sdk'
 import { SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
-import { scValToBigInt } from '../../scval.js'
+import { scValToBigInt } from '../../shared/scval.js'
 
 // ---------------------------------------------------------------------------
 // Event types

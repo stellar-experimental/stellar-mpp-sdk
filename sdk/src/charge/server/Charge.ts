@@ -15,11 +15,11 @@ import {
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
   type NetworkId,
-} from '../constants.js'
+} from '../../constants.js'
 import * as Methods from '../Methods.js'
 import { toBaseUnits } from '../Methods.js'
-import { scValToBigInt } from '../scval.js'
-import { resolveKeypair } from '../signers.js'
+import { scValToBigInt } from '../../shared/scval.js'
+import { resolveKeypair } from '../../shared/keypairs.js'
 
 export function charge(parameters: charge.Parameters) {
   const {
