@@ -1,5 +1,4 @@
 import {
-  parseCommaSeparatedList,
   parseContractAddress,
   parseHexKey,
   parseNumber,
@@ -26,11 +25,6 @@ export class Env {
 
   static get sourceAccount(): string | undefined {
     return parseOptional('SOURCE_ACCOUNT')
-  }
-
-  static get corsOrigin(): string | string[] {
-    const raw = parseOptional('CORS_ORIGIN', '*')!
-    return raw === '*' ? '*' : parseCommaSeparatedList(raw)
   }
 
   static get rateLimitWindowMs(): number {

@@ -1,10 +1,4 @@
-import {
-  parseCommaSeparatedList,
-  parseNumber,
-  parseOptional,
-  parsePort,
-  parseStellarPublicKey,
-} from '../../sdk/src/env.js'
+import { parseNumber, parseOptional, parsePort, parseStellarPublicKey } from '../../sdk/src/env.js'
 
 export class Env {
   static get port(): number {
@@ -17,11 +11,6 @@ export class Env {
 
   static get mppSecretKey(): string {
     return parseOptional('MPP_SECRET_KEY', 'stellar-mpp-demo-secret')!
-  }
-
-  static get corsOrigin(): string | string[] {
-    const raw = parseOptional('CORS_ORIGIN', '*')!
-    return raw === '*' ? '*' : parseCommaSeparatedList(raw)
   }
 
   static get rateLimitWindowMs(): number {

@@ -122,7 +122,7 @@ const mppx = Mppx.create({
   ],
 })
 
-// Express (example servers use helmet, cors, and rate limiting)
+// Express (example servers use helmet and rate limiting)
 export async function handler(request: Request) {
   const result = await mppx.charge({
     amount: '0.01',
@@ -509,9 +509,9 @@ stellar-mpp-sdk/
 │           ├── Methods.ts  # stellar.channel() convenience wrapper
 │           └── index.ts
 ├── examples/
-│   ├── charge-server.ts    # Charge server (Express + helmet/cors/rate-limit)
+│   ├── charge-server.ts    # Charge server (Express + helmet/rate-limit)
 │   ├── charge-client.ts    # Charge client with progress events
-│   ├── channel-server.ts   # Channel server (Express + helmet/cors/rate-limit)
+│   ├── channel-server.ts   # Channel server (Express + helmet/rate-limit)
 │   ├── channel-client.ts   # Channel client example
 │   ├── channel-open.ts     # Channel deployment example
 │   ├── channel-close.ts    # On-chain channel close example

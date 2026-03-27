@@ -2,7 +2,7 @@
  * Example: Stellar MPP Server
  *
  * Charges 0.01 USDC per request via Soroban SAC transfer.
- * Uses Express with security headers (helmet, CORS, rate limiting).
+ * Uses Express with security headers (helmet, rate limiting).
  *
  * Usage:
  *   STELLAR_RECIPIENT=GYOUR_PUBLIC_KEY npx tsx examples/charge-server.ts
@@ -13,7 +13,6 @@
 
 import express from 'express'
 import helmet from 'helmet'
-import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import pino from 'pino'
 import pinoHttp from 'pino-http'
@@ -33,13 +32,6 @@ const app = express()
 // Security middleware
 app.set('trust proxy', Env.trustProxy)
 app.use(helmet())
-app.use(
-  cors({
-    origin: Env.corsOrigin,
-    allowedHeaders: ['Authorization', 'Content-Type'],
-    exposedHeaders: ['WWW-Authenticate'],
-  }),
-)
 app.use(rateLimit({ windowMs: Env.rateLimitWindowMs, max: Env.rateLimitMax }))
 app.use(pinoHttp({ logger }))
 app.use(express.json())

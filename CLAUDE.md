@@ -164,7 +164,7 @@ All other `shared/` modules are strictly internal and consumed only by `charge/`
 - **Configurable defaults**: Server and client functions accept optional parameters (`pollMaxAttempts`, `pollDelayMs`, `pollTimeoutMs`, `simulationTimeoutMs`, `maxFeeBumpStroops`, `logger`) with defaults from `shared/defaults.ts`, applied via parameter destructuring.
 - **Logger interface**: Matches pino's API (`debug`, `info`, `warn`, `error` methods). A `noopLogger` is used when no logger is provided.
 - **Store key naming**: Keys follow the convention `stellar:{intent}:{type}:{id}` (e.g., `stellar:charge:nonce:abc123`).
-- **Express + security headers**: Example servers use Express with helmet, CORS, and rate limiting middleware. Env vars configure CORS origins, rate limits, and trust proxy.
+- **Express + security headers**: Example servers use Express with helmet and rate limiting middleware. Env vars configure rate limits and trust proxy.
 - **Env parsing**: Published as `stellar-mpp-sdk/env`. Core primitives read from `process.env` with validation. Per-example `Env` classes compose these into static getters.
 
 ### Test Setup

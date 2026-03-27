@@ -2,7 +2,7 @@
  * Example: Stellar MPP Channel Server
  *
  * Charges per request via off-chain one-way payment channel commitments.
- * Uses Express with security headers (helmet, CORS, rate limiting).
+ * Uses Express with security headers (helmet, rate limiting).
  *
  * Prerequisites:
  *   - A deployed one-way-channel contract on testnet
@@ -17,7 +17,6 @@
 
 import express from 'express'
 import helmet from 'helmet'
-import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import pino from 'pino'
 import pinoHttp from 'pino-http'
@@ -32,13 +31,6 @@ const app = express()
 // Security middleware
 app.set('trust proxy', Env.trustProxy)
 app.use(helmet())
-app.use(
-  cors({
-    origin: Env.corsOrigin,
-    allowedHeaders: ['Authorization', 'Content-Type'],
-    exposedHeaders: ['WWW-Authenticate'],
-  }),
-)
 app.use(rateLimit({ windowMs: Env.rateLimitWindowMs, max: Env.rateLimitMax }))
 app.use(pinoHttp({ logger }))
 app.use(express.json())
