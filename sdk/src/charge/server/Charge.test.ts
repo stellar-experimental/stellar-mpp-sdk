@@ -160,7 +160,7 @@ describe('charge tx hash dedup', () => {
     ).rejects.toThrow()
 
     // Verify the hash was NOT stored (failed verification should not burn it)
-    const stored = await store.get(`stellar:tx:${hash}`)
+    const stored = await store.get(`stellar:charge:hash:${hash}`)
     expect(stored).toBeFalsy()
   })
 
@@ -169,7 +169,7 @@ describe('charge tx hash dedup', () => {
 
     // Pre-populate the hash to simulate it already being used
     const hash = 'already-used-hash'
-    await store.put(`stellar:tx:${hash}`, { usedAt: new Date().toISOString() })
+    await store.put(`stellar:charge:hash:${hash}`, { usedAt: new Date().toISOString() })
 
     const method = charge({
       recipient: RECIPIENT,

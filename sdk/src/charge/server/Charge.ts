@@ -20,15 +20,32 @@ import * as Methods from '../Methods.js'
 import { toBaseUnits } from '../Methods.js'
 import { scValToBigInt } from '../../shared/scval.js'
 import { resolveKeypair } from '../../shared/keypairs.js'
+import { pollTransaction } from '../../shared/poll.js'
+import { wrapFeeBump } from '../../shared/fee-bump.js'
+import { PaymentVerificationError } from '../../shared/errors.js'
+import { noopLogger, type Logger } from '../../shared/logger.js'
+import {
+  DEFAULT_MAX_FEE_BUMP_STROOPS,
+  DEFAULT_POLL_MAX_ATTEMPTS,
+  DEFAULT_POLL_DELAY_MS,
+  DEFAULT_POLL_TIMEOUT_MS,
+  DEFAULT_SIMULATION_TIMEOUT_MS,
+} from '../../shared/defaults.js'
 
 export function charge(parameters: charge.Parameters) {
   const {
     currency,
     decimals = DEFAULT_DECIMALS,
     feeBumpSigner: feeBumpSignerParam,
+    logger = noopLogger,
+    maxFeeBumpStroops = DEFAULT_MAX_FEE_BUMP_STROOPS,
     network = 'testnet',
+    pollDelayMs = DEFAULT_POLL_DELAY_MS,
+    pollMaxAttempts = DEFAULT_POLL_MAX_ATTEMPTS,
+    pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
     recipient,
     rpcUrl,
+    simulationTimeoutMs: _simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
     signer: signerParam,
     store,
   } = parameters
@@ -79,10 +96,10 @@ export function charge(parameters: charge.Parameters) {
     const { request: challengeRequest } = challenge
 
     if (store) {
-      const key = `stellar:challenge:${challenge.id}`
+      const key = `stellar:charge:challenge:${challenge.id}`
       const existing = await store.get(key)
       if (existing) {
-        throw new Error('Challenge already used. Replay rejected.')
+        throw new Error('[stellar:charge] Challenge already used. Replay rejected.')
       }
       await store.put(key, { usedAt: new Date().toISOString() })
     }
@@ -102,29 +119,27 @@ export function charge(parameters: charge.Parameters) {
         // early, but only mark as used AFTER successful verification to
         // avoid permanently burning a hash on transient failures.
         if (store) {
-          const hashKey = `stellar:tx:${hash}`
+          const hashKey = `stellar:charge:hash:${hash}`
           const hashUsed = await store.get(hashKey)
           if (hashUsed) {
-            throw new PaymentVerificationError('Transaction hash already used. Replay rejected.', {
+            logger.warn('[stellar:charge] Verification failed', {
+              error: 'Transaction hash already used',
               hash,
             })
+            throw new PaymentVerificationError(
+              '[stellar:charge] Transaction hash already used. Replay rejected.',
+              {
+                hash,
+              },
+            )
           }
         }
 
-        let txResult = await server.getTransaction(hash)
-        let attempts = 0
-        while (txResult.status === 'NOT_FOUND' && attempts < 10) {
-          await new Promise((r) => setTimeout(r, 1000))
-          txResult = await server.getTransaction(hash)
-          attempts++
-        }
-
-        if (txResult.status !== 'SUCCESS') {
-          throw new PaymentVerificationError(
-            `Transaction ${hash} is not successful (status: ${txResult.status}).`,
-            { hash, status: txResult.status },
-          )
-        }
+        const txResult = await pollTransaction(server, hash, {
+          maxAttempts: pollMaxAttempts,
+          delayMs: pollDelayMs,
+          timeoutMs: pollTimeoutMs,
+        })
 
         verifySacTransfer(
           txResult,
@@ -138,7 +153,7 @@ export function charge(parameters: charge.Parameters) {
 
         // Mark tx hash as used only after successful verification
         if (store) {
-          await store.put(`stellar:tx:${hash}`, { usedAt: new Date().toISOString() })
+          await store.put(`stellar:charge:hash:${hash}`, { usedAt: new Date().toISOString() })
         }
 
         return Receipt.from({
@@ -167,8 +182,11 @@ export function charge(parameters: charge.Parameters) {
           | FeeBumpTransaction
 
         if (!signerKeypair && tx.source === ALL_ZEROS) {
+          logger.warn('[stellar:charge] Verification failed', {
+            error: 'Sponsored source without signer',
+          })
           throw new PaymentVerificationError(
-            'Transaction uses a sponsored source account but the server is not configured with a signer.',
+            '[stellar:charge] Transaction uses a sponsored source account but the server is not configured with a signer.',
             {},
           )
         }
@@ -177,6 +195,7 @@ export function charge(parameters: charge.Parameters) {
           // ── Sponsored path ──────────────────────────────────────────
           // Client used all-zeros source; rebuild the tx with the
           // signer's account as source.
+          logger.debug('[stellar:charge] Rebuilding sponsored tx...')
           const serverAccount = await server.getAccount(signerKeypair.publicKey())
           const envelopeTx = tx.toEnvelope().v1().tx()
           const sorobanData = envelopeTx.ext().sorobanData()
@@ -201,39 +220,23 @@ export function charge(parameters: charge.Parameters) {
         // When feeBumpSigner is set, wrap in a FeeBumpTransaction.
         // Applies to both sponsored and unsponsored paths.
         // NM-004: Cap the fee-bump to prevent draining the fee payer.
-        if (feeBumpKeypair && !(txToSubmit instanceof FeeBumpTransaction)) {
-          const MAX_FEE_BUMP = 10_000_000 // 1 XLM in stroops
-          const bumpFee = Math.min(Number((txToSubmit as Transaction).fee) * 10, MAX_FEE_BUMP)
-          txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
-            feeBumpKeypair,
-            bumpFee.toString(),
-            txToSubmit as Transaction,
+        if (feeBumpKeypair) {
+          logger.debug('[stellar:charge] Fee bump wrapping')
+          txToSubmit = wrapFeeBump(txToSubmit, feeBumpKeypair, {
             networkPassphrase,
-          )
-          txToSubmit.sign(feeBumpKeypair)
-        }
-
-        const sendResult = await server.sendTransaction(txToSubmit)
-
-        let txResult = await server.getTransaction(sendResult.hash)
-        let txAttempts = 0
-        while (txResult.status === 'NOT_FOUND') {
-          if (++txAttempts >= 60) {
-            throw new PaymentVerificationError(
-              `Transaction not found after ${txAttempts} polling attempts.`,
-              { hash: sendResult.hash },
-            )
-          }
-          await new Promise((r) => setTimeout(r, 1000))
-          txResult = await server.getTransaction(sendResult.hash)
-        }
-
-        if (txResult.status !== 'SUCCESS') {
-          throw new PaymentVerificationError(`Transaction failed on-chain: ${txResult.status}`, {
-            hash: sendResult.hash,
-            status: txResult.status,
+            maxFeeStroops: maxFeeBumpStroops,
           })
         }
+
+        logger.debug('[stellar:charge] Broadcasting tx')
+        const sendResult = await server.sendTransaction(txToSubmit)
+        logger.debug('[stellar:charge] Broadcasting tx', { hash: sendResult.hash })
+
+        await pollTransaction(server, sendResult.hash, {
+          maxAttempts: pollMaxAttempts,
+          delayMs: pollDelayMs,
+          timeoutMs: pollTimeoutMs,
+        })
 
         return Receipt.from({
           method: 'stellar',
@@ -260,7 +263,10 @@ function verifySacInvocation(
   const invokeOp = tx.operations.find((op) => op.type === 'invokeHostFunction')
 
   if (!invokeOp) {
-    throw new PaymentVerificationError('Transaction does not contain a Soroban invocation.', {})
+    throw new PaymentVerificationError(
+      '[stellar:charge] Transaction does not contain a Soroban invocation.',
+      {},
+    )
   }
 
   verifyFromRawOps(tx, expected)
@@ -308,7 +314,7 @@ function verifyFromRawOps(
 
   if (!found) {
     throw new PaymentVerificationError(
-      'Transaction does not contain a matching SAC transfer invocation.',
+      '[stellar:charge] Transaction does not contain a matching SAC transfer invocation.',
       {
         currency: expected.currency,
         recipient: expected.recipient,
@@ -325,7 +331,7 @@ function verifySacTransfer(
 ) {
   if (!txResult.envelopeXdr) {
     throw new PaymentVerificationError(
-      'Transaction result is missing envelope XDR — cannot verify payment.',
+      '[stellar:charge] Transaction result is missing envelope XDR — cannot verify payment.',
       {},
     )
   }
@@ -335,9 +341,12 @@ function verifySacTransfer(
     try {
       envelope = xdr.TransactionEnvelope.fromXDR(txResult.envelopeXdr, 'base64')
     } catch (error) {
-      throw new PaymentVerificationError('Could not parse transaction envelope for verification.', {
-        details: error instanceof Error ? error.message : String(error),
-      })
+      throw new PaymentVerificationError(
+        '[stellar:charge] Could not parse transaction envelope for verification.',
+        {
+          details: error instanceof Error ? error.message : String(error),
+        },
+      )
     }
   } else {
     envelope = txResult.envelopeXdr
@@ -348,7 +357,10 @@ function verifySacTransfer(
   try {
     innerTx = new Transaction(envelope, networkPassphrase)
   } catch {
-    throw new PaymentVerificationError('Could not parse transaction envelope for verification.', {})
+    throw new PaymentVerificationError(
+      '[stellar:charge] Could not parse transaction envelope for verification.',
+      {},
+    )
   }
 
   verifyFromRawOps(innerTx, expected)
@@ -374,15 +386,17 @@ export declare namespace charge {
      */
     feeBumpSigner?: Keypair | string
     store?: Store.Store
-  }
-}
-
-class PaymentVerificationError extends Error {
-  details: Record<string, string>
-
-  constructor(message: string, details: Record<string, string>) {
-    super(message)
-    this.name = 'PaymentVerificationError'
-    this.details = details
+    /** Maximum fee bump in stroops. @default 10_000_000 */
+    maxFeeBumpStroops?: number
+    /** Maximum polling attempts. @default 30 */
+    pollMaxAttempts?: number
+    /** Delay between poll attempts in ms. @default 1_000 */
+    pollDelayMs?: number
+    /** Overall poll timeout in ms. @default 30_000 */
+    pollTimeoutMs?: number
+    /** Simulation timeout in ms. @default 10_000 */
+    simulationTimeoutMs?: number
+    /** Logger instance. @default noopLogger */
+    logger?: Logger
   }
 }

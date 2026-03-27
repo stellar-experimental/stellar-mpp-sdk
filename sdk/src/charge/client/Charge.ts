@@ -23,6 +23,14 @@ import {
 } from '../../constants.js'
 import * as Methods from '../Methods.js'
 import { fromBaseUnits } from '../Methods.js'
+import { resolveKeypair } from '../../shared/keypairs.js'
+import { pollTransaction } from '../../shared/poll.js'
+import {
+  DEFAULT_POLL_MAX_ATTEMPTS,
+  DEFAULT_POLL_DELAY_MS,
+  DEFAULT_POLL_TIMEOUT_MS,
+  DEFAULT_SIMULATION_TIMEOUT_MS,
+} from '../../shared/defaults.js'
 
 /**
  * Creates a Stellar charge method for use on the **client**.
@@ -54,8 +62,12 @@ export function charge(parameters: charge.Parameters) {
     keypair: keypairParam,
     mode: defaultMode = 'pull',
     onProgress,
+    pollDelayMs = DEFAULT_POLL_DELAY_MS,
+    pollMaxAttempts = DEFAULT_POLL_MAX_ATTEMPTS,
+    pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
     rpcUrl,
     secretKey,
+    simulationTimeoutMs: _simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
     timeout = DEFAULT_TIMEOUT,
   } = parameters
 
@@ -63,7 +75,7 @@ export function charge(parameters: charge.Parameters) {
     throw new Error('Either keypair or secretKey must be provided.')
   }
 
-  const keypair = keypairParam ?? Keypair.fromSecret(secretKey!)
+  const keypair = keypairParam ?? resolveKeypair(secretKey!)
 
   return Method.toClient(Methods.charge, {
     context: z.object({
@@ -207,19 +219,11 @@ export function charge(parameters: charge.Parameters) {
 
         // Poll until confirmed
         onProgress?.({ type: 'confirming', hash: result.hash })
-        let txResult = await server.getTransaction(result.hash)
-        let pollAttempts = 0
-        while (txResult.status === 'NOT_FOUND') {
-          if (++pollAttempts >= 60) {
-            throw new Error(`Transaction not confirmed after ${pollAttempts} polling attempts.`)
-          }
-          await new Promise((r) => setTimeout(r, 1000))
-          txResult = await server.getTransaction(result.hash)
-        }
-
-        if (txResult.status !== 'SUCCESS') {
-          throw new Error(`Transaction failed: ${txResult.status}`)
-        }
+        await pollTransaction(server, result.hash, {
+          maxAttempts: pollMaxAttempts,
+          delayMs: pollDelayMs,
+          timeoutMs: pollTimeoutMs,
+        })
 
         onProgress?.({ type: 'paid', hash: result.hash })
 
@@ -270,5 +274,13 @@ export declare namespace charge {
     timeout?: number
     /** Callback invoked at each lifecycle stage. */
     onProgress?: (event: ProgressEvent) => void
+    /** Maximum polling attempts. @default 30 */
+    pollMaxAttempts?: number
+    /** Delay between poll attempts in ms. @default 1_000 */
+    pollDelayMs?: number
+    /** Overall poll timeout in ms. @default 30_000 */
+    pollTimeoutMs?: number
+    /** Simulation timeout in ms. @default 10_000 */
+    simulationTimeoutMs?: number
   }
 }
