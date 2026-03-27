@@ -8,18 +8,18 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
     ...actual,
     rpc: {
       ...actual.rpc,
-      Server: vi.fn().mockImplementation(() => ({
-        getAccount: vi.fn().mockResolvedValue({
+      Server: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+        this.getAccount = vi.fn().mockResolvedValue({
           accountId: () => Keypair.random().publicKey(),
           sequenceNumber: () => '0',
           sequence: () => '0',
           incrementSequenceNumber: () => {},
-        }),
-        simulateTransaction: vi.fn().mockResolvedValue({
+        })
+        this.simulateTransaction = vi.fn().mockResolvedValue({
           result: { retval: { bytes: () => Buffer.from('mock-commitment') } },
           transactionData: 'mock',
-        }),
-      })),
+        })
+      }),
     },
   }
 })

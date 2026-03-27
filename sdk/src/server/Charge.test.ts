@@ -11,9 +11,9 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
     ...actual,
     rpc: {
       ...actual.rpc,
-      Server: vi.fn().mockImplementation(() => ({
-        getTransaction: mockGetTransaction,
-      })),
+      Server: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+        this.getTransaction = mockGetTransaction
+      }),
     },
   }
 })

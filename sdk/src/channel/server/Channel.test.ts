@@ -26,12 +26,12 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
     ),
     rpc: {
       ...actual.rpc,
-      Server: vi.fn().mockImplementation(() => ({
-        getAccount: mockGetAccount,
-        simulateTransaction: mockSimulateTransaction,
-        sendTransaction: mockSendTransaction,
-        getTransaction: mockGetTransaction,
-      })),
+      Server: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+        this.getAccount = mockGetAccount
+        this.simulateTransaction = mockSimulateTransaction
+        this.sendTransaction = mockSendTransaction
+        this.getTransaction = mockGetTransaction
+      }),
     },
   }
 })
