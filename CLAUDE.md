@@ -19,7 +19,7 @@ pnpm run build          # Compile TypeScript → dist/
 pnpm run check:types    # Type-check only (tsc --noEmit)
 pnpm test               # Run vitest (watch mode)
 pnpm test -- --run      # Run tests once without watch
-pnpm test -- sdk/src/client/Charge.test.ts   # Run a single test file
+pnpm test -- sdk/src/charge/client/Charge.test.ts   # Run a single test file
 make help               # Show all Makefile targets
 make check              # Run full quality pipeline (mirrors CI)
 pnpm run lint           # Run ESLint
@@ -109,16 +109,25 @@ Methods.ts (Zod schema) → client/ (create credentials) + server/ (verify crede
 
 | Path                                | Role                                                                                                                               |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `sdk/src/Methods.ts`                | Charge method schema (Zod discriminated union: `transaction` vs `hash` credentials)                                                |
-| `sdk/src/constants.ts`              | SAC addresses (USDC/XLM), RPC URLs, network passphrases, defaults                                                                  |
-| `sdk/src/scval.ts`                  | Soroban ScVal ↔ BigInt conversion                                                                                                  |
-| `sdk/src/client/Charge.ts`          | Creates SAC `transfer` invocations; handles pull (send XDR) and push (broadcast + send hash) flows                                 |
-| `sdk/src/server/Charge.ts`          | Verifies and broadcasts SAC transfers; supports fee sponsorship via FeeBumpTransaction                                             |
+| `sdk/src/charge/Methods.ts`         | Charge method schema (Zod discriminated union: `transaction` vs `hash` credentials)                                                |
+| `sdk/src/charge/client/Charge.ts`   | Creates SAC `transfer` invocations; handles pull (send XDR) and push (broadcast + send hash) flows                                 |
+| `sdk/src/charge/server/Charge.ts`   | Verifies and broadcasts SAC transfers; supports fee sponsorship via FeeBumpTransaction                                             |
 | `sdk/src/channel/Methods.ts`        | Channel method schema (discriminated union: `open` / `voucher` / `close` actions)                                                  |
 | `sdk/src/channel/client/Channel.ts` | Signs cumulative commitment amounts off-chain via ed25519; handles `open` action (sends signed deploy tx XDR + initial commitment) |
 | `sdk/src/channel/server/Channel.ts` | Verifies commitment signatures via contract simulation; `open` action broadcasts the deploy tx and initialises cumulative store    |
 | `sdk/src/channel/server/State.ts`   | Queries on-chain channel state (balance, close status, refund period)                                                              |
 | `sdk/src/channel/server/Watcher.ts` | Polls for contract events (close, refund, top_up)                                                                                  |
+| `sdk/src/shared/defaults.ts`        | Internal default constants (poll intervals, fee limits, timeouts)                                                                  |
+| `sdk/src/shared/errors.ts`          | StellarMppError, PaymentVerificationError, ChannelVerificationError                                                                |
+| `sdk/src/shared/fee-bump.ts`        | Fee bump wrapping                                                                                                                  |
+| `sdk/src/shared/keypairs.ts`        | Keypair resolution (Keypair or S... string)                                                                                        |
+| `sdk/src/shared/logger.ts`          | Logger interface (pino-compatible) and noopLogger                                                                                  |
+| `sdk/src/shared/poll.ts`            | Transaction polling with backoff and jitter                                                                                        |
+| `sdk/src/shared/scval.ts`           | Soroban ScVal ↔ BigInt conversion                                                                                                  |
+| `sdk/src/shared/simulate.ts`        | Simulation with timeout and error classification                                                                                   |
+| `sdk/src/shared/units.ts`           | toBaseUnits / fromBaseUnits                                                                                                        |
+| `sdk/src/shared/validation.ts`      | Hex signature and amount validation                                                                                                |
+| `sdk/src/constants.ts`              | SAC addresses (USDC/XLM), RPC URLs, network passphrases, defaults                                                                  |
 | `sdk/src/env.ts`                    | Stellar-aware env parsing primitives (parsePort, parseStellarPublicKey, etc.)                                                      |
 | `examples/config/*.ts`              | Per-example Env classes using env primitives                                                                                       |
 
@@ -126,13 +135,24 @@ Methods.ts (Zod schema) → client/ (create credentials) + server/ (verify crede
 
 Package.json exports allow selective imports to avoid bundling unused code:
 
-- `stellar-mpp-sdk` — root (schemas + constants)
-- `stellar-mpp-sdk/client` — charge client only
-- `stellar-mpp-sdk/server` — charge server only
+- `stellar-mpp-sdk` — root (schemas + constants + `resolveKeypair` + `Logger` type + unit conversion)
+- `stellar-mpp-sdk/charge` — charge method schema
+- `stellar-mpp-sdk/charge/client` — charge client only
+- `stellar-mpp-sdk/charge/server` — charge server only
 - `stellar-mpp-sdk/channel` — channel schema
 - `stellar-mpp-sdk/channel/client` — channel client
 - `stellar-mpp-sdk/channel/server` — channel server
 - `stellar-mpp-sdk/env` — env parsing primitives
+
+### Shared Utilities Convention
+
+The `shared/` directory contains internal utility modules. These are **not** exported as a subpath from the package. Exceptions that are re-exported from the root `index.ts`:
+
+- `resolveKeypair` (from `shared/keypairs.ts`)
+- `Logger` type (from `shared/logger.ts`)
+- `toBaseUnits` / `fromBaseUnits` (from `shared/units.ts`)
+
+All other `shared/` modules are strictly internal and consumed only by `charge/` and `channel/` code.
 
 ### Key Patterns
 
@@ -140,6 +160,10 @@ Package.json exports allow selective imports to avoid bundling unused code:
 - **Serialization locks**: Both Charge and Channel servers use Promise-based locks (`let verifyLock: Promise<unknown> = Promise.resolve()`) to serialize verification and prevent race conditions on store get/put.
 - **Contract simulation**: Uses Soroban RPC `simulateTransaction` for read-only verification — SAC transfer validation, `prepare_commitment` for commitment bytes, and channel state queries.
 - **Zod validation**: All method schemas use Zod v4 with discriminated unions for credential/action types.
+- **Shared utility extraction**: Common logic (polling, fee bumps, simulation, keypair resolution, validation, error types, logging) lives in `shared/` and is imported by both `charge/` and `channel/`.
+- **Configurable defaults**: Server and client functions accept optional parameters (`pollMaxAttempts`, `pollDelayMs`, `pollTimeoutMs`, `simulationTimeoutMs`, `maxFeeBumpStroops`, `logger`) with defaults from `shared/defaults.ts`, applied via parameter destructuring.
+- **Logger interface**: Matches pino's API (`debug`, `info`, `warn`, `error` methods). A `noopLogger` is used when no logger is provided.
+- **Store key naming**: Keys follow the convention `stellar:{intent}:{type}:{id}` (e.g., `stellar:charge:nonce:abc123`).
 - **Express + security headers**: Example servers use Express with helmet, CORS, and rate limiting middleware. Env vars configure CORS origins, rate limits, and trust proxy.
 - **Env parsing**: Published as `stellar-mpp-sdk/env`. Core primitives read from `process.env` with validation. Per-example `Env` classes compose these into static getters.
 

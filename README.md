@@ -108,7 +108,7 @@ npm install stellar-mpp-sdk mppx @stellar/stellar-sdk
 ### Server (charge)
 
 ```ts
-import { Mppx, stellar } from 'stellar-mpp-sdk/server'
+import { Mppx, stellar } from 'stellar-mpp-sdk/charge/server'
 import { USDC_SAC_TESTNET } from 'stellar-mpp-sdk'
 
 const mppx = Mppx.create({
@@ -139,7 +139,7 @@ export async function handler(request: Request) {
 
 ```ts
 import { Keypair } from '@stellar/stellar-sdk'
-import { Mppx, stellar } from 'stellar-mpp-sdk/client'
+import { Mppx, stellar } from 'stellar-mpp-sdk/charge/client'
 
 // Polyfills global fetch — 402 responses are handled automatically
 Mppx.create({
@@ -207,9 +207,10 @@ const data = await response.json()
 
 | Path                             | Exports                                                                                                                                                                          |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stellar-mpp-sdk`                | `Methods`, `ChannelMethods`, constants (`USDC_SAC_TESTNET`, `XLM_SAC_MAINNET`, etc.), `toBaseUnits`, `fromBaseUnits`                                                             |
-| `stellar-mpp-sdk/client`         | `stellar`, `charge`, `Mppx`                                                                                                                                                      |
-| `stellar-mpp-sdk/server`         | `stellar`, `charge`, `Mppx`, `Store`, `Expires`                                                                                                                                  |
+| `stellar-mpp-sdk`                | `ChargeMethods`, `ChannelMethods`, constants (`USDC_SAC_TESTNET`, `XLM_SAC_MAINNET`, etc.), `toBaseUnits`, `fromBaseUnits`, `resolveKeypair`, `Logger` (type)                    |
+| `stellar-mpp-sdk/charge`         | `charge` (method schema)                                                                                                                                                         |
+| `stellar-mpp-sdk/charge/client`  | `stellar`, `charge`, `Mppx`                                                                                                                                                      |
+| `stellar-mpp-sdk/charge/server`  | `stellar`, `charge`, `Mppx`, `Store`, `Expires`, `resolveKeypair`                                                                                                                |
 | `stellar-mpp-sdk/channel`        | `channel` (method schema)                                                                                                                                                        |
 | `stellar-mpp-sdk/channel/client` | `stellar`, `channel`, `Mppx`                                                                                                                                                     |
 | `stellar-mpp-sdk/channel/server` | `stellar`, `channel`, `close`, `getChannelState`, `watchChannel`, `Mppx`, `Store`, `Expires`                                                                                     |
@@ -227,6 +228,12 @@ stellar.charge({
   signer?: Keypair | string,      // source account for sponsored tx signing
   feeBumpSigner?: Keypair | string, // wraps all txs in FeeBumpTransaction
   store?: Store.Store,            // replay protection
+  maxFeeBumpStroops?: number,     // max fee bump in stroops (default: 10,000,000)
+  pollMaxAttempts?: number,       // max polling attempts (default: 30)
+  pollDelayMs?: number,           // delay between poll attempts in ms (default: 1,000)
+  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 30,000)
+  simulationTimeoutMs?: number,   // simulation timeout in ms (default: 10,000)
+  logger?: Logger,                // structured logger (default: no-op)
 })
 ```
 
@@ -238,7 +245,12 @@ stellar.charge({
   secretKey?: string,             // Stellar secret key (S...)
   mode?: 'push' | 'pull',        // default: 'pull'
   timeout?: number,               // tx timeout in seconds (default: 180)
+  decimals?: number,              // default: 7
   rpcUrl?: string,                // custom Soroban RPC URL
+  pollMaxAttempts?: number,       // max polling attempts (default: 30)
+  pollDelayMs?: number,           // delay between poll attempts in ms (default: 1,000)
+  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 30,000)
+  simulationTimeoutMs?: number,   // simulation timeout in ms (default: 10,000)
   onProgress?: (event) => void,   // lifecycle callback
 })
 ```
@@ -254,6 +266,16 @@ stellar.channel({
   rpcUrl?: string,                // custom Soroban RPC URL
   sourceAccount?: string,         // funded G... address for simulations
   store?: Store.Store,            // replay protection + cumulative amount tracking
+  signer?: Keypair | string,      // keypair for signing close/open transactions
+  feeBumpSigner?: Keypair | string, // fee bump signer for close/open transactions
+  checkOnChainState?: boolean,    // detect on-chain disputes (default: false)
+  onDisputeDetected?: (state) => void, // callback when close_start detected
+  maxFeeBumpStroops?: number,     // max fee bump in stroops (default: 10,000,000)
+  pollMaxAttempts?: number,       // max polling attempts (default: 30)
+  pollDelayMs?: number,           // delay between poll attempts in ms (default: 1,000)
+  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 30,000)
+  simulationTimeoutMs?: number,   // simulation timeout in ms (default: 10,000)
+  logger?: Logger,                // structured logger (default: no-op)
 })
 ```
 
@@ -264,6 +286,7 @@ stellar.channel({
   commitmentKey?: Keypair,        // ed25519 Keypair for signing commitments
   commitmentSecret?: string,      // ed25519 secret key (S...)
   rpcUrl?: string,                // custom Soroban RPC URL
+  simulationTimeoutMs?: number,   // simulation timeout in ms (default: 10,000)
   sourceAccount?: string,         // funded G... address for simulations
   onProgress?: (event) => void,   // lifecycle callback
 })
@@ -278,9 +301,9 @@ The `onProgress` callback receives events at each stage:
 | Event        | Fields                            | When                                 |
 | ------------ | --------------------------------- | ------------------------------------ |
 | `challenge`  | `recipient`, `amount`, `currency` | Challenge received                   |
-| `signing`    | —                                 | Before signing                       |
+| `signing`    | ---                               | Before signing                       |
 | `signed`     | `transaction`                     | After signing                        |
-| `paying`     | —                                 | Before broadcast (push mode)         |
+| `paying`     | ---                               | Before broadcast (push mode)         |
 | `confirming` | `hash`                            | Polling for confirmation (push mode) |
 | `paid`       | `hash`                            | Transaction confirmed (push mode)    |
 
@@ -289,17 +312,19 @@ The `onProgress` callback receives events at each stage:
 | Event       | Fields                                  | When                      |
 | ----------- | --------------------------------------- | ------------------------- |
 | `challenge` | `channel`, `amount`, `cumulativeAmount` | Challenge received        |
-| `signing`   | —                                       | Before signing commitment |
+| `signing`   | ---                                     | Before signing commitment |
 | `signed`    | `cumulativeAmount`                      | Commitment signed         |
 
 ### Fee sponsorship
 
 The server can decouple sequence-number management from fee payment:
 
-- **`signer`** — keypair providing the source account and sequence number for sponsored transactions.
-- **`feeBumpSigner`** — optional dedicated fee payer. When set, all submitted transactions are wrapped in a `FeeBumpTransaction` signed by this key.
+- **`signer`** --- keypair providing the source account and sequence number for sponsored transactions.
+- **`feeBumpSigner`** --- optional dedicated fee payer. When set, all submitted transactions are wrapped in a `FeeBumpTransaction` signed by this key.
 
 ```ts
+import { stellar } from 'stellar-mpp-sdk/charge/server'
+
 stellar.charge({
   recipient: 'G...',
   currency: USDC_SAC_TESTNET,
@@ -315,7 +340,7 @@ The client is automatically informed of fee sponsorship via `methodDetails.feePa
 Provide an mppx `Store` to prevent challenge reuse:
 
 ```ts
-import { Store } from 'stellar-mpp-sdk/server'
+import { Store } from 'stellar-mpp-sdk/charge/server'
 
 stellar.charge({
   recipient: 'G...',
@@ -324,9 +349,26 @@ stellar.charge({
 })
 ```
 
+### Logger
+
+Pass a `logger` to charge or channel servers for structured debug and warning output. The `Logger` interface is compatible with [pino](https://github.com/pinojs/pino) out of the box:
+
+```ts
+import pino from 'pino'
+import { stellar } from 'stellar-mpp-sdk/charge/server'
+
+const logger = pino({ level: 'debug' })
+
+stellar.charge({
+  recipient: 'G...',
+  currency: USDC_SAC_TESTNET,
+  logger, // pino satisfies the Logger interface natively
+})
+```
+
 ### One-way payment channels
 
-Payment channels allow many off-chain micro-payments with minimal on-chain transactions. The [one-way-channel](https://github.com/stellar-experimental/one-way-channel) contract is deployed on Soroban — no additional npm dependency is needed.
+Payment channels allow many off-chain micro-payments with minimal on-chain transactions. The [one-way-channel](https://github.com/stellar-experimental/one-way-channel) contract is deployed on Soroban --- no additional npm dependency is needed.
 
 **Prerequisites:**
 
@@ -368,6 +410,13 @@ await close({
 | `XLM_SAC_MAINNET`  | `CAS3J7GYLGVE45MR3HPSFG352DAANEV5GGMFTO3IZIE4JMCDALQO57Y`  |
 | `XLM_SAC_TESTNET`  | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` |
 
+## Breaking changes from 0.1.0
+
+- **Import paths changed**: `stellar-mpp-sdk/client` and `stellar-mpp-sdk/server` are no longer valid. Use `stellar-mpp-sdk/charge/client` and `stellar-mpp-sdk/charge/server` instead.
+- **Root export renamed**: `Methods` is now `ChargeMethods`.
+- **Store keys changed**: Store key format updated to `stellar:{intent}:{type}:{id}`. Existing stored data is not backwards compatible.
+- **`resolveKeypair` moved**: Now exported from the root (`stellar-mpp-sdk`) and from `stellar-mpp-sdk/charge/server`, no longer from `stellar-mpp-sdk/server`.
+
 ## Environment variables
 
 Example `.env` files are provided for each demo:
@@ -402,7 +451,7 @@ Browser UI available at `http://localhost:3000/demo` once the server is running.
 
 ### Channel end-to-end (with on-chain settlement)
 
-Run the full channel lifecycle — deploy, off-chain payments, and on-chain close — in a single command:
+Run the full channel lifecycle --- deploy, off-chain payments, and on-chain close --- in a single command:
 
 ```bash
 # Build the one-way-channel WASM first (see https://github.com/stellar-experimental/one-way-channel)
@@ -421,19 +470,31 @@ stellar-mpp-sdk/
 ├── .github/workflows/
 │   └── ci.yml              # GitHub Actions CI pipeline
 ├── sdk/src/
-│   ├── Methods.ts          # Method schema (name: 'stellar', intent: 'charge')
 │   ├── constants.ts        # SAC addresses, RPC URLs, network passphrases
-│   ├── scval.ts            # Soroban ScVal ↔ BigInt conversion
 │   ├── env.ts              # Stellar-aware env parsing primitives
 │   ├── index.ts            # Root exports
-│   ├── client/
-│   │   ├── Charge.ts       # Client-side credential creation (SAC transfer)
-│   │   ├── Methods.ts      # stellar.charge() convenience wrapper
-│   │   └── index.ts
-│   ├── server/
-│   │   ├── Charge.ts       # Server-side verification + broadcast
-│   │   ├── Methods.ts      # stellar.charge() convenience wrapper
-│   │   └── index.ts
+│   ├── shared/
+│   │   ├── defaults.ts     # Internal default constants
+│   │   ├── errors.ts       # StellarMppError, PaymentVerificationError, ChannelVerificationError
+│   │   ├── fee-bump.ts     # Fee bump wrapping
+│   │   ├── keypairs.ts     # Keypair resolution (Keypair or S... string)
+│   │   ├── logger.ts       # Logger interface and noopLogger
+│   │   ├── poll.ts         # Transaction polling with backoff and jitter
+│   │   ├── scval.ts        # Soroban ScVal ↔ BigInt conversion
+│   │   ├── simulate.ts     # Simulation with timeout and error classification
+│   │   ├── units.ts        # toBaseUnits / fromBaseUnits
+│   │   └── validation.ts   # Hex signature and amount validation
+│   ├── charge/
+│   │   ├── Methods.ts      # Charge method schema (name: 'stellar', intent: 'charge')
+│   │   ├── index.ts        # Charge root exports
+│   │   ├── client/
+│   │   │   ├── Charge.ts   # Client-side credential creation (SAC transfer)
+│   │   │   ├── Methods.ts  # stellar.charge() convenience wrapper
+│   │   │   └── index.ts
+│   │   └── server/
+│   │       ├── Charge.ts   # Server-side verification + broadcast
+│   │       ├── Methods.ts  # stellar.charge() convenience wrapper
+│   │       └── index.ts
 │   └── channel/
 │       ├── Methods.ts      # Method schema (name: 'stellar', intent: 'channel')
 │       ├── index.ts        # Channel root exports
