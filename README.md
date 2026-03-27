@@ -205,14 +205,14 @@ const data = await response.json()
 
 ### Exports
 
-| Path                             | Exports                                                                                                              |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `stellar-mpp-sdk`                | `Methods`, `ChannelMethods`, constants (`USDC_SAC_TESTNET`, `XLM_SAC_MAINNET`, etc.), `toBaseUnits`, `fromBaseUnits` |
-| `stellar-mpp-sdk/client`         | `stellar`, `charge`, `Mppx`                                                                                          |
-| `stellar-mpp-sdk/server`         | `stellar`, `charge`, `Mppx`, `Store`, `Expires`                                                                      |
-| `stellar-mpp-sdk/channel`        | `channel` (method schema)                                                                                            |
-| `stellar-mpp-sdk/channel/client` | `stellar`, `channel`, `Mppx`                                                                                         |
-| `stellar-mpp-sdk/channel/server` | `stellar`, `channel`, `close`, `getChannelState`, `watchChannel`, `Mppx`, `Store`, `Expires`                         |
+| Path                             | Exports                                                                                                                                                                          |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stellar-mpp-sdk`                | `Methods`, `ChannelMethods`, constants (`USDC_SAC_TESTNET`, `XLM_SAC_MAINNET`, etc.), `toBaseUnits`, `fromBaseUnits`                                                             |
+| `stellar-mpp-sdk/client`         | `stellar`, `charge`, `Mppx`                                                                                                                                                      |
+| `stellar-mpp-sdk/server`         | `stellar`, `charge`, `Mppx`, `Store`, `Expires`                                                                                                                                  |
+| `stellar-mpp-sdk/channel`        | `channel` (method schema)                                                                                                                                                        |
+| `stellar-mpp-sdk/channel/client` | `stellar`, `channel`, `Mppx`                                                                                                                                                     |
+| `stellar-mpp-sdk/channel/server` | `stellar`, `channel`, `close`, `getChannelState`, `watchChannel`, `Mppx`, `Store`, `Expires`                                                                                     |
 | `stellar-mpp-sdk/env`            | `parseRequired`, `parseOptional`, `parsePort`, `parseStellarPublicKey`, `parseStellarSecretKey`, `parseContractAddress`, `parseHexKey`, `parseCommaSeparatedList`, `parseNumber` |
 
 ### Server options (charge)
@@ -372,12 +372,12 @@ await close({
 
 Example `.env` files are provided for each demo:
 
-| File                                    | Purpose                                              |
-| --------------------------------------- | ---------------------------------------------------- |
-| `examples/.env.charge-server.example`   | Charge server (recipient key, security settings)     |
-| `examples/.env.charge-client.example`   | Charge client (secret key, server URL)               |
-| `examples/.env.channel-server.example`  | Channel server (contract, commitment key, security)  |
-| `examples/.env.channel-client.example`  | Channel client (commitment secret, server URL)       |
+| File                                   | Purpose                                             |
+| -------------------------------------- | --------------------------------------------------- |
+| `examples/.env.charge-server.example`  | Charge server (recipient key, security settings)    |
+| `examples/.env.charge-client.example`  | Charge client (secret key, server URL)              |
+| `examples/.env.channel-server.example` | Channel server (contract, commitment key, security) |
+| `examples/.env.channel-client.example` | Channel client (commitment secret, server URL)      |
 
 Copy the relevant `.example` file, remove the `.example` suffix, and fill in your values.
 
