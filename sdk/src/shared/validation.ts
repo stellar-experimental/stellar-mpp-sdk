@@ -1,6 +1,8 @@
+import { StellarMppError } from './errors.js'
+
 export function validateHexSignature(hex: string, expectedLength: number = 128): void {
   if (!/^[0-9a-f]+$/i.test(hex) || hex.length % 2 !== 0 || hex.length !== expectedLength) {
-    throw new Error(
+    throw new StellarMppError(
       `Invalid signature: expected ${expectedLength} hex characters, got ${hex.length}`,
     )
   }
@@ -8,6 +10,6 @@ export function validateHexSignature(hex: string, expectedLength: number = 128):
 
 export function validateAmount(amount: string): void {
   if (!/^\d+$/.test(amount)) {
-    throw new Error(`Invalid amount: "${amount}" must be a non-negative integer string`)
+    throw new StellarMppError(`Invalid amount: "${amount}" must be a non-negative integer string`)
   }
 }

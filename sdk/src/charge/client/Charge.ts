@@ -23,6 +23,7 @@ import {
 } from '../../constants.js'
 import * as Methods from '../Methods.js'
 import { fromBaseUnits } from '../Methods.js'
+import { StellarMppError } from '../../shared/errors.js'
 import { resolveKeypair } from '../../shared/keypairs.js'
 import { pollTransaction } from '../../shared/poll.js'
 import {
@@ -72,7 +73,7 @@ export function charge(parameters: charge.Parameters) {
   } = parameters
 
   if (!keypairParam && !secretKey) {
-    throw new Error('Either keypair or secretKey must be provided.')
+    throw new StellarMppError('Either keypair or secretKey must be provided.')
   }
 
   const keypair = keypairParam ?? resolveKeypair(secretKey!)
@@ -105,7 +106,7 @@ export function charge(parameters: charge.Parameters) {
       const isServerSponsored = request.methodDetails?.feePayer === true
 
       if (isServerSponsored && effectiveMode === 'push') {
-        throw new Error(
+        throw new StellarMppError(
           'Push mode is not supported for server-sponsored transactions. ' +
             "The server must submit sponsored transactions. Use mode: 'pull' (default).",
         )

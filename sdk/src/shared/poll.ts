@@ -5,6 +5,7 @@ import {
   DEFAULT_POLL_JITTER_MS,
   DEFAULT_POLL_TIMEOUT_MS,
 } from './defaults.js'
+import { StellarMppError } from './errors.js'
 
 export class PollTimeoutError extends Error {
   constructor(message: string) {
@@ -56,7 +57,7 @@ export async function pollTransaction(
     }
 
     if (result.status === 'FAILED') {
-      throw new Error(`Transaction ${hash} failed: ${result.resultXdr ?? 'unknown error'}`)
+      throw new StellarMppError(`Transaction ${hash} failed: ${result.resultXdr ?? 'unknown error'}`)
     }
 
     attempts++

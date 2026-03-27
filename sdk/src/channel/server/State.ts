@@ -1,5 +1,6 @@
 import { Address, Contract, TransactionBuilder, rpc, xdr } from '@stellar/stellar-sdk'
 import { NETWORK_PASSPHRASE, SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
+import { StellarMppError } from '../../shared/errors.js'
 import { scValToBigInt } from '../../shared/scval.js'
 
 // ---------------------------------------------------------------------------
@@ -76,7 +77,7 @@ export async function getChannelState(
     const result = await server.simulateTransaction(tx)
     if (!rpc.Api.isSimulationSuccess(result)) {
       const errorMsg = 'error' in result ? String(result.error) : 'unknown'
-      throw new Error(`Failed to simulate ${fnName} on channel ${channelAddress}: ${errorMsg}`)
+      throw new StellarMppError(`Failed to simulate ${fnName} on channel ${channelAddress}: ${errorMsg}`)
     }
     return result.result?.retval
   }
@@ -92,7 +93,7 @@ export async function getChannelState(
 
   const balance = scValToBigInt(balanceVal!)
   if (!waitingPeriodVal) {
-    throw new Error(
+    throw new StellarMppError(
       `Failed to simulate refund_waiting_period on channel ${channelAddress}: missing return value`,
     )
   }

@@ -3,6 +3,7 @@ import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
 import { NETWORK_PASSPHRASE, SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
 import { DEFAULT_SIMULATION_TIMEOUT_MS } from '../../shared/defaults.js'
+import { StellarMppError } from '../../shared/errors.js'
 import { simulateCall } from '../../shared/simulate.js'
 import { channel as ChannelMethod } from '../Methods.js'
 
@@ -39,7 +40,7 @@ export function channel(parameters: channel.Parameters) {
   } = parameters
 
   if (!commitmentKeyParam && !commitmentSecret) {
-    throw new Error('Either commitmentKey or commitmentSecret must be provided.')
+    throw new StellarMppError('Either commitmentKey or commitmentSecret must be provided.')
   }
 
   const commitmentKey = commitmentKeyParam ?? Keypair.fromSecret(commitmentSecret!)
@@ -66,7 +67,7 @@ export function channel(parameters: channel.Parameters) {
       // (first payment). The caller must also provide the signed open tx XDR.
       if (action === 'open') {
         if (!context?.openTransaction) {
-          throw new Error('openTransaction is required when action is "open".')
+          throw new StellarMppError('openTransaction is required when action is "open".')
         }
       }
 
@@ -109,7 +110,7 @@ export function channel(parameters: channel.Parameters) {
       // Extract the commitment bytes from the simulation result
       const returnValue = simResult.result?.retval
       if (!returnValue) {
-        throw new Error('prepare_commitment returned no value')
+        throw new StellarMppError('prepare_commitment returned no value')
       }
 
       const commitmentBytes = returnValue.bytes()

@@ -167,7 +167,7 @@ export function channel(parameters: channel.Parameters) {
       const replayKey = `stellar:channel:challenge:${challenge.id}`
       const existing = await store.get(replayKey)
       if (existing) {
-        throw new Error('Challenge already used. Replay rejected.')
+        throw new ChannelVerificationError('Challenge already used. Replay rejected.', { channel: channelAddress })
       }
       await store.put(replayKey, { usedAt: new Date().toISOString() })
     }
@@ -192,9 +192,10 @@ export function channel(parameters: channel.Parameters) {
     // our view of the channel without requiring a background poller.
     if (checkOnChainState) {
       if (!sourceAccount) {
-        throw new Error(
+        throw new ChannelVerificationError(
           'checkOnChainState requires sourceAccount to be set. ' +
             'Provide a funded Stellar account address (G...) to use for on-chain simulations.',
+          { channel: channelAddress },
         )
       }
       try {
