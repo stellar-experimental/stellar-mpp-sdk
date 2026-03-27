@@ -115,7 +115,6 @@ export function charge(parameters: charge.Parameters) {
         )
       }
 
-      // Gap #4: Derive ledger expiration from challenge.expires instead of timeout
       const expiresTimestamp: number | undefined = challenge.expires
         ? Math.floor(new Date(challenge.expires).getTime() / 1000)
         : undefined
@@ -138,7 +137,6 @@ export function charge(parameters: charge.Parameters) {
           networkPassphrase,
         }).addOperation(transferOp)
 
-        // Gap #5: Set timeBounds.maxTime to expires timestamp
         if (expiresTimestamp) {
           sponsoredBuilder.setTimebounds(0, expiresTimestamp)
         } else {
@@ -148,7 +146,6 @@ export function charge(parameters: charge.Parameters) {
         const unsignedTx = sponsoredBuilder.build()
         const prepared = await server.prepareTransaction(unsignedTx)
 
-        // Gap #4: Derive auth-entry expiry from challenge.expires
         const latestLedger = await server.getLatestLedger()
         let validUntilLedger: number
         if (expiresTimestamp) {
@@ -190,7 +187,6 @@ export function charge(parameters: charge.Parameters) {
         const signedXdr = prepared.toEnvelope().toXDR('base64')
         onProgress?.({ type: 'signed', transaction: signedXdr })
 
-        // Gap #14: Add DID-PKH source field (derived from resolved network for consistency)
         const didComponent = network === 'public' ? 'pubnet' : network
         const source = `did:pkh:stellar:${didComponent}:${keypair.publicKey()}`
 
@@ -218,7 +214,6 @@ export function charge(parameters: charge.Parameters) {
         networkPassphrase,
       }).addOperation(transferOp)
 
-      // Gap #5: Set timeBounds.maxTime to expires timestamp for unsponsored path
       if (expiresTimestamp) {
         builder.setTimebounds(0, expiresTimestamp)
       } else {
@@ -236,7 +231,6 @@ export function charge(parameters: charge.Parameters) {
       const signedXdr = prepared.toXDR()
       onProgress?.({ type: 'signed', transaction: signedXdr })
 
-      // Gap #14: Add DID-PKH source field (derived from resolved network for consistency)
       const didComponent = network === 'public' ? 'pubnet' : network
       const source = `did:pkh:stellar:${didComponent}:${keypair.publicKey()}`
 

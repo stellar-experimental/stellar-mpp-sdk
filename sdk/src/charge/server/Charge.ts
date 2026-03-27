@@ -174,7 +174,6 @@ export function charge(parameters: charge.Parameters) {
         const tx =
           parsed instanceof FeeBumpTransaction ? parsed.innerTransaction : (parsed as Transaction)
 
-        // Gap #13: Exactly one invokeHostFunction operation
         verifyExactlyOneInvokeOp(tx)
 
         verifySacInvocation(tx, {
@@ -205,9 +204,6 @@ export function charge(parameters: charge.Parameters) {
         if (signerKeypair && tx.source === ALL_ZEROS) {
           // ── Sponsored path ──────────────────────────────────────────
 
-          // Gap #8: Auth entries MUST NOT contain subInvocations
-          // Gap #9: Auth entry expiration MUST NOT exceed max ledger
-          // Gap #10: Server address MUST NOT appear in auth entries
           await validateAuthEntries(tx, signerKeypair.publicKey(), expiresTimestamp)
 
           // Rebuild the tx with the signer's account as source
@@ -229,7 +225,6 @@ export function charge(parameters: charge.Parameters) {
           }
           const rebuiltTx = rebuilt.setSorobanData(sorobanData).build()
 
-          // Gap #6 & #7: Pre-submission simulation + re-simulation after rebuild
           await simulateAndValidateTransfer(
             rebuiltTx,
             expectedAmount,
@@ -243,7 +238,6 @@ export function charge(parameters: charge.Parameters) {
         } else {
           // ── Unsponsored path ────────────────────────────────────────
 
-          // Gap #11: timeBounds.maxTime MUST NOT exceed expires
           if (expiresTimestamp && tx.timeBounds) {
             const maxTime = parseInt(tx.timeBounds.maxTime, 10)
             if (maxTime > expiresTimestamp) {
@@ -257,7 +251,6 @@ export function charge(parameters: charge.Parameters) {
             }
           }
 
-          // Gap #6: Pre-submission simulation
           await simulateAndValidateTransfer(
             tx,
             expectedAmount,
@@ -277,7 +270,6 @@ export function charge(parameters: charge.Parameters) {
         }
 
         // ── Settlement ──────────────────────────────────────────────
-        // Gap #12: Use SettlementError for broadcast/confirmation failures
         let sendResult: rpc.Api.SendTransactionResponse
         try {
           logger.debug('[stellar:charge] Broadcasting tx')
@@ -324,7 +316,6 @@ export function charge(parameters: charge.Parameters) {
   }
 
   // ── Simulation validation ─────────────────────────────────────────────
-  // Gap #6 & #7: Server MUST simulate before submitting; validate events
 
   async function simulateAndValidateTransfer(
     tx: Transaction,
@@ -343,7 +334,7 @@ export function charge(parameters: charge.Parameters) {
           { simulationError: error.simulationError },
         )
       }
-      // Timeout and network errors bubble up as-is (Gap #17: RPC unavailability → 5xx)
+      // Timeout and network errors bubble up as-is
       throw error
     }
 
@@ -402,7 +393,6 @@ export function charge(parameters: charge.Parameters) {
 
         const addressCred = credentials.address()
 
-        // Gap #10: Server's address MUST NOT appear in auth entries
         const entryAddress = Address.fromScAddress(addressCred.address())
         if (entryAddress.toString() === serverAddress.toString()) {
           throw new PaymentVerificationError(
@@ -411,7 +401,6 @@ export function charge(parameters: charge.Parameters) {
           )
         }
 
-        // Gap #9: Expiration MUST NOT exceed maxLedger
         if (maxLedger !== undefined) {
           const entryExpiration = addressCred.signatureExpirationLedger()
           if (entryExpiration > maxLedger) {
@@ -425,7 +414,6 @@ export function charge(parameters: charge.Parameters) {
           }
         }
 
-        // Gap #8: MUST NOT contain subInvocations
         const rootInvocation = entry.rootInvocation()
         if (rootInvocation.subInvocations().length > 0) {
           throw new PaymentVerificationError(
@@ -442,7 +430,6 @@ export function charge(parameters: charge.Parameters) {
 // Verification helpers
 // ---------------------------------------------------------------------------
 
-// Gap #13: Transaction MUST contain exactly one invokeHostFunction operation
 function verifyExactlyOneInvokeOp(tx: Transaction) {
   const invokeOps = tx.operations.filter((op) => op.type === 'invokeHostFunction')
 
@@ -622,7 +609,7 @@ function validateSimulationEvents(
     )
   }
 
-  // Server address must not be involved in transfers (Gap #10 reinforcement)
+  // Server address must not be involved in transfers
   if (serverAddress) {
     const serverInvolved = transferEvents.some(
       (t) => t.from === serverAddress || t.to === serverAddress,
