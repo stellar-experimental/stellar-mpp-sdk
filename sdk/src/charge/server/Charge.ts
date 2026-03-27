@@ -35,6 +35,9 @@ import {
   DEFAULT_SIMULATION_TIMEOUT_MS,
 } from '../../shared/defaults.js'
 
+const LOG_PREFIX = '[stellar:charge]'
+const STORE_PREFIX = 'stellar:charge'
+
 export function charge(parameters: charge.Parameters) {
   const {
     currency,
@@ -97,12 +100,10 @@ export function charge(parameters: charge.Parameters) {
     const { request: challengeRequest } = challenge
 
     if (store) {
-      const key = `stellar:charge:challenge:${challenge.id}`
+      const key = `${STORE_PREFIX}:challenge:${challenge.id}`
       const existing = await store.get(key)
       if (existing) {
-        throw new PaymentVerificationError(
-          '[stellar:charge] Challenge already used. Replay rejected.',
-        )
+        throw new PaymentVerificationError(`${LOG_PREFIX} Challenge already used. Replay rejected.`)
       }
       await store.put(key, { usedAt: new Date().toISOString() })
     }
@@ -122,15 +123,15 @@ export function charge(parameters: charge.Parameters) {
         // early, but only mark as used AFTER successful verification to
         // avoid permanently burning a hash on transient failures.
         if (store) {
-          const hashKey = `stellar:charge:hash:${hash}`
+          const hashKey = `${STORE_PREFIX}:hash:${hash}`
           const hashUsed = await store.get(hashKey)
           if (hashUsed) {
-            logger.warn('[stellar:charge] Verification failed', {
+            logger.warn(`${LOG_PREFIX} Verification failed`, {
               error: 'Transaction hash already used',
               hash,
             })
             throw new PaymentVerificationError(
-              '[stellar:charge] Transaction hash already used. Replay rejected.',
+              `${LOG_PREFIX} Transaction hash already used. Replay rejected.`,
               {
                 hash,
               },
@@ -156,7 +157,7 @@ export function charge(parameters: charge.Parameters) {
 
         // Mark tx hash as used only after successful verification
         if (store) {
-          await store.put(`stellar:charge:hash:${hash}`, { usedAt: new Date().toISOString() })
+          await store.put(`${STORE_PREFIX}:hash:${hash}`, { usedAt: new Date().toISOString() })
         }
 
         return Receipt.from({
@@ -187,11 +188,11 @@ export function charge(parameters: charge.Parameters) {
           | FeeBumpTransaction
 
         if (!signerKeypair && tx.source === ALL_ZEROS) {
-          logger.warn('[stellar:charge] Verification failed', {
+          logger.warn(`${LOG_PREFIX} Verification failed`, {
             error: 'Sponsored source without signer',
           })
           throw new PaymentVerificationError(
-            '[stellar:charge] Transaction uses a sponsored source account but the server is not configured with a signer.',
+            `${LOG_PREFIX} Transaction uses a sponsored source account but the server is not configured with a signer.`,
             {},
           )
         }
@@ -207,7 +208,7 @@ export function charge(parameters: charge.Parameters) {
           await validateAuthEntries(tx, signerKeypair.publicKey(), expiresTimestamp)
 
           // Rebuild the tx with the signer's account as source
-          logger.debug('[stellar:charge] Rebuilding sponsored tx...')
+          logger.debug(`${LOG_PREFIX} Rebuilding sponsored tx...`)
           const serverAccount = await server.getAccount(signerKeypair.publicKey())
           const envelopeTx = tx.toEnvelope().v1().tx()
           const sorobanData = envelopeTx.ext().sorobanData()
@@ -242,7 +243,7 @@ export function charge(parameters: charge.Parameters) {
             const maxTime = parseInt(tx.timeBounds.maxTime, 10)
             if (maxTime > expiresTimestamp) {
               throw new PaymentVerificationError(
-                '[stellar:charge] Transaction timeBounds.maxTime exceeds challenge expires.',
+                `${LOG_PREFIX} Transaction timeBounds.maxTime exceeds challenge expires.`,
                 {
                   maxTime,
                   expires: expiresTimestamp,
@@ -262,7 +263,7 @@ export function charge(parameters: charge.Parameters) {
 
         // ── Fee bump wrapping ───────────────────────────────────────
         if (feeBumpKeypair) {
-          logger.debug('[stellar:charge] Fee bump wrapping')
+          logger.debug(`${LOG_PREFIX} Fee bump wrapping`)
           txToSubmit = wrapFeeBump(txToSubmit, feeBumpKeypair, {
             networkPassphrase,
             maxFeeStroops: maxFeeBumpStroops,
@@ -272,12 +273,12 @@ export function charge(parameters: charge.Parameters) {
         // ── Settlement ──────────────────────────────────────────────
         let sendResult: rpc.Api.SendTransactionResponse
         try {
-          logger.debug('[stellar:charge] Broadcasting tx')
+          logger.debug(`${LOG_PREFIX} Broadcasting tx`)
           sendResult = await server.sendTransaction(txToSubmit)
-          logger.debug('[stellar:charge] Broadcasting tx', { hash: sendResult.hash })
+          logger.debug(`${LOG_PREFIX} Broadcasting tx`, { hash: sendResult.hash })
         } catch (error) {
           throw new SettlementError(
-            '[stellar:charge] Settlement failed: could not broadcast transaction.',
+            `${LOG_PREFIX} Settlement failed: could not broadcast transaction.`,
             {
               details: error instanceof Error ? error.message : String(error),
             },
@@ -291,13 +292,10 @@ export function charge(parameters: charge.Parameters) {
             timeoutMs: pollTimeoutMs,
           })
         } catch (error) {
-          throw new SettlementError(
-            '[stellar:charge] Settlement failed: transaction not confirmed.',
-            {
-              hash: sendResult.hash,
-              details: error instanceof Error ? error.message : String(error),
-            },
-          )
+          throw new SettlementError(`${LOG_PREFIX} Settlement failed: transaction not confirmed.`, {
+            hash: sendResult.hash,
+            details: error instanceof Error ? error.message : String(error),
+          })
         }
 
         return Receipt.from({
@@ -330,7 +328,7 @@ export function charge(parameters: charge.Parameters) {
     } catch (error) {
       if (error instanceof SimulationContractError) {
         throw new PaymentVerificationError(
-          `[stellar:charge] Pre-submission simulation failed: ${error.simulationError}`,
+          `${LOG_PREFIX} Pre-submission simulation failed: ${error.simulationError}`,
           { simulationError: error.simulationError },
         )
       }
@@ -396,7 +394,7 @@ export function charge(parameters: charge.Parameters) {
         const entryAddress = Address.fromScAddress(addressCred.address())
         if (entryAddress.toString() === serverAddress.toString()) {
           throw new PaymentVerificationError(
-            '[stellar:charge] Server address must not appear in client auth entries.',
+            `${LOG_PREFIX} Server address must not appear in client auth entries.`,
             { serverAddress: serverPublicKey },
           )
         }
@@ -405,7 +403,7 @@ export function charge(parameters: charge.Parameters) {
           const entryExpiration = addressCred.signatureExpirationLedger()
           if (entryExpiration > maxLedger) {
             throw new PaymentVerificationError(
-              '[stellar:charge] Auth entry expiration exceeds maximum allowed ledger.',
+              `${LOG_PREFIX} Auth entry expiration exceeds maximum allowed ledger.`,
               {
                 entryExpiration,
                 maxLedger,
@@ -417,7 +415,7 @@ export function charge(parameters: charge.Parameters) {
         const rootInvocation = entry.rootInvocation()
         if (rootInvocation.subInvocations().length > 0) {
           throw new PaymentVerificationError(
-            '[stellar:charge] Auth entries must not contain sub-invocations.',
+            `${LOG_PREFIX} Auth entries must not contain sub-invocations.`,
             {},
           )
         }
@@ -435,13 +433,13 @@ function verifyExactlyOneInvokeOp(tx: Transaction) {
 
   if (invokeOps.length === 0) {
     throw new PaymentVerificationError(
-      '[stellar:charge] Transaction does not contain a Soroban invocation.',
+      `${LOG_PREFIX} Transaction does not contain a Soroban invocation.`,
       {},
     )
   }
   if (invokeOps.length > 1) {
     throw new PaymentVerificationError(
-      '[stellar:charge] Transaction must contain exactly one invokeHostFunction operation.',
+      `${LOG_PREFIX} Transaction must contain exactly one invokeHostFunction operation.`,
       { operationCount: invokeOps.length },
     )
   }
@@ -496,7 +494,7 @@ function verifyFromRawOps(
 
   if (!found) {
     throw new PaymentVerificationError(
-      '[stellar:charge] Transaction does not contain a matching SAC transfer invocation.',
+      `${LOG_PREFIX} Transaction does not contain a matching SAC transfer invocation.`,
       {
         currency: expected.currency,
         recipient: expected.recipient,
@@ -513,7 +511,7 @@ function verifySacTransfer(
 ) {
   if (!txResult.envelopeXdr) {
     throw new PaymentVerificationError(
-      '[stellar:charge] Transaction result is missing envelope XDR — cannot verify payment.',
+      `${LOG_PREFIX} Transaction result is missing envelope XDR — cannot verify payment.`,
       {},
     )
   }
@@ -524,7 +522,7 @@ function verifySacTransfer(
       envelope = xdr.TransactionEnvelope.fromXDR(txResult.envelopeXdr, 'base64')
     } catch (error) {
       throw new PaymentVerificationError(
-        '[stellar:charge] Could not parse transaction envelope for verification.',
+        `${LOG_PREFIX} Could not parse transaction envelope for verification.`,
         {
           details: error instanceof Error ? error.message : String(error),
         },
@@ -539,7 +537,7 @@ function verifySacTransfer(
     innerTx = new Transaction(envelope, networkPassphrase)
   } catch {
     throw new PaymentVerificationError(
-      '[stellar:charge] Could not parse transaction envelope for verification.',
+      `${LOG_PREFIX} Could not parse transaction envelope for verification.`,
       {},
     )
   }
@@ -600,7 +598,7 @@ function validateSimulationEvents(
 
   if (!matchingTransfer) {
     throw new PaymentVerificationError(
-      '[stellar:charge] Simulation events do not contain expected transfer.',
+      `${LOG_PREFIX} Simulation events do not contain expected transfer.`,
       {
         expectedRecipient,
         expectedAmount: expectedAmount.toString(),
@@ -616,7 +614,7 @@ function validateSimulationEvents(
     )
     if (serverInvolved) {
       throw new PaymentVerificationError(
-        '[stellar:charge] Server address must not be involved in transfer events.',
+        `${LOG_PREFIX} Server address must not be involved in transfer events.`,
         { serverAddress },
       )
     }
