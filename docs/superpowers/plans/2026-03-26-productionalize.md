@@ -724,9 +724,8 @@ export class Env {
     return parseNumber('RATE_LIMIT_MAX', { fallback: 100, min: 1 })
   }
 
-  static get trustProxy(): string[] {
-    const raw = parseOptional('TRUST_PROXY', 'loopback,linklocal,uniquelocal')!
-    return parseCommaSeparatedList(raw)
+  static get trustProxy(): string {
+    return parseOptional('TRUST_PROXY', 'loopback,linklocal,uniquelocal')!
   }
 }
 ```
@@ -793,9 +792,8 @@ export class Env {
     return parseNumber('RATE_LIMIT_MAX', { fallback: 100, min: 1 })
   }
 
-  static get trustProxy(): string[] {
-    const raw = parseOptional('TRUST_PROXY', 'loopback,linklocal,uniquelocal')!
-    return parseCommaSeparatedList(raw)
+  static get trustProxy(): string {
+    return parseOptional('TRUST_PROXY', 'loopback,linklocal,uniquelocal')!
   }
 }
 ```
