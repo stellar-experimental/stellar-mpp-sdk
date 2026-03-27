@@ -710,7 +710,7 @@ export async function close(parameters: {
 
   const account = await server.getAccount(signer.publicKey())
   const tx = new TransactionBuilder(account, {
-    fee: '100',
+    fee: DEFAULT_FEE,
     networkPassphrase,
   })
     .addOperation(closeOp)
