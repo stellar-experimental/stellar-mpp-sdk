@@ -27,7 +27,8 @@ import { resolveKeypair } from '../../shared/keypairs.js'
 import { noopLogger, type Logger } from '../../shared/logger.js'
 import { pollTransaction } from '../../shared/poll.js'
 import { toBaseUnits } from '../../shared/units.js'
-import { validateHexSignature } from '../../shared/validation.js'
+import { simulateCall } from '../../shared/simulate.js'
+import { validateAmount, validateHexSignature } from '../../shared/validation.js'
 import { channel as ChannelMethod } from '../Methods.js'
 import { getChannelState, type ChannelState } from './State.js'
 
@@ -181,6 +182,7 @@ export function channel(parameters: channel.Parameters) {
     // NM-001 (voucher/close): closed and replay checks are now applied
     // earlier in doVerify() for all actions including 'open'.
 
+    validateAmount(payload.amount)
     const commitmentAmount = BigInt(payload.amount)
     const signatureHex = payload.signature
 
@@ -290,6 +292,7 @@ export function channel(parameters: channel.Parameters) {
     }
 
     // Reject zero or negative requested amounts
+    validateAmount(challengeRequest.amount)
     const requestedAmount = BigInt(challengeRequest.amount)
     if (requestedAmount <= 0n) {
       logger.warn('[stellar:channel] Non-positive requested amount', {
@@ -351,17 +354,7 @@ export function channel(parameters: channel.Parameters) {
       .setTimeout(simulationTimeoutMs / 1000)
       .build()
 
-    const simResult = await server.simulateTransaction(simTx)
-
-    if (!rpc.Api.isSimulationSuccess(simResult)) {
-      logger.warn('[stellar:channel] prepare_commitment simulation failed')
-      throw new ChannelVerificationError(
-        '[stellar:channel] Failed to simulate prepare_commitment for verification.',
-        {
-          error: 'error' in simResult ? String(simResult.error) : 'unknown',
-        },
-      )
-    }
+    const simResult = await simulateCall(server, simTx, { timeoutMs: simulationTimeoutMs })
 
     const returnValue = simResult.result?.retval
     if (!returnValue) {
@@ -511,11 +504,13 @@ export function channel(parameters: channel.Parameters) {
       )
     }
 
+    validateAmount(amount)
     const commitmentAmount = BigInt(amount)
     const signatureBytes = Buffer.from(signatureHex, 'hex')
 
     // Enforce amount invariants: both the commitment and the requested amount
     // must be positive, and the commitment must cover the requested amount.
+    validateAmount(challenge.request.amount)
     const requestedAmount = BigInt(challenge.request.amount)
     if (requestedAmount <= 0n) {
       throw new ChannelVerificationError(
@@ -571,16 +566,7 @@ export function channel(parameters: channel.Parameters) {
       .setTimeout(simulationTimeoutMs / 1000)
       .build()
 
-    const simResult = await server.simulateTransaction(simTx)
-
-    if (!rpc.Api.isSimulationSuccess(simResult)) {
-      throw new ChannelVerificationError(
-        '[stellar:channel] Failed to simulate prepare_commitment for open verification.',
-        {
-          error: 'error' in simResult ? String(simResult.error) : 'unknown',
-        },
-      )
-    }
+    const simResult = await simulateCall(server, simTx, { timeoutMs: simulationTimeoutMs })
 
     const returnValue = simResult.result?.retval
     if (!returnValue) {

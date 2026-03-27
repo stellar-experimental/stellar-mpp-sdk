@@ -36,7 +36,7 @@ export async function simulateCall(
   rpcServer: rpc.Server,
   tx: unknown,
   opts: SimulateOptions = {},
-): Promise<rpc.Api.SimulateTransactionResponse> {
+): Promise<rpc.Api.SimulateTransactionSuccessResponse> {
   const { timeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS } = opts
 
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -59,6 +59,7 @@ export async function simulateCall(
 
     return result
   } catch (err) {
+    clearTimeout(timer)
     if (err instanceof SimulationContractError || err instanceof SimulationTimeoutError) {
       throw err
     }

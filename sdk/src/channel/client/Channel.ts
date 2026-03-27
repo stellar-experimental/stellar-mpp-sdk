@@ -3,6 +3,7 @@ import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
 import { NETWORK_PASSPHRASE, SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
 import { DEFAULT_SIMULATION_TIMEOUT_MS } from '../../shared/defaults.js'
+import { simulateCall } from '../../shared/simulate.js'
 import { channel as ChannelMethod } from '../Methods.js'
 
 /**
@@ -103,15 +104,7 @@ export function channel(parameters: channel.Parameters) {
         .setTimeout(simulationTimeoutMs / 1000)
         .build()
 
-      const simResult = await server.simulateTransaction(simTx)
-
-      if (!rpc.Api.isSimulationSuccess(simResult)) {
-        throw new Error(
-          `Failed to simulate prepare_commitment: ${
-            'error' in simResult ? simResult.error : 'unknown error'
-          }`,
-        )
-      }
+      const simResult = await simulateCall(server, simTx, { timeoutMs: simulationTimeoutMs })
 
       // Extract the commitment bytes from the simulation result
       const returnValue = simResult.result?.retval
