@@ -120,3 +120,88 @@ describe('credential type validation', () => {
     expect(serialized).toContain('Payment')
   })
 })
+
+describe('spec compliance: credential structure', () => {
+  it('source is a top-level credential field, not inside payload', () => {
+    const challenge = mockChallenge()
+    const source = `did:pkh:stellar:testnet:${SENDER.publicKey()}`
+
+    const serialized = Credential.serialize({
+      challenge,
+      payload: { type: 'transaction' as const, transaction: 'AAAA' },
+      source,
+    })
+
+    const deserialized = Credential.deserialize(serialized)
+
+    expect(deserialized.source).toBe(source)
+
+    const payload = deserialized.payload as Record<string, unknown>
+    expect(payload.source).toBeUndefined()
+  })
+
+  it('source roundtrips through serialize/deserialize for hash type', () => {
+    const challenge = mockChallenge()
+    const source = `did:pkh:stellar:testnet:${SENDER.publicKey()}`
+
+    const serialized = Credential.serialize({
+      challenge,
+      payload: { type: 'hash' as const, hash: 'tx-hash-abc' },
+      source,
+    })
+
+    const deserialized = Credential.deserialize(serialized)
+    expect(deserialized.source).toBe(source)
+
+    const payload = deserialized.payload as Record<string, unknown>
+    expect(payload.source).toBeUndefined()
+    expect(payload.type).toBe('hash')
+    expect(payload.hash).toBe('tx-hash-abc')
+  })
+
+  it('credential without source omits the field entirely', () => {
+    const challenge = mockChallenge()
+
+    const serialized = Credential.serialize({
+      challenge,
+      payload: { type: 'transaction' as const, transaction: 'AAAA' },
+    })
+
+    const deserialized = Credential.deserialize(serialized)
+    expect(deserialized.source).toBeUndefined()
+  })
+
+  it('source follows DID-PKH format for Stellar', () => {
+    const kp = Keypair.random()
+    const source = `did:pkh:stellar:testnet:${kp.publicKey()}`
+
+    expect(source).toMatch(/^did:pkh:stellar:(testnet|pubnet):G[A-Z2-7]{55}$/)
+  })
+
+  it('payload.type discriminator is preserved without source contamination', () => {
+    const challenge = mockChallenge()
+    const source = `did:pkh:stellar:testnet:${SENDER.publicKey()}`
+
+    const txSerialized = Credential.serialize({
+      challenge,
+      payload: { type: 'transaction' as const, transaction: 'AAAA' },
+      source,
+    })
+    const txDeserialized = Credential.deserialize(txSerialized)
+    const txPayload = txDeserialized.payload as { type: string; transaction?: string }
+    expect(txPayload.type).toBe('transaction')
+    expect(txPayload.transaction).toBe('AAAA')
+    expect(Object.keys(txPayload).sort()).toEqual(['transaction', 'type'])
+
+    const hashSerialized = Credential.serialize({
+      challenge,
+      payload: { type: 'hash' as const, hash: 'deadbeef' },
+      source,
+    })
+    const hashDeserialized = Credential.deserialize(hashSerialized)
+    const hashPayload = hashDeserialized.payload as { type: string; hash?: string }
+    expect(hashPayload.type).toBe('hash')
+    expect(hashPayload.hash).toBe('deadbeef')
+    expect(Object.keys(hashPayload).sort()).toEqual(['hash', 'type'])
+  })
+})

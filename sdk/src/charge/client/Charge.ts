@@ -200,7 +200,8 @@ export function charge(parameters: charge.Parameters) {
 
         return Credential.serialize({
           challenge,
-          payload: { type: 'transaction' as const, transaction: signedXdr, source },
+          payload: { type: 'transaction' as const, transaction: signedXdr },
+          source,
         })
       }
 
@@ -264,14 +265,16 @@ export function charge(parameters: charge.Parameters) {
 
         return Credential.serialize({
           challenge,
-          payload: { type: 'hash' as const, hash: result.hash, source },
+          payload: { type: 'hash' as const, hash: result.hash },
+          source,
         })
       }
 
       // Pull mode: send signed XDR for server to broadcast
       return Credential.serialize({
         challenge,
-        payload: { type: 'transaction' as const, transaction: signedXdr, source },
+        payload: { type: 'transaction' as const, transaction: signedXdr },
+        source,
       })
     },
   })
