@@ -3,7 +3,7 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .claude/
-!.claude/commands/
+!.claude/skills/
 package-lock.json
 .env
 examples/.env.*
