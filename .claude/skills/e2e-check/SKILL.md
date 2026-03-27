@@ -35,14 +35,14 @@ done
 
 **Pass criteria per script:**
 
-| Script | Expected |
-|--------|----------|
-| `examples/server.ts` | Starts Express on port 3000 (pino JSON log) |
-| `examples/client.ts` | Loads keypair, starts client |
-| `examples/channel-server.ts` | Starts Express on port 3001 (pino JSON log) |
-| `examples/channel-client.ts` | Loads commitment key, starts client |
-| `examples/channel-open.ts` | Env validation error: `OPEN_TX_XDR is required` (expected) |
-| `examples/channel-close.ts` | Env validation error: `CHANNEL_CONTRACT is required` (expected) |
+| Script                       | Expected                                                        |
+| ---------------------------- | --------------------------------------------------------------- |
+| `examples/server.ts`         | Starts Express on port 3000 (pino JSON log)                     |
+| `examples/client.ts`         | Loads keypair, starts client                                    |
+| `examples/channel-server.ts` | Starts Express on port 3001 (pino JSON log)                     |
+| `examples/channel-client.ts` | Loads commitment key, starts client                             |
+| `examples/channel-open.ts`   | Env validation error: `OPEN_TX_XDR is required` (expected)      |
+| `examples/channel-close.ts`  | Env validation error: `CHANNEL_CONTRACT is required` (expected) |
 
 **Fail:** Any import error, syntax error, or module-not-found error.
 
@@ -54,6 +54,7 @@ STELLAR_RECIPIENT="$STELLAR_RECIPIENT" STELLAR_SECRET="$STELLAR_SECRET" timeout 
 ```
 
 **Expected flow:**
+
 1. Server starts on port 3000 with pino JSON logging
 2. Client receives 402 Payment Required challenge
 3. Client signs SAC transfer transaction
@@ -70,6 +71,7 @@ CHANNEL_CONTRACT="$CHANNEL_CONTRACT" COMMITMENT_PUBKEY="$COMMITMENT_PUBKEY" COMM
 ```
 
 **Expected flow:**
+
 1. Channel server starts on port 3001 with pino JSON logging
 2. Client makes 2 requests, signing cumulative commitments off-chain
 3. Request 1: cumulative 1,000,000 stroops -> **200 OK**
@@ -92,10 +94,10 @@ CHANNEL_CONTRACT="$CHANNEL_CONTRACT" COMMITMENT_PUBKEY="$COMMITMENT_PUBKEY" COMM
 
 After running all checks, report:
 
-| Check | Status | Notes |
-|-------|--------|-------|
-| `make check` (full pipeline) | PASS/FAIL | test count, any errors |
-| Example script validation (6 scripts) | PASS/FAIL | which scripts failed |
-| Charge E2E (`demo/run.sh`) | PASS/FAIL | final HTTP status |
-| Channel E2E (`demo/run-channel.sh`) | PASS/FAIL | request count, cumulative amounts |
-| Channel E2E settlement (`demo/run-channel-e2e.sh`) | TODO | requires WASM file |
+| Check                                              | Status    | Notes                             |
+| -------------------------------------------------- | --------- | --------------------------------- |
+| `make check` (full pipeline)                       | PASS/FAIL | test count, any errors            |
+| Example script validation (6 scripts)              | PASS/FAIL | which scripts failed              |
+| Charge E2E (`demo/run.sh`)                         | PASS/FAIL | final HTTP status                 |
+| Channel E2E (`demo/run-channel.sh`)                | PASS/FAIL | request count, cumulative amounts |
+| Channel E2E settlement (`demo/run-channel-e2e.sh`) | TODO      | requires WASM file                |
