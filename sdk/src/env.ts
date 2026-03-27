@@ -1,6 +1,6 @@
 export function parseRequired(name: string): string {
   const value = process.env[name]
-  if (!value) {
+  if (value === undefined || value === '') {
     throw new Error(`${name} is required`)
   }
   return value
@@ -14,7 +14,7 @@ export function parseOptional(name: string, fallback?: string): string | undefin
 
 export function parsePort(name: string = 'PORT', fallback?: number): number {
   const raw = process.env[name]
-  if (!raw) {
+  if (raw === undefined || raw === '') {
     if (fallback !== undefined) return fallback
     throw new Error(`${name} is required`)
   }
@@ -70,7 +70,7 @@ export function parseNumber(
   opts?: { min?: number; max?: number; fallback?: number },
 ): number {
   const raw = process.env[name]
-  if (!raw) {
+  if (raw === undefined || raw === '') {
     if (opts?.fallback !== undefined) return opts.fallback
     throw new Error(`${name} is required`)
   }

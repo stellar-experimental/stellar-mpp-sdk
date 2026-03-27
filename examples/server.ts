@@ -92,8 +92,8 @@ app.post('/demo/pay', async (req, res) => {
     res.status(response.status).json({ status: response.status, data, events })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
-    const stack = err instanceof Error ? err.stack : undefined
-    res.status(500).json({ error: message, stack })
+    console.error('POST /demo/pay error:', err)
+    res.status(500).json({ error: message })
   }
 })
 
