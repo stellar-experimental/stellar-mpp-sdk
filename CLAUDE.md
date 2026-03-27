@@ -20,6 +20,10 @@ pnpm run check:types    # Type-check only (tsc --noEmit)
 pnpm test               # Run vitest (watch mode)
 pnpm test -- --run      # Run tests once without watch
 pnpm test -- sdk/src/client/Charge.test.ts   # Run a single test file
+make help               # Show all Makefile targets
+make check              # Run full quality pipeline (mirrors CI)
+pnpm run lint           # Run ESLint
+pnpm run format:check   # Check Prettier formatting
 ```
 
 ## Verification Checklist
@@ -115,6 +119,8 @@ Methods.ts (Zod schema) → client/ (create credentials) + server/ (verify crede
 | `sdk/src/channel/server/Channel.ts` | Verifies commitment signatures via contract simulation; `open` action broadcasts the deploy tx and initialises cumulative store    |
 | `sdk/src/channel/server/State.ts`   | Queries on-chain channel state (balance, close status, refund period)                                                              |
 | `sdk/src/channel/server/Watcher.ts` | Polls for contract events (close, refund, top_up)                                                                                  |
+| `sdk/src/env.ts`                    | Stellar-aware env parsing primitives (parsePort, parseStellarPublicKey, etc.)                                                      |
+| `examples/config/*.ts`              | Per-example Env classes using env primitives                                                                                       |
 
 ### Subpath Exports
 
@@ -126,6 +132,7 @@ Package.json exports allow selective imports to avoid bundling unused code:
 - `stellar-mpp-sdk/channel` — channel schema
 - `stellar-mpp-sdk/channel/client` — channel client
 - `stellar-mpp-sdk/channel/server` — channel server
+- `stellar-mpp-sdk/env` — env parsing primitives
 
 ### Key Patterns
 
@@ -133,9 +140,18 @@ Package.json exports allow selective imports to avoid bundling unused code:
 - **Serialization locks**: Both Charge and Channel servers use Promise-based locks (`let verifyLock: Promise<unknown> = Promise.resolve()`) to serialize verification and prevent race conditions on store get/put.
 - **Contract simulation**: Uses Soroban RPC `simulateTransaction` for read-only verification — SAC transfer validation, `prepare_commitment` for commitment bytes, and channel state queries.
 - **Zod validation**: All method schemas use Zod v4 with discriminated unions for credential/action types.
+- **Express + security headers**: Example servers use Express with helmet, CORS, and rate limiting middleware. Env vars configure CORS origins, rate limits, and trust proxy.
+- **Env parsing**: Published as `stellar-mpp-sdk/env`. Core primitives read from `process.env` with validation. Per-example `Env` classes compose these into static getters.
 
 ### Test Setup
 
 - **Vitest** with test files colocated alongside source (`*.test.ts` next to `*.ts`)
 - Tests mock `@stellar/stellar-sdk` and `mppx` internals
 - Integration test at `sdk/src/channel/integration.test.ts`
+
+### Tooling
+
+- **ESLint 9** flat config (`eslint.config.mjs`) with typescript-eslint recommended rules
+- **Prettier** for formatting (`.prettierrc`), separate from ESLint
+- **GitHub Actions** CI runs: format-check → lint → typecheck → test → build
+- **Makefile** for dev workflow (`make help` for all targets, `make check` mirrors CI)

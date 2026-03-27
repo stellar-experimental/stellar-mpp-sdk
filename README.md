@@ -81,7 +81,23 @@ Client (Funder)                 Server (Recipient)                Stellar
   |                               |  sendTransaction (close) ------->|
 ```
 
+## Prerequisites
+
+- [Node.js](https://nodejs.org/) 22+
+- [pnpm](https://pnpm.io/) 10.33+ (via [corepack](https://nodejs.org/api/corepack.html))
+
+```bash
+corepack enable
+```
+
 ## Install
+
+```bash
+corepack enable
+pnpm install
+```
+
+For end users:
 
 ```bash
 npm install stellar-mpp-sdk mppx @stellar/stellar-sdk
@@ -106,7 +122,7 @@ const mppx = Mppx.create({
   ],
 })
 
-// Express / Bun / any framework
+// Express (example servers use helmet, cors, and rate limiting)
 export async function handler(request: Request) {
   const result = await mppx.charge({
     amount: '0.01',
@@ -197,6 +213,7 @@ const data = await response.json()
 | `stellar-mpp-sdk/channel`        | `channel` (method schema)                                                                                            |
 | `stellar-mpp-sdk/channel/client` | `stellar`, `channel`, `Mppx`                                                                                         |
 | `stellar-mpp-sdk/channel/server` | `stellar`, `channel`, `close`, `getChannelState`, `watchChannel`, `Mppx`, `Store`, `Expires`                         |
+| `stellar-mpp-sdk/env`            | `parseRequired`, `parseOptional`, `parsePort`, `parseStellarPublicKey`, `parseStellarSecretKey`, `parseContractAddress`, `parseHexKey`, `parseCommaSeparatedList`, `parseNumber` |
 
 ### Server options (charge)
 
@@ -351,6 +368,19 @@ await close({
 | `XLM_SAC_MAINNET`  | `CAS3J7GYLGVE45MR3HPSFG352DAANEV5GGMFTO3IZIE4JMCDALQO57Y`  |
 | `XLM_SAC_TESTNET`  | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` |
 
+## Environment variables
+
+Example `.env` files are provided for each demo:
+
+| File                                    | Purpose                                              |
+| --------------------------------------- | ---------------------------------------------------- |
+| `examples/.env.charge-server.example`   | Charge server (recipient key, security settings)     |
+| `examples/.env.charge-client.example`   | Charge client (secret key, server URL)               |
+| `examples/.env.channel-server.example`  | Channel server (contract, commitment key, security)  |
+| `examples/.env.channel-client.example`  | Channel client (commitment secret, server URL)       |
+
+Copy the relevant `.example` file, remove the `.example` suffix, and fill in your values.
+
 ## Demo
 
 See [demo/README.md](demo/README.md) for full instructions. Quick start:
@@ -385,10 +415,16 @@ See [demo/channel-e2e-output.txt](demo/channel-e2e-output.txt) for example outpu
 
 ```
 stellar-mpp-sdk/
+├── eslint.config.mjs       # ESLint 9 flat config
+├── .prettierrc             # Prettier configuration
+├── Makefile                # Dev workflow targets (make help)
+├── .github/workflows/
+│   └── ci.yml              # GitHub Actions CI pipeline
 ├── sdk/src/
 │   ├── Methods.ts          # Method schema (name: 'stellar', intent: 'charge')
 │   ├── constants.ts        # SAC addresses, RPC URLs, network passphrases
 │   ├── scval.ts            # Soroban ScVal ↔ BigInt conversion
+│   ├── env.ts              # Stellar-aware env parsing primitives
 │   ├── index.ts            # Root exports
 │   ├── client/
 │   │   ├── Charge.ts       # Client-side credential creation (SAC transfer)
@@ -412,12 +448,17 @@ stellar-mpp-sdk/
 │           ├── Methods.ts  # stellar.channel() convenience wrapper
 │           └── index.ts
 ├── examples/
-│   ├── server.ts           # Example server (Node http + tsx)
+│   ├── server.ts           # Charge server (Express + helmet/cors/rate-limit)
 │   ├── client.ts           # Example client with progress events
-│   ├── channel-server.ts   # Channel server example
+│   ├── channel-server.ts   # Channel server (Express + helmet/cors/rate-limit)
 │   ├── channel-client.ts   # Channel client example
 │   ├── channel-open.ts     # Channel deployment example
-│   └── channel-close.ts    # On-chain channel close example
+│   ├── channel-close.ts    # On-chain channel close example
+│   └── config/
+│       ├── charge-server.ts  # Env class for charge server
+│       ├── charge-client.ts  # Env class for charge client
+│       ├── channel-server.ts # Env class for channel server
+│       └── channel-client.ts # Env class for channel client
 ├── demo/
 │   ├── index.html          # Interactive browser UI (served at /demo)
 │   ├── run.sh              # All-in-one charge demo script
@@ -431,10 +472,21 @@ stellar-mpp-sdk/
 ## Development
 
 ```bash
-pnpm install
-pnpm run build        # compile TypeScript
-pnpm run check:types  # type-check without emitting
-pnpm test             # run tests (vitest)
+make help       # Show all available commands
+make check      # Run full quality pipeline (format, lint, typecheck, test, build)
+make test       # Run tests once
+make test-watch # Run tests in watch mode
+```
+
+See the [Makefile](Makefile) for all targets.
+
+```bash
+pnpm install          # Install deps
+pnpm run build        # Compile TypeScript
+pnpm run check:types  # Type-check without emitting
+pnpm run lint         # Run ESLint
+pnpm run format:check # Check formatting
+pnpm test             # Run tests (vitest)
 ```
 
 ## License
