@@ -26,7 +26,7 @@ import { pollTransaction } from '../../shared/poll.js'
 import { wrapFeeBump } from '../../shared/fee-bump.js'
 import { PaymentVerificationError, SettlementError } from '../../shared/errors.js'
 import { noopLogger, type Logger } from '../../shared/logger.js'
-import { SimulationNetworkError, SimulationTimeoutError } from '../../shared/simulate.js'
+import { SimulationContractError, simulateCall } from '../../shared/simulate.js'
 import {
   DEFAULT_MAX_FEE_BUMP_STROOPS,
   DEFAULT_POLL_MAX_ATTEMPTS,
@@ -333,41 +333,18 @@ export function charge(parameters: charge.Parameters) {
     expectedRecipient: string,
     serverAddress: string | undefined,
   ) {
-    let simResponse: rpc.Api.SimulateTransactionResponse
+    let simResponse: rpc.Api.SimulateTransactionSuccessResponse
     try {
-      simResponse = await Promise.race([
-        server.simulateTransaction(tx),
-        new Promise<never>((_, reject) => {
-          setTimeout(
-            () =>
-              reject(
-                new SimulationTimeoutError(`Simulation timed out after ${simulationTimeoutMs}ms`),
-              ),
-            simulationTimeoutMs,
-          )
-        }),
-      ])
+      simResponse = await simulateCall(server, tx, { timeoutMs: simulationTimeoutMs })
     } catch (error) {
-      // Gap #17: RPC unavailability → 5xx, not verification-failed
-      if (error instanceof SimulationNetworkError || error instanceof SimulationTimeoutError) {
-        throw error
-      }
-      // Network-level errors (fetch failures, timeouts) bubble as-is
-      if (error instanceof Error && !error.message.includes('[stellar:charge]')) {
-        throw new SimulationNetworkError(
-          `[stellar:charge] RPC unavailable during simulation: ${error.message}`,
-          error,
+      if (error instanceof SimulationContractError) {
+        throw new PaymentVerificationError(
+          `[stellar:charge] Pre-submission simulation failed: ${error.simulationError}`,
+          { simulationError: error.simulationError },
         )
       }
+      // Timeout and network errors bubble up as-is (Gap #17: RPC unavailability → 5xx)
       throw error
-    }
-
-    if (!rpc.Api.isSimulationSuccess(simResponse)) {
-      const errorMsg = 'error' in simResponse ? String((simResponse as any).error) : 'unknown error'
-      throw new PaymentVerificationError(
-        `[stellar:charge] Pre-submission simulation failed: ${errorMsg}`,
-        { simulationError: errorMsg },
-      )
     }
 
     // Validate simulation events for expected transfer

@@ -69,7 +69,7 @@ export const CAIP2_NETWORK: Record<NetworkId, string> = {
 /**
  * Reverse map: CAIP-2 chain identifier → internal NetworkId.
  */
-export const CAIP2_TO_NETWORK: Record<string, NetworkId> = {
+export const CAIP2_TO_NETWORK: Record<string, NetworkId | undefined> = {
   'stellar:pubnet': 'public',
   'stellar:testnet': 'testnet',
 }
