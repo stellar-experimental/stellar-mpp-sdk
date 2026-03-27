@@ -10,4 +10,6 @@ export class StellarMppError extends Error {
 
 export class PaymentVerificationError extends StellarMppError {}
 
+export class SettlementError extends StellarMppError {}
+
 export class ChannelVerificationError extends StellarMppError {}

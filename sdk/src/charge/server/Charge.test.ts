@@ -114,6 +114,71 @@ describe('stellar server charge', () => {
 })
 
 // ---------------------------------------------------------------------------
+// request() transform — CAIP-2 network format
+// ---------------------------------------------------------------------------
+
+describe('charge request transform', () => {
+  it('emits CAIP-2 network in methodDetails (testnet)', () => {
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      network: 'testnet',
+    })
+    const transformed = (method as any).request({
+      request: { amount: '1', currency: USDC_SAC_TESTNET, recipient: RECIPIENT },
+    })
+    expect(transformed.methodDetails.network).toBe('stellar:testnet')
+  })
+
+  it('emits CAIP-2 network in methodDetails (pubnet)', () => {
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      network: 'public',
+    })
+    const transformed = (method as any).request({
+      request: { amount: '1', currency: USDC_SAC_TESTNET, recipient: RECIPIENT },
+    })
+    expect(transformed.methodDetails.network).toBe('stellar:pubnet')
+  })
+
+  it('includes feePayer when signer is configured', () => {
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      signer: Keypair.random(),
+    })
+    const transformed = (method as any).request({
+      request: { amount: '1', currency: USDC_SAC_TESTNET, recipient: RECIPIENT },
+    })
+    expect(transformed.methodDetails.feePayer).toBe(true)
+  })
+
+  it('omits feePayer when no signer configured', () => {
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+    })
+    const transformed = (method as any).request({
+      request: { amount: '1', currency: USDC_SAC_TESTNET, recipient: RECIPIENT },
+    })
+    expect(transformed.methodDetails.feePayer).toBeUndefined()
+  })
+
+  it('converts amount to base units using decimals', () => {
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      decimals: 7,
+    })
+    const transformed = (method as any).request({
+      request: { amount: '0.01', currency: USDC_SAC_TESTNET, recipient: RECIPIENT },
+    })
+    expect(transformed.amount).toBe('100000')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Transaction hash dedup tests (hash flow with mocked RPC)
 // ---------------------------------------------------------------------------
 
@@ -127,6 +192,9 @@ function makeHashCredential(opts: { hash: string; challengeId?: string }) {
       amount: '10000000',
       currency: USDC_SAC_TESTNET,
       recipient: RECIPIENT,
+      methodDetails: {
+        network: 'stellar:testnet',
+      },
     },
   })
   return Credential.from({
@@ -137,10 +205,9 @@ function makeHashCredential(opts: { hash: string; challengeId?: string }) {
 
 describe('charge tx hash dedup', () => {
   it('rejects a second verify with the same tx hash', async () => {
-    // Mock: tx SUCCESS with a valid SAC transfer envelope
     mockGetTransaction.mockResolvedValue({
       status: 'SUCCESS',
-      envelopeXdr: undefined, // verifySacTransfer will throw — that's fine for
+      envelopeXdr: undefined,
     })
 
     const store = Store.memory()
@@ -152,14 +219,11 @@ describe('charge tx hash dedup', () => {
 
     const hash = 'abc123firstuse'
 
-    // First attempt — will fail on envelope verification (no envelope),
-    // which means the hash should NOT be marked as used (write is after verify).
     const cred1 = makeHashCredential({ hash })
     await expect(
       method.verify({ credential: cred1 as any, request: cred1.challenge.request }),
     ).rejects.toThrow()
 
-    // Verify the hash was NOT stored (failed verification should not burn it)
     const stored = await store.get(`stellar:charge:hash:${hash}`)
     expect(stored).toBeFalsy()
   })
@@ -167,7 +231,6 @@ describe('charge tx hash dedup', () => {
   it('marks tx hash as used only after successful verification', async () => {
     const store = Store.memory()
 
-    // Pre-populate the hash to simulate it already being used
     const hash = 'already-used-hash'
     await store.put(`stellar:charge:hash:${hash}`, { usedAt: new Date().toISOString() })
 

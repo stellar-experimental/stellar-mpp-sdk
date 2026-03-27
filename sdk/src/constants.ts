@@ -54,6 +54,27 @@ export const SAC_ADDRESSES = {
 } as const
 
 // ---------------------------------------------------------------------------
+// CAIP-2 network identifiers
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps internal network IDs to CAIP-2 chain identifiers.
+ * @see https://github.com/ChainAgnostic/CAIPs/blob/main/CAIPs/caip-2.md
+ */
+export const CAIP2_NETWORK: Record<NetworkId, string> = {
+  public: 'stellar:pubnet',
+  testnet: 'stellar:testnet',
+}
+
+/**
+ * Reverse map: CAIP-2 chain identifier → internal NetworkId.
+ */
+export const CAIP2_TO_NETWORK: Record<string, NetworkId> = {
+  'stellar:pubnet': 'public',
+  'stellar:testnet': 'testnet',
+}
+
+// ---------------------------------------------------------------------------
 // Defaults
 // ---------------------------------------------------------------------------
 
@@ -65,6 +86,12 @@ export const DEFAULT_FEE = '100'
 
 /** Default transaction timeout in seconds. */
 export const DEFAULT_TIMEOUT = 180
+
+/** Average Stellar ledger close time in seconds. */
+export const DEFAULT_LEDGER_CLOSE_TIME = 5
+
+/** Default challenge expiry in seconds (5 minutes). */
+export const DEFAULT_CHALLENGE_EXPIRY = 300
 
 // ---------------------------------------------------------------------------
 // Special accounts

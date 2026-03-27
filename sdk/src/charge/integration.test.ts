@@ -21,8 +21,7 @@ function mockChallenge(overrides: Record<string, unknown> = {}) {
       currency: USDC_SAC_TESTNET,
       recipient: RECIPIENT.publicKey(),
       methodDetails: {
-        reference: crypto.randomUUID(),
-        network: 'testnet',
+        network: 'stellar:testnet',
       },
       ...overrides,
     },

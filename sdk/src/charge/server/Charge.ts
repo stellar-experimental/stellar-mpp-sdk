@@ -10,7 +10,9 @@ import {
 import { Method, Receipt, Store } from 'mppx'
 import {
   ALL_ZEROS,
+  CAIP2_NETWORK,
   DEFAULT_DECIMALS,
+  DEFAULT_LEDGER_CLOSE_TIME,
   DEFAULT_TIMEOUT,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
@@ -22,8 +24,9 @@ import { scValToBigInt } from '../../shared/scval.js'
 import { resolveKeypair } from '../../shared/keypairs.js'
 import { pollTransaction } from '../../shared/poll.js'
 import { wrapFeeBump } from '../../shared/fee-bump.js'
-import { PaymentVerificationError } from '../../shared/errors.js'
+import { PaymentVerificationError, SettlementError } from '../../shared/errors.js'
 import { noopLogger, type Logger } from '../../shared/logger.js'
+import { SimulationNetworkError, SimulationTimeoutError } from '../../shared/simulate.js'
 import {
   DEFAULT_MAX_FEE_BUMP_STROOPS,
   DEFAULT_POLL_MAX_ATTEMPTS,
@@ -45,7 +48,7 @@ export function charge(parameters: charge.Parameters) {
     pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
     recipient,
     rpcUrl,
-    simulationTimeoutMs: _simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
+    simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
     signer: signerParam,
     store,
   } = parameters
@@ -72,9 +75,7 @@ export function charge(parameters: charge.Parameters) {
         ...request,
         amount: toBaseUnits(request.amount, decimals),
         methodDetails: {
-          ...request.methodDetails,
-          reference: crypto.randomUUID(),
-          network,
+          network: CAIP2_NETWORK[network],
           ...(signerKeypair ? { feePayer: true } : {}),
         },
       }
@@ -173,6 +174,9 @@ export function charge(parameters: charge.Parameters) {
         const tx =
           parsed instanceof FeeBumpTransaction ? parsed.innerTransaction : (parsed as Transaction)
 
+        // Gap #13: Exactly one invokeHostFunction operation
+        verifyExactlyOneInvokeOp(tx)
+
         verifySacInvocation(tx, {
           amount: expectedAmount,
           currency: expectedCurrency,
@@ -193,10 +197,20 @@ export function charge(parameters: charge.Parameters) {
           )
         }
 
+        // Determine expires from challenge for ledger expiration calculations
+        const expiresTimestamp: number | undefined = challenge.expires
+          ? Math.floor(new Date(challenge.expires).getTime() / 1000)
+          : undefined
+
         if (signerKeypair && tx.source === ALL_ZEROS) {
           // ── Sponsored path ──────────────────────────────────────────
-          // Client used all-zeros source; rebuild the tx with the
-          // signer's account as source.
+
+          // Gap #8: Auth entries MUST NOT contain subInvocations
+          // Gap #9: Auth entry expiration MUST NOT exceed max ledger
+          // Gap #10: Server address MUST NOT appear in auth entries
+          await validateAuthEntries(tx, signerKeypair.publicKey(), expiresTimestamp)
+
+          // Rebuild the tx with the signer's account as source
           logger.debug('[stellar:charge] Rebuilding sponsored tx...')
           const serverAccount = await server.getAccount(signerKeypair.publicKey())
           const envelopeTx = tx.toEnvelope().v1().tx()
@@ -214,14 +228,46 @@ export function charge(parameters: charge.Parameters) {
             rebuilt.setTimeout(DEFAULT_TIMEOUT)
           }
           const rebuiltTx = rebuilt.setSorobanData(sorobanData).build()
+
+          // Gap #6 & #7: Pre-submission simulation + re-simulation after rebuild
+          await simulateAndValidateTransfer(
+            rebuiltTx,
+            expectedAmount,
+            expectedCurrency,
+            expectedRecipient,
+            signerKeypair.publicKey(),
+          )
+
           rebuiltTx.sign(signerKeypair)
           txToSubmit = rebuiltTx
+        } else {
+          // ── Unsponsored path ────────────────────────────────────────
+
+          // Gap #11: timeBounds.maxTime MUST NOT exceed expires
+          if (expiresTimestamp && tx.timeBounds) {
+            const maxTime = parseInt(tx.timeBounds.maxTime, 10)
+            if (maxTime > expiresTimestamp) {
+              throw new PaymentVerificationError(
+                '[stellar:charge] Transaction timeBounds.maxTime exceeds challenge expires.',
+                {
+                  maxTime,
+                  expires: expiresTimestamp,
+                },
+              )
+            }
+          }
+
+          // Gap #6: Pre-submission simulation
+          await simulateAndValidateTransfer(
+            tx,
+            expectedAmount,
+            expectedCurrency,
+            expectedRecipient,
+            signerKeypair?.publicKey(),
+          )
         }
 
         // ── Fee bump wrapping ───────────────────────────────────────
-        // When feeBumpSigner is set, wrap in a FeeBumpTransaction.
-        // Applies to both sponsored and unsponsored paths.
-        // NM-004: Cap the fee-bump to prevent draining the fee payer.
         if (feeBumpKeypair) {
           logger.debug('[stellar:charge] Fee bump wrapping')
           txToSubmit = wrapFeeBump(txToSubmit, feeBumpKeypair, {
@@ -230,15 +276,37 @@ export function charge(parameters: charge.Parameters) {
           })
         }
 
-        logger.debug('[stellar:charge] Broadcasting tx')
-        const sendResult = await server.sendTransaction(txToSubmit)
-        logger.debug('[stellar:charge] Broadcasting tx', { hash: sendResult.hash })
+        // ── Settlement ──────────────────────────────────────────────
+        // Gap #12: Use SettlementError for broadcast/confirmation failures
+        let sendResult: rpc.Api.SendTransactionResponse
+        try {
+          logger.debug('[stellar:charge] Broadcasting tx')
+          sendResult = await server.sendTransaction(txToSubmit)
+          logger.debug('[stellar:charge] Broadcasting tx', { hash: sendResult.hash })
+        } catch (error) {
+          throw new SettlementError(
+            '[stellar:charge] Settlement failed: could not broadcast transaction.',
+            {
+              details: error instanceof Error ? error.message : String(error),
+            },
+          )
+        }
 
-        await pollTransaction(server, sendResult.hash, {
-          maxAttempts: pollMaxAttempts,
-          delayMs: pollDelayMs,
-          timeoutMs: pollTimeoutMs,
-        })
+        try {
+          await pollTransaction(server, sendResult.hash, {
+            maxAttempts: pollMaxAttempts,
+            delayMs: pollDelayMs,
+            timeoutMs: pollTimeoutMs,
+          })
+        } catch (error) {
+          throw new SettlementError(
+            '[stellar:charge] Settlement failed: transaction not confirmed.',
+            {
+              hash: sendResult.hash,
+              details: error instanceof Error ? error.message : String(error),
+            },
+          )
+        }
 
         return Receipt.from({
           method: 'stellar',
@@ -254,25 +322,171 @@ export function charge(parameters: charge.Parameters) {
         )
     }
   }
+
+  // ── Simulation validation ─────────────────────────────────────────────
+  // Gap #6 & #7: Server MUST simulate before submitting; validate events
+
+  async function simulateAndValidateTransfer(
+    tx: Transaction,
+    expectedAmount: bigint,
+    expectedCurrency: string,
+    expectedRecipient: string,
+    serverAddress: string | undefined,
+  ) {
+    let simResponse: rpc.Api.SimulateTransactionResponse
+    try {
+      simResponse = await Promise.race([
+        server.simulateTransaction(tx),
+        new Promise<never>((_, reject) => {
+          setTimeout(
+            () =>
+              reject(
+                new SimulationTimeoutError(`Simulation timed out after ${simulationTimeoutMs}ms`),
+              ),
+            simulationTimeoutMs,
+          )
+        }),
+      ])
+    } catch (error) {
+      // Gap #17: RPC unavailability → 5xx, not verification-failed
+      if (error instanceof SimulationNetworkError || error instanceof SimulationTimeoutError) {
+        throw error
+      }
+      // Network-level errors (fetch failures, timeouts) bubble as-is
+      if (error instanceof Error && !error.message.includes('[stellar:charge]')) {
+        throw new SimulationNetworkError(
+          `[stellar:charge] RPC unavailable during simulation: ${error.message}`,
+          error,
+        )
+      }
+      throw error
+    }
+
+    if (!rpc.Api.isSimulationSuccess(simResponse)) {
+      const errorMsg = 'error' in simResponse ? String((simResponse as any).error) : 'unknown error'
+      throw new PaymentVerificationError(
+        `[stellar:charge] Pre-submission simulation failed: ${errorMsg}`,
+        { simulationError: errorMsg },
+      )
+    }
+
+    // Validate simulation events for expected transfer
+    if (simResponse.events && simResponse.events.length > 0) {
+      validateSimulationEvents(
+        simResponse.events,
+        expectedAmount,
+        expectedCurrency,
+        expectedRecipient,
+        serverAddress,
+      )
+    }
+  }
+
+  // ── Auth entry validation (sponsored path) ────────────────────────────
+
+  async function validateAuthEntries(
+    tx: Transaction,
+    serverPublicKey: string,
+    expiresTimestamp: number | undefined,
+  ) {
+    const envelope = tx.toEnvelope().v1().tx()
+    const ops = envelope.operations()
+
+    // Calculate max ledger from expires
+    let maxLedger: number | undefined
+    if (expiresTimestamp) {
+      const nowSecs = Math.floor(Date.now() / 1000)
+      const secsUntilExpiry = expiresTimestamp - nowSecs
+      if (secsUntilExpiry > 0) {
+        const latestLedger = await server.getLatestLedger()
+        maxLedger = latestLedger.sequence + Math.ceil(secsUntilExpiry / DEFAULT_LEDGER_CLOSE_TIME)
+      }
+    }
+
+    const serverAddress = Address.fromString(serverPublicKey)
+
+    for (let i = 0; i < ops.length; i++) {
+      const opBody = ops[i].body()
+      if (opBody.switch().value !== xdr.OperationType.invokeHostFunction().value) {
+        continue
+      }
+
+      const authEntries = opBody.invokeHostFunctionOp().auth()
+      for (const entry of authEntries) {
+        const credentials = entry.credentials()
+
+        // Only validate address-type credentials
+        if (
+          credentials.switch().value !==
+          xdr.SorobanCredentialsType.sorobanCredentialsAddress().value
+        ) {
+          continue
+        }
+
+        const addressCred = credentials.address()
+
+        // Gap #10: Server's address MUST NOT appear in auth entries
+        const entryAddress = Address.fromScAddress(addressCred.address())
+        if (entryAddress.toString() === serverAddress.toString()) {
+          throw new PaymentVerificationError(
+            '[stellar:charge] Server address must not appear in client auth entries.',
+            { serverAddress: serverPublicKey },
+          )
+        }
+
+        // Gap #9: Expiration MUST NOT exceed maxLedger
+        if (maxLedger !== undefined) {
+          const entryExpiration = addressCred.signatureExpirationLedger()
+          if (entryExpiration > maxLedger) {
+            throw new PaymentVerificationError(
+              '[stellar:charge] Auth entry expiration exceeds maximum allowed ledger.',
+              {
+                entryExpiration,
+                maxLedger,
+              },
+            )
+          }
+        }
+
+        // Gap #8: MUST NOT contain subInvocations
+        const rootInvocation = entry.rootInvocation()
+        if (rootInvocation.subInvocations().length > 0) {
+          throw new PaymentVerificationError(
+            '[stellar:charge] Auth entries must not contain sub-invocations.',
+            {},
+          )
+        }
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Verification helpers
 // ---------------------------------------------------------------------------
 
-function verifySacInvocation(
-  tx: Transaction,
-  expected: { amount: bigint; currency: string; recipient: string },
-) {
-  const invokeOp = tx.operations.find((op) => op.type === 'invokeHostFunction')
+// Gap #13: Transaction MUST contain exactly one invokeHostFunction operation
+function verifyExactlyOneInvokeOp(tx: Transaction) {
+  const invokeOps = tx.operations.filter((op) => op.type === 'invokeHostFunction')
 
-  if (!invokeOp) {
+  if (invokeOps.length === 0) {
     throw new PaymentVerificationError(
       '[stellar:charge] Transaction does not contain a Soroban invocation.',
       {},
     )
   }
+  if (invokeOps.length > 1) {
+    throw new PaymentVerificationError(
+      '[stellar:charge] Transaction must contain exactly one invokeHostFunction operation.',
+      { operationCount: invokeOps.length },
+    )
+  }
+}
 
+function verifySacInvocation(
+  tx: Transaction,
+  expected: { amount: bigint; currency: string; recipient: string },
+) {
   verifyFromRawOps(tx, expected)
 }
 
@@ -356,7 +570,6 @@ function verifySacTransfer(
     envelope = txResult.envelopeXdr
   }
 
-  // NM-009: Use the configured network passphrase instead of guessing.
   let innerTx: Transaction
   try {
     innerTx = new Transaction(envelope, networkPassphrase)
@@ -371,6 +584,82 @@ function verifySacTransfer(
 }
 
 // ---------------------------------------------------------------------------
+// Simulation event validation (CAP-46 transfer events)
+// ---------------------------------------------------------------------------
+
+function validateSimulationEvents(
+  events: xdr.DiagnosticEvent[],
+  expectedAmount: bigint,
+  expectedCurrency: string,
+  expectedRecipient: string,
+  serverAddress: string | undefined,
+) {
+  const transferEvents: Array<{ from: string; to: string; amount: bigint; contract: string }> = []
+
+  for (const event of events) {
+    try {
+      const contractEvent = event.event()
+      // Only process contract events (type 0)
+      if (contractEvent.type().value !== 0) continue
+
+      const body = contractEvent.body().v0()
+      const topics = body.topics()
+      if (topics.length < 3) continue
+
+      // CAP-46: topic[0] = "transfer"
+      const topicName = topics[0].sym?.()?.toString()
+      if (topicName !== 'transfer') continue
+
+      const from = Address.fromScVal(topics[1]).toString()
+      const to = Address.fromScVal(topics[2]).toString()
+      const amount = scValToBigInt(body.data())
+      const contract = contractEvent.contractId()
+        ? Address.fromScAddress(
+            xdr.ScAddress.scAddressTypeContract(contractEvent.contractId()!),
+          ).toString()
+        : ''
+
+      transferEvents.push({ from, to, amount, contract })
+    } catch {
+      // Skip events we can't parse
+      continue
+    }
+  }
+
+  if (transferEvents.length === 0) return
+
+  // Verify at least one transfer matches expected parameters
+  const matchingTransfer = transferEvents.find(
+    (t) =>
+      t.to === expectedRecipient && t.amount === expectedAmount && t.contract === expectedCurrency,
+  )
+
+  if (!matchingTransfer) {
+    throw new PaymentVerificationError(
+      '[stellar:charge] Simulation events do not contain expected transfer.',
+      {
+        expectedRecipient,
+        expectedAmount: expectedAmount.toString(),
+        expectedCurrency,
+      },
+    )
+  }
+
+  // Server address must not be involved in transfers (Gap #10 reinforcement)
+  if (serverAddress) {
+    const serverInvolved = transferEvents.some(
+      (t) => t.from === serverAddress || t.to === serverAddress,
+    )
+    if (serverInvolved) {
+      throw new PaymentVerificationError(
+        '[stellar:charge] Server address must not be involved in transfer events.',
+        { serverAddress },
+      )
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -381,26 +670,14 @@ export declare namespace charge {
     decimals?: number
     network?: NetworkId
     rpcUrl?: string
-    /** Keypair providing source account for sponsored transactions. */
     signer?: Keypair | string
-    /**
-     * Optional fee bump signer. Wraps non-fee-bump transactions in a
-     * FeeBumpTransaction; if a FeeBumpTransaction is already provided, it is
-     * submitted as-is.
-     */
     feeBumpSigner?: Keypair | string
     store?: Store.Store
-    /** Maximum fee bump in stroops. @default 10_000_000 */
     maxFeeBumpStroops?: number
-    /** Maximum polling attempts. @default 30 */
     pollMaxAttempts?: number
-    /** Delay between poll attempts in ms. @default 1_000 */
     pollDelayMs?: number
-    /** Overall poll timeout in ms. @default 30_000 */
     pollTimeoutMs?: number
-    /** Simulation timeout in ms. @default 10_000 */
     simulationTimeoutMs?: number
-    /** Logger instance. @default noopLogger */
     logger?: Logger
   }
 }
