@@ -171,8 +171,11 @@ async function readCloseEffectiveAtLedger(
     }
 
     const entry = response.entries[0]
-    const contractData = entry.val.contractData()
-    const instance = contractData.val().instance()
+    const ledgerData = entry.val
+    const contractData = ledgerData?.contractData?.()
+    if (!contractData) return null
+    const instance = contractData.val?.()?.instance?.()
+    if (!instance) return null
     const storage = instance.storage()
 
     if (!storage) return null
