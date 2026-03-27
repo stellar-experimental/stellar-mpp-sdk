@@ -2,7 +2,6 @@
 
 Stellar blockchain payment method for the [Machine Payments Protocol (MPP)](https://mpp.dev). Enables machine-to-machine payments using Soroban SAC token transfers on the Stellar network, with optional support for [one-way payment channels](https://github.com/stellar-experimental/one-way-channel) for high-frequency off-chain payments.
 
-
 ## Payment modes
 
 ### Charge (one-time transfers)
@@ -32,8 +31,8 @@ Client                          Server                         Stellar
 Two credential modes:
 
 - **Pull** (default) — client prepares the transaction, server submits it:
-  - *Sponsored* (`feePayer` configured on server): client signs only Soroban auth entries using an all-zeros placeholder source; server rebuilds the tx with its own account as source, signs, and broadcasts
-  - *Unsponsored*: client builds and signs the full transaction; server broadcasts as-is
+  - _Sponsored_ (`feePayer` configured on server): client signs only Soroban auth entries using an all-zeros placeholder source; server rebuilds the tx with its own account as source, signs, and broadcasts
+  - _Unsponsored_: client builds and signs the full transaction; server broadcasts as-is
 - **Push** — client broadcasts the transaction itself, sends the tx hash for server verification (not compatible with `feePayer`)
 
 ### Channel (off-chain commitments)
@@ -116,9 +115,7 @@ export async function handler(request: Request) {
 
   if (result.status === 402) return result.challenge
 
-  return result.withReceipt(
-    Response.json({ data: 'paid content here' }),
-  )
+  return result.withReceipt(Response.json({ data: 'paid content here' }))
 }
 ```
 
@@ -150,9 +147,9 @@ const mppx = Mppx.create({
   secretKey: process.env.MPP_SECRET_KEY,
   methods: [
     stellar.channel({
-      channel: 'CABC...',            // deployed one-way-channel contract address
-      commitmentKey: 'GFUNDER...',   // ed25519 public key for verifying commitments
-      store: Store.memory(),         // tracks cumulative amounts + replay protection
+      channel: 'CABC...', // deployed one-way-channel contract address
+      commitmentKey: 'GFUNDER...', // ed25519 public key for verifying commitments
+      store: Store.memory(), // tracks cumulative amounts + replay protection
       network: 'testnet',
     }),
   ],
@@ -160,15 +157,13 @@ const mppx = Mppx.create({
 
 export async function handler(request: Request) {
   const result = await mppx.channel({
-    amount: '1',                     // 1 XLM per request (human-readable)
+    amount: '1', // 1 XLM per request (human-readable)
     description: 'API call',
   })(request)
 
   if (result.status === 402) return result.challenge
 
-  return result.withReceipt(
-    Response.json({ data: 'paid content here' }),
-  )
+  return result.withReceipt(Response.json({ data: 'paid content here' }))
 }
 ```
 
@@ -194,14 +189,14 @@ const data = await response.json()
 
 ### Exports
 
-| Path | Exports |
-|------|---------|
-| `stellar-mpp-sdk` | `Methods`, `ChannelMethods`, constants (`USDC_SAC_TESTNET`, `XLM_SAC_MAINNET`, etc.), `toBaseUnits`, `fromBaseUnits` |
-| `stellar-mpp-sdk/client` | `stellar`, `charge`, `Mppx` |
-| `stellar-mpp-sdk/server` | `stellar`, `charge`, `Mppx`, `Store`, `Expires` |
-| `stellar-mpp-sdk/channel` | `channel` (method schema) |
-| `stellar-mpp-sdk/channel/client` | `stellar`, `channel`, `Mppx` |
-| `stellar-mpp-sdk/channel/server` | `stellar`, `channel`, `close`, `getChannelState`, `watchChannel`, `Mppx`, `Store`, `Expires` |
+| Path                             | Exports                                                                                                              |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `stellar-mpp-sdk`                | `Methods`, `ChannelMethods`, constants (`USDC_SAC_TESTNET`, `XLM_SAC_MAINNET`, etc.), `toBaseUnits`, `fromBaseUnits` |
+| `stellar-mpp-sdk/client`         | `stellar`, `charge`, `Mppx`                                                                                          |
+| `stellar-mpp-sdk/server`         | `stellar`, `charge`, `Mppx`, `Store`, `Expires`                                                                      |
+| `stellar-mpp-sdk/channel`        | `channel` (method schema)                                                                                            |
+| `stellar-mpp-sdk/channel/client` | `stellar`, `channel`, `Mppx`                                                                                         |
+| `stellar-mpp-sdk/channel/server` | `stellar`, `channel`, `close`, `getChannelState`, `watchChannel`, `Mppx`, `Store`, `Expires`                         |
 
 ### Server options (charge)
 
@@ -263,22 +258,22 @@ The `onProgress` callback receives events at each stage:
 
 **Charge events:**
 
-| Event | Fields | When |
-|-------|--------|------|
-| `challenge` | `recipient`, `amount`, `currency` | Challenge received |
-| `signing` | — | Before signing |
-| `signed` | `transaction` | After signing |
-| `paying` | — | Before broadcast (push mode) |
-| `confirming` | `hash` | Polling for confirmation (push mode) |
-| `paid` | `hash` | Transaction confirmed (push mode) |
+| Event        | Fields                            | When                                 |
+| ------------ | --------------------------------- | ------------------------------------ |
+| `challenge`  | `recipient`, `amount`, `currency` | Challenge received                   |
+| `signing`    | —                                 | Before signing                       |
+| `signed`     | `transaction`                     | After signing                        |
+| `paying`     | —                                 | Before broadcast (push mode)         |
+| `confirming` | `hash`                            | Polling for confirmation (push mode) |
+| `paid`       | `hash`                            | Transaction confirmed (push mode)    |
 
 **Channel events:**
 
-| Event | Fields | When |
-|-------|--------|------|
-| `challenge` | `channel`, `amount`, `cumulativeAmount` | Challenge received |
-| `signing` | — | Before signing commitment |
-| `signed` | `cumulativeAmount` | Commitment signed |
+| Event       | Fields                                  | When                      |
+| ----------- | --------------------------------------- | ------------------------- |
+| `challenge` | `channel`, `amount`, `cumulativeAmount` | Challenge received        |
+| `signing`   | —                                       | Before signing commitment |
+| `signed`    | `cumulativeAmount`                      | Commitment signed         |
 
 ### Fee sponsorship
 
@@ -291,8 +286,8 @@ The server can decouple sequence-number management from fee payment:
 stellar.charge({
   recipient: 'G...',
   currency: USDC_SAC_TESTNET,
-  signer: Keypair.fromSecret('S...'),         // source account
-  feeBumpSigner: Keypair.fromSecret('S...'),  // pays all fees
+  signer: Keypair.fromSecret('S...'), // source account
+  feeBumpSigner: Keypair.fromSecret('S...'), // pays all fees
 })
 ```
 
@@ -317,11 +312,13 @@ stellar.charge({
 Payment channels allow many off-chain micro-payments with minimal on-chain transactions. The [one-way-channel](https://github.com/stellar-experimental/one-way-channel) contract is deployed on Soroban — no additional npm dependency is needed.
 
 **Prerequisites:**
+
 1. Deploy the channel contract on Stellar (see [one-way-channel repo](https://github.com/stellar-experimental/one-way-channel))
 2. The funder opens the channel with an initial token deposit, a `commitment_key` (ed25519 public key), the recipient address, and a refund waiting period
 3. Both client (funder) and server (recipient) use the channel contract address
 
 **How it works:**
+
 - The client signs cumulative commitment amounts off-chain using the ed25519 commitment key
 - The server verifies signatures by simulating `prepare_commitment` on the channel contract and checking the ed25519 signature
 - A `Store` is required on the server to track cumulative amounts across requests
@@ -337,21 +334,21 @@ The SDK also supports opening a channel through the MPP 402 flow using the `open
 import { close } from 'stellar-mpp-sdk/channel/server'
 
 await close({
-  channel: 'CABC...',           // channel contract address
-  amount: 8000000n,             // commitment amount to close with
-  signature: commitmentSigBytes,// ed25519 signature from the latest commitment
-  closeKey: recipientKeypair,   // keypair to sign the close transaction
+  channel: 'CABC...', // channel contract address
+  amount: 8000000n, // commitment amount to close with
+  signature: commitmentSigBytes, // ed25519 signature from the latest commitment
+  closeKey: recipientKeypair, // keypair to sign the close transaction
   network: 'testnet',
 })
 ```
 
 ## Constants
 
-| Constant | Value |
-|----------|-------|
-| `USDC_SAC_MAINNET` | `CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI` |
+| Constant           | Value                                                      |
+| ------------------ | ---------------------------------------------------------- |
+| `USDC_SAC_MAINNET` | `CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI`   |
 | `USDC_SAC_TESTNET` | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` |
-| `XLM_SAC_MAINNET`  | `CAS3J7GYLGVE45MR3HPSFG352DAANEV5GGMFTO3IZIE4JMCDALQO57Y` |
+| `XLM_SAC_MAINNET`  | `CAS3J7GYLGVE45MR3HPSFG352DAANEV5GGMFTO3IZIE4JMCDALQO57Y`  |
 | `XLM_SAC_TESTNET`  | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` |
 
 ## Demo

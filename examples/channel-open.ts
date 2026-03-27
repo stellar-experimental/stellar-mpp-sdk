@@ -58,13 +58,17 @@ Mppx.create({
         const ts = new Date().toISOString().slice(11, 23)
         switch (event.type) {
           case 'challenge':
-            console.log(`  [${ts}] 💳 Challenge received — channel ${event.channel.slice(0, 12)}...`)
+            console.log(
+              `  [${ts}] 💳 Challenge received — channel ${event.channel.slice(0, 12)}...`,
+            )
             break
           case 'signing':
             console.log(`  [${ts}] ✍️  Signing initial commitment...`)
             break
           case 'signed':
-            console.log(`  [${ts}] ✅ Commitment signed (initial: ${event.cumulativeAmount} stroops)`)
+            console.log(
+              `  [${ts}] ✅ Commitment signed (initial: ${event.cumulativeAmount} stroops)`,
+            )
             break
         }
       },

@@ -16,13 +16,7 @@
  *   npx tsx examples/channel-close.ts
  */
 
-import {
-  Contract,
-  Keypair,
-  TransactionBuilder,
-  nativeToScVal,
-  rpc,
-} from '@stellar/stellar-sdk'
+import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stellar/stellar-sdk'
 import { close } from '../sdk/src/channel/server/index.js'
 import { NETWORK_PASSPHRASE, SOROBAN_RPC_URLS } from '../sdk/src/constants.js'
 
@@ -65,9 +59,7 @@ const simTx = new TransactionBuilder(account, {
   fee: '100',
   networkPassphrase: NETWORK_PASSPHRASE[NETWORK],
 })
-  .addOperation(
-    contract.call('prepare_commitment', nativeToScVal(AMOUNT, { type: 'i128' })),
-  )
+  .addOperation(contract.call('prepare_commitment', nativeToScVal(AMOUNT, { type: 'i128' })))
   .setTimeout(30)
   .build()
 

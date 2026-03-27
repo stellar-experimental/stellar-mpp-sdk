@@ -80,9 +80,7 @@ describe('watchChannel', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(mockGetLatestLedger).toHaveBeenCalledOnce()
-    expect(mockGetEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ startLedger: 5000 }),
-    )
+    expect(mockGetEvents).toHaveBeenCalledWith(expect.objectContaining({ startLedger: 5000 }))
 
     stop()
   })
@@ -190,9 +188,7 @@ describe('watchChannel', () => {
     const events: unknown[] = []
 
     mockGetEvents.mockResolvedValueOnce({
-      events: [
-        makeEvent({ topicName: 'some_other_event' }),
-      ],
+      events: [makeEvent({ topicName: 'some_other_event' })],
       cursor: 'cursor-4',
     })
 
@@ -227,9 +223,7 @@ describe('watchChannel', () => {
 
     // First poll (immediate)
     await vi.advanceTimersByTimeAsync(0)
-    expect(mockGetEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ startLedger: 5000 }),
-    )
+    expect(mockGetEvents).toHaveBeenCalledWith(expect.objectContaining({ startLedger: 5000 }))
 
     // Second poll (after interval)
     await vi.advanceTimersByTimeAsync(1000)
@@ -365,9 +359,7 @@ describe('watchChannel', () => {
 
     // First poll — uses startLedger
     await vi.advanceTimersByTimeAsync(0)
-    expect(mockGetEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ startLedger: 5000 }),
-    )
+    expect(mockGetEvents).toHaveBeenCalledWith(expect.objectContaining({ startLedger: 5000 }))
 
     // Second poll — should use cursor, not startLedger
     await vi.advanceTimersByTimeAsync(1000)

@@ -1,8 +1,5 @@
 import { rpc, xdr } from '@stellar/stellar-sdk'
-import {
-  SOROBAN_RPC_URLS,
-  type NetworkId,
-} from '../../constants.js'
+import { SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
 import { scValToBigInt } from '../../scval.js'
 
 // ---------------------------------------------------------------------------
@@ -77,19 +74,23 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
 
       const request: rpc.Api.GetEventsRequest = cursor
         ? {
-            filters: [{
-              type: 'contract' as const,
-              contractIds: [channel],
-              topics: [['*']],
-            }],
+            filters: [
+              {
+                type: 'contract' as const,
+                contractIds: [channel],
+                topics: [['*']],
+              },
+            ],
             cursor,
           }
         : {
-            filters: [{
-              type: 'contract' as const,
-              contractIds: [channel],
-              topics: [['*']],
-            }],
+            filters: [
+              {
+                type: 'contract' as const,
+                contractIds: [channel],
+                topics: [['*']],
+              },
+            ],
             startLedger: startLedger!,
           }
 
@@ -104,10 +105,10 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
           parsed = parseEvent(event)
         } catch (parseError) {
           try {
-            onError?.(parseError instanceof Error
-              ? parseError
-              : new Error(String(parseError)))
-          } catch { /* prevent onError from breaking the poll loop */ }
+            onError?.(parseError instanceof Error ? parseError : new Error(String(parseError)))
+          } catch {
+            /* prevent onError from breaking the poll loop */
+          }
           continue
         }
         if (parsed) {
@@ -115,10 +116,12 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
             onEvent(parsed)
           } catch (callbackError) {
             try {
-              onError?.(callbackError instanceof Error
-                ? callbackError
-                : new Error(String(callbackError)))
-            } catch { /* prevent onError from breaking the poll loop */ }
+              onError?.(
+                callbackError instanceof Error ? callbackError : new Error(String(callbackError)),
+              )
+            } catch {
+              /* prevent onError from breaking the poll loop */
+            }
           }
         }
       }
@@ -133,7 +136,9 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
       if (!stopped) {
         try {
           onError?.(error instanceof Error ? error : new Error(String(error)))
-        } catch { /* prevent onError from breaking the poll loop */ }
+        } catch {
+          /* prevent onError from breaking the poll loop */
+        }
       }
     }
   }

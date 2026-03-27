@@ -17,29 +17,35 @@ Steps are ordered by dependency — each layer is stable before the next builds 
 ### Step 1: Tooling Configuration
 
 **ESLint 9 (flat config):**
+
 - Create `eslint.config.mjs` at root using `@eslint/js` + `typescript-eslint`
 - Target `sdk/src/**/*.ts` and `examples/**/*.ts`
 - Ignore `dist/`, `node_modules/`, `demo/`
 - Use recommended defaults from typescript-eslint; add targeted overrides if the first lint pass surfaces false positives (e.g., `@typescript-eslint/no-unused-vars` with underscore prefix convention)
 
 **Prettier:**
+
 - Create `.prettierrc` at root with minimal config (semi, singleQuote, trailingComma — matching current code style)
 - Create `.prettierignore` for `dist/`, `node_modules/`, `pnpm-lock.yaml`
 - Separate from ESLint — no `eslint-plugin-prettier`
 - After the initial format pass, create `.git-blame-ignore-revs` with the formatting commit hash to preserve clean `git blame` history
 
 **tsconfig tweaks:**
+
 - Add `noImplicitReturns: true`
 
 **packageManager + engines:**
+
 - Add `"packageManager": "pnpm@10.33.0"` to `package.json` (latest available)
 - Add `"engines": { "node": ">=22" }` to `package.json`
 - Regenerate lockfile with pnpm 10.33.0
 
 **.gitignore updates:**
+
 - Add `examples/.env.*` (but not `*.example`) to `.gitignore`
 
 **New scripts in package.json:**
+
 ```json
 {
   "lint": "eslint .",
@@ -59,39 +65,39 @@ Upgrade in two sub-steps to isolate breakage:
 
 **Step 2a — devDependencies first:**
 
-| Package | Current | Action |
-|---------|---------|--------|
-| `typescript` | `^5.8.0` | `^{latest}` |
-| `vitest` | `^3.1.0` | `^{latest}` |
-| `tsx` | `^4.21.0` | `^{latest}` |
+| Package       | Current   | Action      |
+| ------------- | --------- | ----------- |
+| `typescript`  | `^5.8.0`  | `^{latest}` |
+| `vitest`      | `^3.1.0`  | `^{latest}` |
+| `tsx`         | `^4.21.0` | `^{latest}` |
 | `@types/node` | `^25.5.0` | `^{latest}` |
 
 Verify: `pnpm check:types` + `pnpm test -- --run`
 
 **Step 2b — runtime dependencies:**
 
-| Package | Current | Action |
-|---------|---------|--------|
-| `zod` | `4.3.6` (pinned) | `^{latest}` |
-| `@stellar/stellar-sdk` | `^14.6.1` | `^{latest}` |
-| `mppx` | `^0.4.7` | `^{latest}` |
+| Package                | Current          | Action      |
+| ---------------------- | ---------------- | ----------- |
+| `zod`                  | `4.3.6` (pinned) | `^{latest}` |
+| `@stellar/stellar-sdk` | `^14.6.1`        | `^{latest}` |
+| `mppx`                 | `^0.4.7`         | `^{latest}` |
 
 Verify: `pnpm check:types` + `pnpm test -- --run`
 
 **New devDependencies (all `^{latest}`):**
 
-| Package | Purpose |
-|---------|---------|
-| `eslint` | Linting |
-| `@eslint/js` | ESLint recommended rules |
-| `typescript-eslint` | TypeScript ESLint integration |
-| `prettier` | Formatting |
-| `express` | Example servers |
-| `@types/express` | Express types |
-| `helmet` | Security headers |
-| `express-rate-limit` | Rate limiting |
-| `cors` | CORS middleware |
-| `@types/cors` | CORS types |
+| Package              | Purpose                       |
+| -------------------- | ----------------------------- |
+| `eslint`             | Linting                       |
+| `@eslint/js`         | ESLint recommended rules      |
+| `typescript-eslint`  | TypeScript ESLint integration |
+| `prettier`           | Formatting                    |
+| `express`            | Example servers               |
+| `@types/express`     | Express types                 |
+| `helmet`             | Security headers              |
+| `express-rate-limit` | Rate limiting                 |
+| `cors`               | CORS middleware               |
+| `@types/cors`        | CORS types                    |
 
 ---
 
@@ -118,14 +124,16 @@ parseNumber(name: string, opts?: { min?, max?, fallback? }): number
 > **Note on `parseCommaSeparatedList`:** This is intentionally a pure string utility (takes a value, not an env var name) following x402-stellar's pattern. All other parsers read from `process.env` internally.
 
 **Per-example Env classes** using those primitives:
-- `examples/config/charge-server.ts` — PORT, STELLAR_RECIPIENT, MPP_SECRET_KEY, CORS_ORIGIN, RATE_LIMIT_*, TRUST_PROXY
+
+- `examples/config/charge-server.ts` — PORT, STELLAR*RECIPIENT, MPP_SECRET_KEY, CORS_ORIGIN, RATE_LIMIT*\*, TRUST_PROXY
 - `examples/config/charge-client.ts` — STELLAR_SECRET, SERVER_URL
-- `examples/config/channel-server.ts` — PORT, CHANNEL_CONTRACT, COMMITMENT_PUBKEY (via `parseHexKey`), MPP_SECRET_KEY, SOURCE_ACCOUNT, CORS_ORIGIN, RATE_LIMIT_*
+- `examples/config/channel-server.ts` — PORT, CHANNEL*CONTRACT, COMMITMENT_PUBKEY (via `parseHexKey`), MPP_SECRET_KEY, SOURCE_ACCOUNT, CORS_ORIGIN, RATE_LIMIT*\*
 - `examples/config/channel-client.ts` — COMMITMENT_SECRET (via `parseHexKey`), SERVER_URL, SOURCE_ACCOUNT
 
 > **Note:** `channel-open.ts` and `channel-close.ts` are standalone scripts, not HTTP servers. They will be updated to use the env primitives for their inline validation, but do not get their own Env config classes.
 
 **New subpath export** in `package.json`:
+
 - `stellar-mpp-sdk/env` -> `dist/env.js` / `dist/env.d.ts`
 
 **Tests:** `sdk/src/env.test.ts` — all core primitives using `vi.stubEnv()`.
@@ -137,12 +145,14 @@ parseNumber(name: string, opts?: { min?, max?, fallback? }): number
 **Migrate `examples/server.ts` and `examples/channel-server.ts` from raw Node `http.createServer` to Express.**
 
 **Security middleware stack (matching x402-stellar):**
+
 - `helmet()` — `X-Content-Type-Options`, `Strict-Transport-Security`, `X-Frame-Options`, etc.
 - `cors()` — configurable via `CORS_ORIGIN` env var (default `*` for demos)
 - `express-rate-limit` — configurable via `RATE_LIMIT_WINDOW_MS` and `RATE_LIMIT_MAX` env vars
 - Trust proxy config via `TRUST_PROXY` env var
 
 **Both servers get identical middleware:**
+
 ```ts
 app.set('trust proxy', Env.trustProxy)
 app.use(helmet())
@@ -151,6 +161,7 @@ app.use(rateLimit({ windowMs: Env.rateLimitWindowMs, max: Env.rateLimitMax }))
 ```
 
 **Structure change:**
+
 - Replace `http.createServer` + manual routing with Express `app.get()` / `app.post()`
 - Replace manual CORS header logic with `cors()` middleware
 - Replace inline env validation with Env class imports from `examples/config/`
@@ -190,6 +201,7 @@ help             ## Show this help message (default target)
 Per-demo `.env.example` files with descriptive placeholders:
 
 **`examples/.env.charge-server.example`**
+
 ```env
 # Charge Server Configuration
 PORT=3000
@@ -204,6 +216,7 @@ TRUST_PROXY=loopback,linklocal,uniquelocal
 ```
 
 **`examples/.env.charge-client.example`**
+
 ```env
 # Charge Client Configuration
 STELLAR_SECRET=S_YOUR_STELLAR_SECRET_KEY_HERE
@@ -211,6 +224,7 @@ SERVER_URL=http://localhost:3000
 ```
 
 **`examples/.env.channel-server.example`**
+
 ```env
 # Channel Server Configuration
 PORT=3001
@@ -227,6 +241,7 @@ TRUST_PROXY=loopback,linklocal,uniquelocal
 ```
 
 **`examples/.env.channel-client.example`**
+
 ```env
 # Channel Client Configuration
 COMMITMENT_SECRET=your_64_hex_char_ed25519_secret_key_here
@@ -258,6 +273,7 @@ permissions:
 ```
 
 **Job: `check-test-build`:**
+
 1. `actions/setup-node` (pinned SHA), Node 22
 2. `corepack enable && corepack install` — reads `packageManager` from `package.json` -> `pnpm@10.33.0`
 3. `pnpm install --frozen-lockfile`
@@ -274,6 +290,7 @@ permissions:
 ### Step 8: README.md + CLAUDE.md Updates
 
 **README.md:**
+
 - Add Prerequisites section (Node.js 22+, pnpm 10.33+, `corepack enable`)
 - Update Install section
 - Add Development section pointing to Makefile (`make help`, `make check`)
@@ -283,6 +300,7 @@ permissions:
 - Update export table to include `stellar-mpp-sdk/env`
 
 **CLAUDE.md:**
+
 - Add `make check`, `make help`, `pnpm lint`, `pnpm format:check` to Commands
 - Add `sdk/src/env.ts` and `examples/config/` to Module Map
 - Note Express migration in Key Patterns

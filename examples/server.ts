@@ -25,7 +25,9 @@ const RECIPIENT = process.env.STELLAR_RECIPIENT
 
 if (!RECIPIENT || !RECIPIENT.startsWith('G') || RECIPIENT.length !== 56) {
   console.error('❌ Set STELLAR_RECIPIENT to a valid Stellar public key (G..., 56 chars)')
-  console.error('   Example: STELLAR_RECIPIENT=GC6ZBCI6M6PMBMRCZQMOGCUOZKFREM7P6G2NC3TD5FMYX3YLPAACQMJY npx tsx examples/server.ts')
+  console.error(
+    '   Example: STELLAR_RECIPIENT=GC6ZBCI6M6PMBMRCZQMOGCUOZKFREM7P6G2NC3TD5FMYX3YLPAACQMJY npx tsx examples/server.ts',
+  )
   process.exit(1)
 }
 
@@ -65,7 +67,9 @@ async function sendWebResponse(webRes: Response, res: ServerResponse) {
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve) => {
     let body = ''
-    req.on('data', (c: Buffer) => { body += c.toString() })
+    req.on('data', (c: Buffer) => {
+      body += c.toString()
+    })
     req.on('end', () => resolve(body))
   })
 }

@@ -16,54 +16,55 @@
 
 ### New files
 
-| File | Responsibility |
-|------|---------------|
-| `eslint.config.mjs` | ESLint 9 flat config for TypeScript |
-| `.prettierrc` | Prettier formatting rules |
-| `.prettierignore` | Files excluded from Prettier |
-| `.git-blame-ignore-revs` | Ignore formatting commit in git blame |
-| `sdk/src/env.ts` | Stellar-aware env parsing primitives |
-| `sdk/src/env.test.ts` | Tests for env primitives |
-| `examples/config/charge-server.ts` | Env class for charge server example |
-| `examples/config/charge-client.ts` | Env class for charge client example |
-| `examples/config/channel-server.ts` | Env class for channel server example |
-| `examples/config/channel-client.ts` | Env class for channel client example |
-| `Makefile` | Self-documenting dev workflow targets |
-| `examples/.env.charge-server.example` | Env template for charge server |
-| `examples/.env.charge-client.example` | Env template for charge client |
-| `examples/.env.channel-server.example` | Env template for channel server |
-| `examples/.env.channel-client.example` | Env template for channel client |
-| `.github/workflows/ci.yml` | GitHub Actions CI pipeline |
+| File                                   | Responsibility                        |
+| -------------------------------------- | ------------------------------------- |
+| `eslint.config.mjs`                    | ESLint 9 flat config for TypeScript   |
+| `.prettierrc`                          | Prettier formatting rules             |
+| `.prettierignore`                      | Files excluded from Prettier          |
+| `.git-blame-ignore-revs`               | Ignore formatting commit in git blame |
+| `sdk/src/env.ts`                       | Stellar-aware env parsing primitives  |
+| `sdk/src/env.test.ts`                  | Tests for env primitives              |
+| `examples/config/charge-server.ts`     | Env class for charge server example   |
+| `examples/config/charge-client.ts`     | Env class for charge client example   |
+| `examples/config/channel-server.ts`    | Env class for channel server example  |
+| `examples/config/channel-client.ts`    | Env class for channel client example  |
+| `Makefile`                             | Self-documenting dev workflow targets |
+| `examples/.env.charge-server.example`  | Env template for charge server        |
+| `examples/.env.charge-client.example`  | Env template for charge client        |
+| `examples/.env.channel-server.example` | Env template for channel server       |
+| `examples/.env.channel-client.example` | Env template for channel client       |
+| `.github/workflows/ci.yml`             | GitHub Actions CI pipeline            |
 
 ### Modified files
 
-| File | Changes |
-|------|---------|
-| `package.json` | scripts, packageManager, engines, exports, devDependencies, dependencies |
-| `tsconfig.json` | Add `noImplicitReturns` |
-| `.gitignore` | Add `examples/.env.*`, `!examples/.env.*.example` |
-| `sdk/src/index.ts` | Re-export env module |
-| `examples/server.ts` | Rewrite: raw http → Express + helmet + cors + rate-limit + Env class |
-| `examples/channel-server.ts` | Rewrite: raw http → Express + helmet + cors + rate-limit + Env class |
-| `examples/client.ts` | Use Env class for env parsing |
-| `examples/channel-client.ts` | Use Env class for env parsing |
-| `examples/channel-open.ts` | Use env primitives for inline validation |
-| `examples/channel-close.ts` | Use env primitives for inline validation |
-| `README.md` | Prerequisites, dev workflow, structure tree, env docs, export table |
-| `CLAUDE.md` | Commands, module map, tooling notes |
+| File                         | Changes                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `package.json`               | scripts, packageManager, engines, exports, devDependencies, dependencies |
+| `tsconfig.json`              | Add `noImplicitReturns`                                                  |
+| `.gitignore`                 | Add `examples/.env.*`, `!examples/.env.*.example`                        |
+| `sdk/src/index.ts`           | Re-export env module                                                     |
+| `examples/server.ts`         | Rewrite: raw http → Express + helmet + cors + rate-limit + Env class     |
+| `examples/channel-server.ts` | Rewrite: raw http → Express + helmet + cors + rate-limit + Env class     |
+| `examples/client.ts`         | Use Env class for env parsing                                            |
+| `examples/channel-client.ts` | Use Env class for env parsing                                            |
+| `examples/channel-open.ts`   | Use env primitives for inline validation                                 |
+| `examples/channel-close.ts`  | Use env primitives for inline validation                                 |
+| `README.md`                  | Prerequisites, dev workflow, structure tree, env docs, export table      |
+| `CLAUDE.md`                  | Commands, module map, tooling notes                                      |
 
 ---
 
 ## Task 1: ESLint + Prettier + Config (Spec Step 1)
 
 ### Files
+
 - Create: `eslint.config.mjs`
 - Create: `.prettierrc`
 - Create: `.prettierignore`
 - Create: `.git-blame-ignore-revs`
 - Modify: `package.json` (scripts, packageManager, engines)
 - Modify: `tsconfig.json:3` (add noImplicitReturns)
-- Modify: `.gitignore` (add examples/.env.*)
+- Modify: `.gitignore` (add examples/.env.\*)
 
 - [ ] **Step 1: Add packageManager, engines, and new scripts to package.json**
 
@@ -195,6 +196,7 @@ pnpm lint
 ```
 
 If there are errors, fix them. Common issues:
+
 - Unused variables → prefix with `_` or remove
 - `any` usage → add `// eslint-disable-next-line` if intentional, or type properly
 
@@ -251,6 +253,7 @@ git commit -m "chore: add .git-blame-ignore-revs for Prettier formatting commit"
 ## Task 2: Dependency Upgrades (Spec Step 2)
 
 ### Files
+
 - Modify: `package.json` (dependency versions)
 
 - [ ] **Step 1: Upgrade devDependencies**
@@ -314,6 +317,7 @@ git commit -m "chore: upgrade all dependencies to latest"
 ## Task 3: Env Parser (Spec Step 3)
 
 ### Files
+
 - Create: `sdk/src/env.ts`
 - Create: `sdk/src/env.test.ts`
 - Modify: `sdk/src/index.ts` (re-export)
@@ -338,7 +342,9 @@ import {
 } from './env.js'
 
 describe('parseRequired', () => {
-  beforeEach(() => { vi.unstubAllEnvs() })
+  beforeEach(() => {
+    vi.unstubAllEnvs()
+  })
 
   it('returns value when env var is set', () => {
     vi.stubEnv('TEST_VAR', 'hello')
@@ -357,7 +363,9 @@ describe('parseRequired', () => {
 })
 
 describe('parseOptional', () => {
-  beforeEach(() => { vi.unstubAllEnvs() })
+  beforeEach(() => {
+    vi.unstubAllEnvs()
+  })
 
   it('returns value when set', () => {
     vi.stubEnv('TEST_VAR', 'hello')
@@ -376,7 +384,9 @@ describe('parseOptional', () => {
 })
 
 describe('parsePort', () => {
-  beforeEach(() => { vi.unstubAllEnvs() })
+  beforeEach(() => {
+    vi.unstubAllEnvs()
+  })
 
   it('returns default port when env var missing', () => {
     delete process.env.PORT
@@ -400,7 +410,9 @@ describe('parsePort', () => {
 })
 
 describe('parseStellarPublicKey', () => {
-  beforeEach(() => { vi.unstubAllEnvs() })
+  beforeEach(() => {
+    vi.unstubAllEnvs()
+  })
 
   it('returns valid G... key', () => {
     const key = 'GATLN2B5WYM6PV64X532ZNQ6Q22HVNFNOTH27VLYEHYLRLM5KNBWV2PL'
@@ -425,7 +437,9 @@ describe('parseStellarPublicKey', () => {
 })
 
 describe('parseStellarSecretKey', () => {
-  beforeEach(() => { vi.unstubAllEnvs() })
+  beforeEach(() => {
+    vi.unstubAllEnvs()
+  })
 
   it('returns valid S... key', () => {
     const key = 'SA5KKLVMJWQNZU4I2PIT2DYLPR6VBB552EQGRZB2EKMPCYICGWH56YXP'
@@ -440,7 +454,9 @@ describe('parseStellarSecretKey', () => {
 })
 
 describe('parseContractAddress', () => {
-  beforeEach(() => { vi.unstubAllEnvs() })
+  beforeEach(() => {
+    vi.unstubAllEnvs()
+  })
 
   it('returns valid C... address', () => {
     const addr = 'CBU3P5BAU6CYGPAVY7TGGGNEPCS7H73IA3L677Z3CFZSGFYB7UFK4IMS'
@@ -455,7 +471,9 @@ describe('parseContractAddress', () => {
 })
 
 describe('parseHexKey', () => {
-  beforeEach(() => { vi.unstubAllEnvs() })
+  beforeEach(() => {
+    vi.unstubAllEnvs()
+  })
 
   it('returns valid 64-char hex key', () => {
     const hex = 'b83ee77019d9ca0aac432139fe0159ec01b5d31f58905fdc089980be05b7c5fd'
@@ -498,7 +516,9 @@ describe('parseCommaSeparatedList', () => {
 })
 
 describe('parseNumber', () => {
-  beforeEach(() => { vi.unstubAllEnvs() })
+  beforeEach(() => {
+    vi.unstubAllEnvs()
+  })
 
   it('returns value from env', () => {
     vi.stubEnv('NUM', '42')
@@ -682,6 +702,7 @@ git commit -m "feat: add Stellar-aware env parsing primitives"
 ## Task 4: Example Env Config Classes (Spec Step 3)
 
 ### Files
+
 - Create: `examples/config/charge-server.ts`
 - Create: `examples/config/charge-client.ts`
 - Create: `examples/config/channel-server.ts`
@@ -830,6 +851,7 @@ git commit -m "feat: add per-example Env config classes using env primitives"
 ## Task 5: Express Migration — Charge Server (Spec Step 4)
 
 ### Files
+
 - Modify: `examples/server.ts` (full rewrite)
 
 - [ ] **Step 1: Rewrite examples/server.ts with Express**
@@ -994,6 +1016,7 @@ git commit -m "refactor: migrate charge server example to Express with security 
 ## Task 6: Express Migration — Channel Server (Spec Step 4)
 
 ### Files
+
 - Modify: `examples/channel-server.ts` (full rewrite)
 
 - [ ] **Step 1: Rewrite examples/channel-server.ts with Express**
@@ -1043,9 +1066,7 @@ app.use(rateLimit({ windowMs: Env.rateLimitWindowMs, max: Env.rateLimitMax }))
 app.use(express.json())
 
 // Convert the raw ed25519 public key (hex) to a Stellar G... address for verification
-const commitmentPublicKeyG = StrKey.encodeEd25519PublicKey(
-  Buffer.from(Env.commitmentPubkey, 'hex'),
-)
+const commitmentPublicKeyG = StrKey.encodeEd25519PublicKey(Buffer.from(Env.commitmentPubkey, 'hex'))
 
 const store = Store.memory()
 
@@ -1114,6 +1135,7 @@ git commit -m "refactor: migrate channel server example to Express with security
 ## Task 7: Update Client Examples + Standalone Scripts (Spec Steps 3-4)
 
 ### Files
+
 - Modify: `examples/client.ts`
 - Modify: `examples/channel-client.ts`
 - Modify: `examples/channel-open.ts`
@@ -1140,6 +1162,7 @@ import { Env } from './config/charge-client.js'
 (Add at top of file, after other imports.)
 
 Then replace all references:
+
 - `secretKey` → `Env.stellarSecret`
 - `const keypair = Keypair.fromSecret(secretKey)` → `const keypair = Keypair.fromSecret(Env.stellarSecret)`
 - `process.env.SERVER_URL ?? 'http://localhost:3000'` → `Env.serverUrl`
@@ -1153,12 +1176,15 @@ Replace the inline env parsing (lines 15-19) in `examples/channel-client.ts`:
 ```ts
 const commitmentSecret = process.env.COMMITMENT_SECRET
 if (!commitmentSecret || commitmentSecret.length !== 64) {
-  console.error('Usage: COMMITMENT_SECRET=<64-char-hex-ed25519-secret> npx tsx examples/channel-client.ts')
+  console.error(
+    'Usage: COMMITMENT_SECRET=<64-char-hex-ed25519-secret> npx tsx examples/channel-client.ts',
+  )
   process.exit(1)
 }
 ```
 
 With an import of the Env class and use:
+
 - Add `import { Env } from './config/channel-client.js'` after other imports
 - Replace `commitmentSecret` → `Env.commitmentSecret`
 - Replace `process.env.SOURCE_ACCOUNT` → `Env.sourceAccount`
@@ -1176,6 +1202,7 @@ import { parseHexKey, parseOptional, parseRequired } from '../sdk/src/env.js'
 ```
 
 Replace:
+
 - `process.env.OPEN_TX_XDR` + validation block → `parseRequired('OPEN_TX_XDR')`
 - `process.env.COMMITMENT_SECRET` + validation block → `parseHexKey('COMMITMENT_SECRET')`
 - `process.env.INITIAL_AMOUNT ?? '10000000'` → `parseOptional('INITIAL_AMOUNT', '10000000')!`
@@ -1200,6 +1227,7 @@ import {
 ```
 
 Replace:
+
 - `process.env.CHANNEL_CONTRACT` + validation → `parseContractAddress('CHANNEL_CONTRACT')`
 - `process.env.COMMITMENT_SECRET` + validation → `parseHexKey('COMMITMENT_SECRET')`
 - `process.env.CLOSE_SECRET` + validation → `parseStellarSecretKey('CLOSE_SECRET')`
@@ -1227,6 +1255,7 @@ git commit -m "refactor: use Env classes and env primitives in all example scrip
 ## Task 8: Makefile (Spec Step 5)
 
 ### Files
+
 - Create: `Makefile`
 
 - [ ] **Step 1: Create Makefile**
@@ -1307,6 +1336,7 @@ git commit -m "chore: add self-documenting Makefile for dev workflow"
 ## Task 9: .env.example Files (Spec Step 6)
 
 ### Files
+
 - Create: `examples/.env.charge-server.example`
 - Create: `examples/.env.charge-client.example`
 - Create: `examples/.env.channel-server.example`
@@ -1363,7 +1393,7 @@ SOURCE_ACCOUNT=G_YOUR_SOURCE_ACCOUNT_HERE
 
 > Note: The `.env` file with testnet keys is NOT currently tracked in git (verified via `git ls-files`). It is already in `.gitignore`. No removal action needed.
 
-- [ ] **Step 5: Verify .env.example files are tracked but .env.* are not**
+- [ ] **Step 5: Verify .env.example files are tracked but .env.\* are not**
 
 ```bash
 git status
@@ -1383,6 +1413,7 @@ git commit -m "docs: add .env.example files for all demo configurations"
 ## Task 10: GitHub Actions CI (Spec Step 7)
 
 ### Files
+
 - Create: `.github/workflows/ci.yml`
 
 - [ ] **Step 1: Create .github/workflows/ci.yml**
@@ -1481,6 +1512,7 @@ git commit -m "ci: add GitHub Actions pipeline with quality gates"
 ## Task 11: README.md + CLAUDE.md Updates (Spec Step 8)
 
 ### Files
+
 - Modify: `README.md`
 - Modify: `CLAUDE.md`
 
@@ -1490,7 +1522,7 @@ Make the following changes to `README.md`:
 
 1. **Add Prerequisites section** (after "## Install", before the install command):
 
-```markdown
+````markdown
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 22+
@@ -1499,7 +1531,9 @@ Make the following changes to `README.md`:
 ```bash
 corepack enable
 ```
-```
+````
+
+````
 
 2. **Update Install section** to include corepack:
 
@@ -1509,8 +1543,9 @@ corepack enable
 ```bash
 corepack enable
 pnpm install
-```
-```
+````
+
+````
 
 3. **Add Development section** (before or after "## Demo"):
 
@@ -1522,17 +1557,20 @@ make help       # Show all available commands
 make check      # Run full quality pipeline (format, lint, typecheck, test, build)
 make test       # Run tests once
 make test-watch # Run tests in watch mode
-```
+````
 
 See the [Makefile](Makefile) for all targets.
+
 ```
 
 4. **Update the exports table** to include `stellar-mpp-sdk/env`:
 
 Add a row:
 ```
+
 | `stellar-mpp-sdk/env` | `parseRequired`, `parseOptional`, `parsePort`, `parseStellarPublicKey`, `parseStellarSecretKey`, `parseContractAddress`, `parseHexKey`, `parseCommaSeparatedList`, `parseNumber` |
-```
+
+````
 
 5. **Add Environment variables section** referencing .env.example files:
 
@@ -1549,7 +1587,7 @@ Example `.env` files are provided for each demo:
 | `examples/.env.channel-client.example` | Channel client (commitment secret, server URL) |
 
 Copy the relevant `.example` file, remove the `.example` suffix, and fill in your values.
-```
+````
 
 6. **Update Project structure** to include new files: `eslint.config.mjs`, `.prettierrc`, `Makefile`, `.github/`, `examples/config/`, `sdk/src/env.ts`
 
@@ -1562,10 +1600,10 @@ Make the following changes to `CLAUDE.md`:
 1. **Add to Commands section:**
 
 ```markdown
-pnpm run lint           # Run ESLint
-pnpm run format:check   # Check Prettier formatting
-make help               # Show all Makefile targets
-make check              # Run full quality pipeline (mirrors CI)
+pnpm run lint # Run ESLint
+pnpm run format:check # Check Prettier formatting
+make help # Show all Makefile targets
+make check # Run full quality pipeline (mirrors CI)
 ```
 
 2. **Add to Module Map table:**

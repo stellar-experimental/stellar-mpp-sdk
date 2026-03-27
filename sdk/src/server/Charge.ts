@@ -39,9 +39,7 @@ export function charge(parameters: charge.Parameters) {
 
   const signerKeypair = signerParam ? resolveKeypair(signerParam) : undefined
 
-  const feeBumpKeypair = feeBumpSignerParam
-    ? resolveKeypair(feeBumpSignerParam)
-    : undefined
+  const feeBumpKeypair = feeBumpSignerParam ? resolveKeypair(feeBumpSignerParam) : undefined
 
   // Serialize verify operations to prevent concurrent race conditions
   // on tx hash deduplication (get/put is not atomic).
@@ -77,186 +75,177 @@ export function charge(parameters: charge.Parameters) {
   })
 
   async function doVerify(credential: any) {
-      const { challenge } = credential
-      const { request: challengeRequest } = challenge
+    const { challenge } = credential
+    const { request: challengeRequest } = challenge
 
-      if (store) {
-        const key = `stellar:challenge:${challenge.id}`
-        const existing = await store.get(key)
-        if (existing) {
-          throw new Error(
-            'Challenge already used. Replay rejected.',
+    if (store) {
+      const key = `stellar:challenge:${challenge.id}`
+      const existing = await store.get(key)
+      if (existing) {
+        throw new Error('Challenge already used. Replay rejected.')
+      }
+      await store.put(key, { usedAt: new Date().toISOString() })
+    }
+
+    const { amount } = challengeRequest
+    const expectedCurrency = challengeRequest.currency
+    const expectedRecipient = challengeRequest.recipient
+    const expectedAmount = BigInt(amount)
+
+    const payload = credential.payload
+
+    switch (payload.type) {
+      case 'hash': {
+        const hash = payload.hash
+
+        // Check tx hash dedup BEFORE verification to reject known replays
+        // early, but only mark as used AFTER successful verification to
+        // avoid permanently burning a hash on transient failures.
+        if (store) {
+          const hashKey = `stellar:tx:${hash}`
+          const hashUsed = await store.get(hashKey)
+          if (hashUsed) {
+            throw new PaymentVerificationError('Transaction hash already used. Replay rejected.', {
+              hash,
+            })
+          }
+        }
+
+        let txResult = await server.getTransaction(hash)
+        let attempts = 0
+        while (txResult.status === 'NOT_FOUND' && attempts < 10) {
+          await new Promise((r) => setTimeout(r, 1000))
+          txResult = await server.getTransaction(hash)
+          attempts++
+        }
+
+        if (txResult.status !== 'SUCCESS') {
+          throw new PaymentVerificationError(
+            `Transaction ${hash} is not successful (status: ${txResult.status}).`,
+            { hash, status: txResult.status },
           )
         }
-        await store.put(key, { usedAt: new Date().toISOString() })
-      }
 
-      const { amount } = challengeRequest
-      const expectedCurrency = challengeRequest.currency
-      const expectedRecipient = challengeRequest.recipient
-      const expectedAmount = BigInt(amount)
-
-      const payload = credential.payload
-
-      switch (payload.type) {
-        case 'hash': {
-          const hash = payload.hash
-
-          // Check tx hash dedup BEFORE verification to reject known replays
-          // early, but only mark as used AFTER successful verification to
-          // avoid permanently burning a hash on transient failures.
-          if (store) {
-            const hashKey = `stellar:tx:${hash}`
-            const hashUsed = await store.get(hashKey)
-            if (hashUsed) {
-              throw new PaymentVerificationError(
-                'Transaction hash already used. Replay rejected.',
-                { hash },
-              )
-            }
-          }
-
-          let txResult = await server.getTransaction(hash)
-          let attempts = 0
-          while (txResult.status === 'NOT_FOUND' && attempts < 10) {
-            await new Promise((r) => setTimeout(r, 1000))
-            txResult = await server.getTransaction(hash)
-            attempts++
-          }
-
-          if (txResult.status !== 'SUCCESS') {
-            throw new PaymentVerificationError(
-              `Transaction ${hash} is not successful (status: ${txResult.status}).`,
-              { hash, status: txResult.status },
-            )
-          }
-
-          verifySacTransfer(txResult, {
+        verifySacTransfer(
+          txResult,
+          {
             amount: expectedAmount,
             currency: expectedCurrency,
             recipient: expectedRecipient,
-          }, networkPassphrase)
+          },
+          networkPassphrase,
+        )
 
-          // Mark tx hash as used only after successful verification
-          if (store) {
-            await store.put(`stellar:tx:${hash}`, { usedAt: new Date().toISOString() })
-          }
-
-          return Receipt.from({
-            method: 'stellar',
-            reference: hash,
-            status: 'success',
-            timestamp: new Date().toISOString(),
-          })
+        // Mark tx hash as used only after successful verification
+        if (store) {
+          await store.put(`stellar:tx:${hash}`, { usedAt: new Date().toISOString() })
         }
 
-        case 'transaction': {
-          const txXdr = payload.transaction
-          const parsed = TransactionBuilder.fromXDR(
-            txXdr,
+        return Receipt.from({
+          method: 'stellar',
+          reference: hash,
+          status: 'success',
+          timestamp: new Date().toISOString(),
+        })
+      }
+
+      case 'transaction': {
+        const txXdr = payload.transaction
+        const parsed = TransactionBuilder.fromXDR(txXdr, networkPassphrase)
+
+        const tx =
+          parsed instanceof FeeBumpTransaction ? parsed.innerTransaction : (parsed as Transaction)
+
+        verifySacInvocation(tx, {
+          amount: expectedAmount,
+          currency: expectedCurrency,
+          recipient: expectedRecipient,
+        })
+
+        let txToSubmit: Transaction | FeeBumpTransaction = parsed as
+          | Transaction
+          | FeeBumpTransaction
+
+        if (!signerKeypair && tx.source === ALL_ZEROS) {
+          throw new PaymentVerificationError(
+            'Transaction uses a sponsored source account but the server is not configured with a signer.',
+            {},
+          )
+        }
+
+        if (signerKeypair && tx.source === ALL_ZEROS) {
+          // ── Sponsored path ──────────────────────────────────────────
+          // Client used all-zeros source; rebuild the tx with the
+          // signer's account as source.
+          const serverAccount = await server.getAccount(signerKeypair.publicKey())
+          const envelopeTx = tx.toEnvelope().v1().tx()
+          const sorobanData = envelopeTx.ext().sorobanData()
+          const rebuilt = new TransactionBuilder(serverAccount, {
+            fee: tx.fee,
+            networkPassphrase,
+            memo: tx.memo,
+            ...(tx.timeBounds ? { timebounds: tx.timeBounds } : {}),
+          })
+          for (const rawOp of envelopeTx.operations()) {
+            rebuilt.addOperation(rawOp)
+          }
+          if (!tx.timeBounds) {
+            rebuilt.setTimeout(DEFAULT_TIMEOUT)
+          }
+          const rebuiltTx = rebuilt.setSorobanData(sorobanData).build()
+          rebuiltTx.sign(signerKeypair)
+          txToSubmit = rebuiltTx
+        }
+
+        // ── Fee bump wrapping ───────────────────────────────────────
+        // When feeBumpSigner is set, wrap in a FeeBumpTransaction.
+        // Applies to both sponsored and unsponsored paths.
+        // NM-004: Cap the fee-bump to prevent draining the fee payer.
+        if (feeBumpKeypair && !(txToSubmit instanceof FeeBumpTransaction)) {
+          const MAX_FEE_BUMP = 10_000_000 // 1 XLM in stroops
+          const bumpFee = Math.min(Number((txToSubmit as Transaction).fee) * 10, MAX_FEE_BUMP)
+          txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
+            feeBumpKeypair,
+            bumpFee.toString(),
+            txToSubmit as Transaction,
             networkPassphrase,
           )
+          txToSubmit.sign(feeBumpKeypair)
+        }
 
-          const tx =
-            parsed instanceof FeeBumpTransaction
-              ? parsed.innerTransaction
-              : (parsed as Transaction)
+        const sendResult = await server.sendTransaction(txToSubmit)
 
-          verifySacInvocation(tx, {
-            amount: expectedAmount,
-            currency: expectedCurrency,
-            recipient: expectedRecipient,
-          })
-
-          let txToSubmit: Transaction | FeeBumpTransaction = parsed as
-            | Transaction
-            | FeeBumpTransaction
-
-          if (!signerKeypair && tx.source === ALL_ZEROS) {
+        let txResult = await server.getTransaction(sendResult.hash)
+        let txAttempts = 0
+        while (txResult.status === 'NOT_FOUND') {
+          if (++txAttempts >= 60) {
             throw new PaymentVerificationError(
-              'Transaction uses a sponsored source account but the server is not configured with a signer.',
-              {},
+              `Transaction not found after ${txAttempts} polling attempts.`,
+              { hash: sendResult.hash },
             )
           }
+          await new Promise((r) => setTimeout(r, 1000))
+          txResult = await server.getTransaction(sendResult.hash)
+        }
 
-          if (signerKeypair && tx.source === ALL_ZEROS) {
-            // ── Sponsored path ──────────────────────────────────────────
-            // Client used all-zeros source; rebuild the tx with the
-            // signer's account as source.
-            const serverAccount = await server.getAccount(signerKeypair.publicKey())
-            const envelopeTx = tx.toEnvelope().v1().tx()
-            const sorobanData = envelopeTx.ext().sorobanData()
-            const rebuilt = new TransactionBuilder(serverAccount, {
-              fee: tx.fee,
-              networkPassphrase,
-              memo: tx.memo,
-              ...(tx.timeBounds ? { timebounds: tx.timeBounds } : {}),
-            })
-            for (const rawOp of envelopeTx.operations()) {
-              rebuilt.addOperation(rawOp)
-            }
-            if (!tx.timeBounds) {
-              rebuilt.setTimeout(DEFAULT_TIMEOUT)
-            }
-            const rebuiltTx = rebuilt.setSorobanData(sorobanData).build()
-            rebuiltTx.sign(signerKeypair)
-            txToSubmit = rebuiltTx
-          }
-
-          // ── Fee bump wrapping ───────────────────────────────────────
-          // When feeBumpSigner is set, wrap in a FeeBumpTransaction.
-          // Applies to both sponsored and unsponsored paths.
-          // NM-004: Cap the fee-bump to prevent draining the fee payer.
-          if (feeBumpKeypair && !(txToSubmit instanceof FeeBumpTransaction)) {
-            const MAX_FEE_BUMP = 10_000_000 // 1 XLM in stroops
-            const bumpFee = Math.min(
-              Number((txToSubmit as Transaction).fee) * 10,
-              MAX_FEE_BUMP,
-            )
-            txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
-              feeBumpKeypair,
-              bumpFee.toString(),
-              txToSubmit as Transaction,
-              networkPassphrase,
-            )
-            txToSubmit.sign(feeBumpKeypair)
-          }
-
-          const sendResult = await server.sendTransaction(txToSubmit)
-
-          let txResult = await server.getTransaction(sendResult.hash)
-          let txAttempts = 0
-          while (txResult.status === 'NOT_FOUND') {
-            if (++txAttempts >= 60) {
-              throw new PaymentVerificationError(
-                `Transaction not found after ${txAttempts} polling attempts.`,
-                { hash: sendResult.hash },
-              )
-            }
-            await new Promise((r) => setTimeout(r, 1000))
-            txResult = await server.getTransaction(sendResult.hash)
-          }
-
-          if (txResult.status !== 'SUCCESS') {
-            throw new PaymentVerificationError(
-              `Transaction failed on-chain: ${txResult.status}`,
-              { hash: sendResult.hash, status: txResult.status },
-            )
-          }
-
-          return Receipt.from({
-            method: 'stellar',
-            reference: sendResult.hash,
-            status: 'success',
-            timestamp: new Date().toISOString(),
+        if (txResult.status !== 'SUCCESS') {
+          throw new PaymentVerificationError(`Transaction failed on-chain: ${txResult.status}`, {
+            hash: sendResult.hash,
+            status: txResult.status,
           })
         }
 
-        default:
-          throw new Error(
-            `Unsupported credential type "${(payload as { type: string }).type}".`,
-          )
+        return Receipt.from({
+          method: 'stellar',
+          reference: sendResult.hash,
+          status: 'success',
+          timestamp: new Date().toISOString(),
+        })
       }
+
+      default:
+        throw new Error(`Unsupported credential type "${(payload as { type: string }).type}".`)
+    }
   }
 }
 
@@ -268,15 +257,10 @@ function verifySacInvocation(
   tx: Transaction,
   expected: { amount: bigint; currency: string; recipient: string },
 ) {
-  const invokeOp = tx.operations.find(
-    (op) => op.type === 'invokeHostFunction',
-  )
+  const invokeOp = tx.operations.find((op) => op.type === 'invokeHostFunction')
 
   if (!invokeOp) {
-    throw new PaymentVerificationError(
-      'Transaction does not contain a Soroban invocation.',
-      {},
-    )
+    throw new PaymentVerificationError('Transaction does not contain a Soroban invocation.', {})
   }
 
   verifyFromRawOps(tx, expected)
@@ -304,9 +288,7 @@ function verifyFromRawOps(
     }
 
     const invokeArgs = hostFn.invokeContract()
-    const contractAddress = Address.fromScAddress(
-      invokeArgs.contractAddress(),
-    ).toString()
+    const contractAddress = Address.fromScAddress(invokeArgs.contractAddress()).toString()
     const functionName = invokeArgs.functionName().toString()
     const args = invokeArgs.args()
 
@@ -351,18 +333,11 @@ function verifySacTransfer(
   let envelope: xdr.TransactionEnvelope
   if (typeof txResult.envelopeXdr === 'string') {
     try {
-      envelope = xdr.TransactionEnvelope.fromXDR(
-        txResult.envelopeXdr,
-        'base64',
-      )
+      envelope = xdr.TransactionEnvelope.fromXDR(txResult.envelopeXdr, 'base64')
     } catch (error) {
-      throw new PaymentVerificationError(
-        'Could not parse transaction envelope for verification.',
-        {
-          details:
-            error instanceof Error ? error.message : String(error),
-        },
-      )
+      throw new PaymentVerificationError('Could not parse transaction envelope for verification.', {
+        details: error instanceof Error ? error.message : String(error),
+      })
     }
   } else {
     envelope = txResult.envelopeXdr
@@ -373,10 +348,7 @@ function verifySacTransfer(
   try {
     innerTx = new Transaction(envelope, networkPassphrase)
   } catch {
-    throw new PaymentVerificationError(
-      'Could not parse transaction envelope for verification.',
-      {},
-    )
+    throw new PaymentVerificationError('Could not parse transaction envelope for verification.', {})
   }
 
   verifyFromRawOps(innerTx, expected)

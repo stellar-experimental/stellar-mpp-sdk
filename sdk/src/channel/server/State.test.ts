@@ -40,10 +40,13 @@ mockGetAccount.mockResolvedValue({
 })
 
 function makeI128ScVal(amount: bigint): xdr.ScVal {
-  const lo = amount & 0xFFFFFFFFFFFFFFFFn
+  const lo = amount & 0xffffffffffffffffn
   const hi = amount >> 64n
   return xdr.ScVal.scvI128(
-    new xdr.Int128Parts({ lo: xdr.Uint64.fromString(lo.toString()), hi: xdr.Int64.fromString(hi.toString()) }),
+    new xdr.Int128Parts({
+      lo: xdr.Uint64.fromString(lo.toString()),
+      hi: xdr.Int64.fromString(hi.toString()),
+    }),
   )
 }
 
@@ -83,9 +86,7 @@ function makeLedgerEntryWithCloseEffective(ledgerValue: number) {
   ]
 
   const instance = new xdr.ScContractInstance({
-    executable: xdr.ContractExecutable.contractExecutableWasm(
-      Buffer.alloc(32),
-    ),
+    executable: xdr.ContractExecutable.contractExecutableWasm(Buffer.alloc(32)),
     storage,
   })
 
@@ -104,9 +105,7 @@ function makeLedgerEntryWithCloseEffective(ledgerValue: number) {
 
 function makeLedgerEntryWithoutCloseEffective() {
   const instance = new xdr.ScContractInstance({
-    executable: xdr.ContractExecutable.contractExecutableWasm(
-      Buffer.alloc(32),
-    ),
+    executable: xdr.ContractExecutable.contractExecutableWasm(Buffer.alloc(32)),
     storage: [],
   })
 

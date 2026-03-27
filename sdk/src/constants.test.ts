@@ -6,9 +6,7 @@ describe('constants', () => {
     expect(constants.NETWORK_PASSPHRASE.public).toBe(
       'Public Global Stellar Network ; September 2015',
     )
-    expect(constants.NETWORK_PASSPHRASE.testnet).toBe(
-      'Test SDF Network ; September 2015',
-    )
+    expect(constants.NETWORK_PASSPHRASE.testnet).toBe('Test SDF Network ; September 2015')
   })
 
   it('exports SOROBAN_RPC_URLS', () => {
@@ -18,9 +16,7 @@ describe('constants', () => {
 
   it('exports HORIZON_URLS', () => {
     expect(constants.HORIZON_URLS.public).toBe('https://horizon.stellar.org')
-    expect(constants.HORIZON_URLS.testnet).toBe(
-      'https://horizon-testnet.stellar.org',
-    )
+    expect(constants.HORIZON_URLS.testnet).toBe('https://horizon-testnet.stellar.org')
   })
 
   it('exports USDC SAC contract addresses', () => {

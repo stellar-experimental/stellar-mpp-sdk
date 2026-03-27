@@ -1,16 +1,7 @@
-import {
-  Contract,
-  Keypair,
-  nativeToScVal,
-  rpc,
-} from '@stellar/stellar-sdk'
+import { Contract, Keypair, nativeToScVal, rpc } from '@stellar/stellar-sdk'
 import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
-import {
-  NETWORK_PASSPHRASE,
-  SOROBAN_RPC_URLS,
-  type NetworkId,
-} from '../../constants.js'
+import { NETWORK_PASSPHRASE, SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
 import { channel as ChannelMethod } from '../Methods.js'
 
 /**
@@ -45,13 +36,10 @@ export function channel(parameters: channel.Parameters) {
   } = parameters
 
   if (!commitmentKeyParam && !commitmentSecret) {
-    throw new Error(
-      'Either commitmentKey or commitmentSecret must be provided.',
-    )
+    throw new Error('Either commitmentKey or commitmentSecret must be provided.')
   }
 
-  const commitmentKey =
-    commitmentKeyParam ?? Keypair.fromSecret(commitmentSecret!)
+  const commitmentKey = commitmentKeyParam ?? Keypair.fromSecret(commitmentSecret!)
 
   return Method.toClient(ChannelMethod, {
     context: z.object({
@@ -65,8 +53,7 @@ export function channel(parameters: channel.Parameters) {
     async createCredential({ challenge, context }) {
       const { request } = challenge
       const { amount, channel: channelAddress } = request
-      const network: NetworkId =
-        (request.methodDetails?.network as NetworkId) ?? 'testnet'
+      const network: NetworkId = (request.methodDetails?.network as NetworkId) ?? 'testnet'
 
       // The server tells us the cumulative amount via methodDetails,
       // or the caller can override via context.
@@ -76,15 +63,11 @@ export function channel(parameters: channel.Parameters) {
       // (first payment). The caller must also provide the signed open tx XDR.
       if (action === 'open') {
         if (!context?.openTransaction) {
-          throw new Error(
-            'openTransaction is required when action is "open".',
-          )
+          throw new Error('openTransaction is required when action is "open".')
         }
       }
 
-      const previousCumulative = BigInt(
-        request.methodDetails?.cumulativeAmount ?? '0',
-      )
+      const previousCumulative = BigInt(request.methodDetails?.cumulativeAmount ?? '0')
       const cumulativeAmount =
         context?.cumulativeAmount !== undefined
           ? BigInt(context.cumulativeAmount)
@@ -109,9 +92,7 @@ export function channel(parameters: channel.Parameters) {
       )
 
       // Simulate the call to get the commitment bytes
-      const account = await server.getAccount(
-        sourceAccount ?? commitmentKey.publicKey(),
-      )
+      const account = await server.getAccount(sourceAccount ?? commitmentKey.publicKey())
       const { TransactionBuilder } = await import('@stellar/stellar-sdk')
       const simTx = new TransactionBuilder(account, {
         fee: '100',

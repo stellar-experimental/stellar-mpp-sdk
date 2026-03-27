@@ -60,9 +60,7 @@ export function charge(parameters: charge.Parameters) {
   } = parameters
 
   if (!keypairParam && !secretKey) {
-    throw new Error(
-      'Either keypair or secretKey must be provided.',
-    )
+    throw new Error('Either keypair or secretKey must be provided.')
   }
 
   const keypair = keypairParam ?? Keypair.fromSecret(secretKey!)
@@ -74,8 +72,7 @@ export function charge(parameters: charge.Parameters) {
     async createCredential({ challenge, context }) {
       const { request } = challenge
       const { amount, currency, recipient } = request
-      const network: NetworkId =
-        (request.methodDetails?.network as NetworkId) ?? 'testnet'
+      const network: NetworkId = (request.methodDetails?.network as NetworkId) ?? 'testnet'
       const memo = request.methodDetails?.memo as string | undefined
       onProgress?.({
         type: 'challenge',
@@ -98,7 +95,7 @@ export function charge(parameters: charge.Parameters) {
       if (isServerSponsored && effectiveMode === 'push') {
         throw new Error(
           'Push mode is not supported for server-sponsored transactions. ' +
-          'The server must submit sponsored transactions. Use mode: \'pull\' (default).',
+            "The server must submit sponsored transactions. Use mode: 'pull' (default).",
         )
       }
 
@@ -131,8 +128,7 @@ export function charge(parameters: charge.Parameters) {
 
         // Determine auth-entry expiry from the current ledger sequence
         const latestLedger = await server.getLatestLedger()
-        const validUntilLedger =
-          latestLedger.sequence + Math.ceil(timeout / 5) + 10
+        const validUntilLedger = latestLedger.sequence + Math.ceil(timeout / 5) + 10
 
         onProgress?.({ type: 'signing' })
 
@@ -141,10 +137,7 @@ export function charge(parameters: charge.Parameters) {
         const envelope = prepared.toEnvelope().v1()
         for (const op of envelope.tx().operations()) {
           const body = op.body()
-          if (
-            body.switch().value !==
-            StellarXdr.OperationType.invokeHostFunction().value
-          ) {
+          if (body.switch().value !== StellarXdr.OperationType.invokeHostFunction().value) {
             continue
           }
           const authEntries = body.invokeHostFunctionOp().auth()
@@ -218,18 +211,14 @@ export function charge(parameters: charge.Parameters) {
         let pollAttempts = 0
         while (txResult.status === 'NOT_FOUND') {
           if (++pollAttempts >= 60) {
-            throw new Error(
-              `Transaction not confirmed after ${pollAttempts} polling attempts.`,
-            )
+            throw new Error(`Transaction not confirmed after ${pollAttempts} polling attempts.`)
           }
           await new Promise((r) => setTimeout(r, 1000))
           txResult = await server.getTransaction(result.hash)
         }
 
         if (txResult.status !== 'SUCCESS') {
-          throw new Error(
-            `Transaction failed: ${txResult.status}`,
-          )
+          throw new Error(`Transaction failed: ${txResult.status}`)
         }
 
         onProgress?.({ type: 'paid', hash: result.hash })

@@ -14,7 +14,9 @@ import { stellar } from '../sdk/src/channel/client/index.js'
 
 const commitmentSecret = process.env.COMMITMENT_SECRET
 if (!commitmentSecret || commitmentSecret.length !== 64) {
-  console.error('Usage: COMMITMENT_SECRET=<64-char-hex-ed25519-secret> npx tsx examples/channel-client.ts')
+  console.error(
+    'Usage: COMMITMENT_SECRET=<64-char-hex-ed25519-secret> npx tsx examples/channel-client.ts',
+  )
   process.exit(1)
 }
 
@@ -32,14 +34,18 @@ Mppx.create({
         const ts = new Date().toISOString().slice(11, 23)
         switch (event.type) {
           case 'challenge':
-            console.log(`[${ts}] 💳 Challenge received — ${event.amount} stroops via channel ${event.channel.slice(0, 12)}...`)
+            console.log(
+              `[${ts}] 💳 Challenge received — ${event.amount} stroops via channel ${event.channel.slice(0, 12)}...`,
+            )
             console.log(`[${ts}]    Cumulative amount will be: ${event.cumulativeAmount} stroops`)
             break
           case 'signing':
             console.log(`[${ts}] ✍️  Signing commitment...`)
             break
           case 'signed':
-            console.log(`[${ts}] ✅ Commitment signed (cumulative: ${event.cumulativeAmount} stroops)`)
+            console.log(
+              `[${ts}] ✅ Commitment signed (cumulative: ${event.cumulativeAmount} stroops)`,
+            )
             break
         }
       },

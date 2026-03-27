@@ -1,15 +1,5 @@
-import {
-  Address,
-  Contract,
-  TransactionBuilder,
-  rpc,
-  xdr,
-} from '@stellar/stellar-sdk'
-import {
-  NETWORK_PASSPHRASE,
-  SOROBAN_RPC_URLS,
-  type NetworkId,
-} from '../../constants.js'
+import { Address, Contract, TransactionBuilder, rpc, xdr } from '@stellar/stellar-sdk'
+import { NETWORK_PASSPHRASE, SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
 import { scValToBigInt } from '../../scval.js'
 
 // ---------------------------------------------------------------------------
@@ -64,12 +54,7 @@ export type ChannelState = {
 export async function getChannelState(
   parameters: getChannelState.Parameters,
 ): Promise<ChannelState> {
-  const {
-    channel: channelAddress,
-    network = 'testnet',
-    rpcUrl,
-    sourceAccount,
-  } = parameters
+  const { channel: channelAddress, network = 'testnet', rpcUrl, sourceAccount } = parameters
 
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
   const networkPassphrase = NETWORK_PASSPHRASE[network]
@@ -90,24 +75,20 @@ export async function getChannelState(
 
     const result = await server.simulateTransaction(tx)
     if (!rpc.Api.isSimulationSuccess(result)) {
-      const errorMsg =
-        'error' in result ? String(result.error) : 'unknown'
-      throw new Error(
-        `Failed to simulate ${fnName} on channel ${channelAddress}: ${errorMsg}`,
-      )
+      const errorMsg = 'error' in result ? String(result.error) : 'unknown'
+      throw new Error(`Failed to simulate ${fnName} on channel ${channelAddress}: ${errorMsg}`)
     }
     return result.result?.retval
   }
 
   // Run getter simulations in parallel
-  const [balanceVal, waitingPeriodVal, tokenVal, fromVal, toVal] =
-    await Promise.all([
-      simulateGetter('balance'),
-      simulateGetter('refund_waiting_period'),
-      simulateGetter('token'),
-      simulateGetter('from'),
-      simulateGetter('to'),
-    ])
+  const [balanceVal, waitingPeriodVal, tokenVal, fromVal, toVal] = await Promise.all([
+    simulateGetter('balance'),
+    simulateGetter('refund_waiting_period'),
+    simulateGetter('token'),
+    simulateGetter('from'),
+    simulateGetter('to'),
+  ])
 
   const balance = scValToBigInt(balanceVal!)
   if (!waitingPeriodVal) {
@@ -123,10 +104,7 @@ export async function getChannelState(
   // Read CloseEffectiveAtLedger from contract instance storage.
   // The contract uses DataKey::CloseEffectiveAtLedger (enum variant index 5)
   // stored in instance storage.
-  const closeEffectiveAtLedger = await readCloseEffectiveAtLedger(
-    server,
-    channelAddress,
-  )
+  const closeEffectiveAtLedger = await readCloseEffectiveAtLedger(server, channelAddress)
 
   const latestLedger = await server.getLatestLedger()
 
@@ -219,10 +197,7 @@ function isEnumVariant(scVal: xdr.ScVal, name: string): boolean {
   try {
     if (scVal.switch().value === xdr.ScValType.scvVec().value) {
       const vec = scVal.vec()!
-      if (
-        vec.length === 1 &&
-        vec[0].switch().value === xdr.ScValType.scvSymbol().value
-      ) {
+      if (vec.length === 1 && vec[0].switch().value === xdr.ScValType.scvSymbol().value) {
         return vec[0].sym().toString() === name
       }
     }

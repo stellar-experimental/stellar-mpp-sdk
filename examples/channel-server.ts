@@ -26,13 +26,19 @@ const COMMITMENT_PUBKEY = process.env.COMMITMENT_PUBKEY
 
 if (!CHANNEL_CONTRACT || !CHANNEL_CONTRACT.startsWith('C') || CHANNEL_CONTRACT.length !== 56) {
   console.error('❌ Set CHANNEL_CONTRACT to the deployed channel contract address (C..., 56 chars)')
-  console.error('   Example: CHANNEL_CONTRACT=CBU3P5BAU6CYGPAVY7TGGGNEPCS7H73IA3L677Z3CFZSGFYB7UFK4IMS')
+  console.error(
+    '   Example: CHANNEL_CONTRACT=CBU3P5BAU6CYGPAVY7TGGGNEPCS7H73IA3L677Z3CFZSGFYB7UFK4IMS',
+  )
   process.exit(1)
 }
 
 if (!COMMITMENT_PUBKEY || COMMITMENT_PUBKEY.length !== 64) {
-  console.error('❌ Set COMMITMENT_PUBKEY to the ed25519 public key used when deploying the channel (64 hex chars)')
-  console.error('   Example: COMMITMENT_PUBKEY=b83ee77019d9ca0aac432139fe0159ec01b5d31f58905fdc089980be05b7c5fd')
+  console.error(
+    '❌ Set COMMITMENT_PUBKEY to the ed25519 public key used when deploying the channel (64 hex chars)',
+  )
+  console.error(
+    '   Example: COMMITMENT_PUBKEY=b83ee77019d9ca0aac432139fe0159ec01b5d31f58905fdc089980be05b7c5fd',
+  )
   process.exit(1)
 }
 
@@ -80,7 +86,7 @@ async function sendWebResponse(webRes: Response, res: ServerResponse) {
 // ---------------------------------------------------------------------------
 
 const server = createServer(async (req, res) => {
-  const url = new URL(req.url!, `http://localhost:${PORT}`)
+  const _url = new URL(req.url!, `http://localhost:${PORT}`)
 
   // CORS preflight
   if (req.method === 'OPTIONS') {
@@ -95,7 +101,7 @@ const server = createServer(async (req, res) => {
   // Main MPP channel endpoint
   const webReq = toWebRequest(req)
   const result = await mppx.channel({
-    amount: '0.1',  // 0.1 XLM per request
+    amount: '0.1', // 0.1 XLM per request
     description: 'Channel-gated API access',
   })(webReq)
 

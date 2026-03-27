@@ -103,22 +103,23 @@ Methods.ts (Zod schema) → client/ (create credentials) + server/ (verify crede
 
 ### Module Map
 
-| Path | Role |
-|------|------|
-| `sdk/src/Methods.ts` | Charge method schema (Zod discriminated union: `transaction` vs `hash` credentials) |
-| `sdk/src/constants.ts` | SAC addresses (USDC/XLM), RPC URLs, network passphrases, defaults |
-| `sdk/src/scval.ts` | Soroban ScVal ↔ BigInt conversion |
-| `sdk/src/client/Charge.ts` | Creates SAC `transfer` invocations; handles pull (send XDR) and push (broadcast + send hash) flows |
-| `sdk/src/server/Charge.ts` | Verifies and broadcasts SAC transfers; supports fee sponsorship via FeeBumpTransaction |
-| `sdk/src/channel/Methods.ts` | Channel method schema (discriminated union: `open` / `voucher` / `close` actions) |
+| Path                                | Role                                                                                                                               |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `sdk/src/Methods.ts`                | Charge method schema (Zod discriminated union: `transaction` vs `hash` credentials)                                                |
+| `sdk/src/constants.ts`              | SAC addresses (USDC/XLM), RPC URLs, network passphrases, defaults                                                                  |
+| `sdk/src/scval.ts`                  | Soroban ScVal ↔ BigInt conversion                                                                                                  |
+| `sdk/src/client/Charge.ts`          | Creates SAC `transfer` invocations; handles pull (send XDR) and push (broadcast + send hash) flows                                 |
+| `sdk/src/server/Charge.ts`          | Verifies and broadcasts SAC transfers; supports fee sponsorship via FeeBumpTransaction                                             |
+| `sdk/src/channel/Methods.ts`        | Channel method schema (discriminated union: `open` / `voucher` / `close` actions)                                                  |
 | `sdk/src/channel/client/Channel.ts` | Signs cumulative commitment amounts off-chain via ed25519; handles `open` action (sends signed deploy tx XDR + initial commitment) |
-| `sdk/src/channel/server/Channel.ts` | Verifies commitment signatures via contract simulation; `open` action broadcasts the deploy tx and initialises cumulative store |
-| `sdk/src/channel/server/State.ts` | Queries on-chain channel state (balance, close status, refund period) |
-| `sdk/src/channel/server/Watcher.ts` | Polls for contract events (close, refund, top_up) |
+| `sdk/src/channel/server/Channel.ts` | Verifies commitment signatures via contract simulation; `open` action broadcasts the deploy tx and initialises cumulative store    |
+| `sdk/src/channel/server/State.ts`   | Queries on-chain channel state (balance, close status, refund period)                                                              |
+| `sdk/src/channel/server/Watcher.ts` | Polls for contract events (close, refund, top_up)                                                                                  |
 
 ### Subpath Exports
 
 Package.json exports allow selective imports to avoid bundling unused code:
+
 - `stellar-mpp-sdk` — root (schemas + constants)
 - `stellar-mpp-sdk/client` — charge client only
 - `stellar-mpp-sdk/server` — charge server only
