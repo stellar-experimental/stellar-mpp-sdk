@@ -45,7 +45,7 @@ jobs:
         run: pnpm check:types
 
       - name: Test
-        run: pnpm test -- --run
+        run: pnpm test -- --run --coverage --coverage.reporter=text
 
       - name: Build
         run: pnpm build
