@@ -1,7 +1,8 @@
-import { Contract, Keypair, nativeToScVal, rpc } from '@stellar/stellar-sdk'
+import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stellar/stellar-sdk'
 import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
 import { NETWORK_PASSPHRASE, SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
+import { DEFAULT_SIMULATION_TIMEOUT_MS } from '../../shared/defaults.js'
 import { channel as ChannelMethod } from '../Methods.js'
 
 /**
@@ -32,6 +33,7 @@ export function channel(parameters: channel.Parameters) {
     commitmentSecret,
     onProgress,
     rpcUrl,
+    simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
     sourceAccount,
   } = parameters
 
@@ -93,13 +95,12 @@ export function channel(parameters: channel.Parameters) {
 
       // Simulate the call to get the commitment bytes
       const account = await server.getAccount(sourceAccount ?? commitmentKey.publicKey())
-      const { TransactionBuilder } = await import('@stellar/stellar-sdk')
       const simTx = new TransactionBuilder(account, {
         fee: '100',
         networkPassphrase,
       })
         .addOperation(call)
-        .setTimeout(30)
+        .setTimeout(simulationTimeoutMs / 1000)
         .build()
 
       const simResult = await server.simulateTransaction(simTx)
@@ -164,6 +165,8 @@ export declare namespace channel {
     commitmentKey?: Keypair
     /** Custom Soroban RPC URL. Defaults based on network. */
     rpcUrl?: string
+    /** Simulation timeout in milliseconds. @default 10_000 */
+    simulationTimeoutMs?: number
     /**
      * Funded Stellar account address (G...) used as the source for
      * read-only transaction simulations. If omitted, the commitment

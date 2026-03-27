@@ -14,8 +14,20 @@ import {
   SOROBAN_RPC_URLS,
   type NetworkId,
 } from '../../constants.js'
-import { toBaseUnits } from '../../shared/units.js'
+import {
+  DEFAULT_MAX_FEE_BUMP_STROOPS,
+  DEFAULT_POLL_DELAY_MS,
+  DEFAULT_POLL_MAX_ATTEMPTS,
+  DEFAULT_POLL_TIMEOUT_MS,
+  DEFAULT_SIMULATION_TIMEOUT_MS,
+} from '../../shared/defaults.js'
+import { ChannelVerificationError } from '../../shared/errors.js'
+import { wrapFeeBump } from '../../shared/fee-bump.js'
 import { resolveKeypair } from '../../shared/keypairs.js'
+import { noopLogger, type Logger } from '../../shared/logger.js'
+import { pollTransaction } from '../../shared/poll.js'
+import { toBaseUnits } from '../../shared/units.js'
+import { validateHexSignature } from '../../shared/validation.js'
 import { channel as ChannelMethod } from '../Methods.js'
 import { getChannelState, type ChannelState } from './State.js'
 
@@ -50,12 +62,18 @@ export function channel(parameters: channel.Parameters) {
     commitmentKey: commitmentKeyParam,
     decimals = DEFAULT_DECIMALS,
     feeBumpSigner: feeBumpSignerParam,
+    maxFeeBumpStroops = DEFAULT_MAX_FEE_BUMP_STROOPS,
     network = 'testnet',
     onDisputeDetected,
+    pollDelayMs = DEFAULT_POLL_DELAY_MS,
+    pollMaxAttempts = DEFAULT_POLL_MAX_ATTEMPTS,
+    pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
     rpcUrl,
+    simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
     signer: signerParam,
     sourceAccount,
     store,
+    logger = noopLogger,
   } = parameters
 
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
@@ -125,13 +143,16 @@ export function channel(parameters: channel.Parameters) {
     const payload = credential.payload
     const action = payload.action ?? 'voucher'
 
-    // NM-001: Reject credentials once the channel has been finalized (closed on-chain).
+    // NM-001: Reject credentials once the channel has been closed on-chain.
     // Applied to all actions including 'open'.
     if (store) {
-      const finalized = await store.get(`stellar:channel:finalized:${channelAddress}`)
-      if (finalized) {
+      const closed = await store.get(`stellar:channel:closed:${channelAddress}`)
+      if (closed) {
+        logger.warn('[stellar:channel] Rejecting credential — channel already closed', {
+          channel: channelAddress,
+        })
         throw new ChannelVerificationError(
-          'Channel has been finalized. No further credentials accepted.',
+          '[stellar:channel] Channel has been closed. No further credentials accepted.',
           { channel: channelAddress },
         )
       }
@@ -142,7 +163,7 @@ export function channel(parameters: channel.Parameters) {
     // be exploited in a single-process deployment. Multi-process
     // deployments MUST use a store with atomic put-if-absent semantics.
     if (store) {
-      const replayKey = `stellar:challenge:${challenge.id}`
+      const replayKey = `stellar:channel:challenge:${challenge.id}`
       const existing = await store.get(replayKey)
       if (existing) {
         throw new Error('Challenge already used. Replay rejected.')
@@ -157,7 +178,7 @@ export function channel(parameters: channel.Parameters) {
       return doVerifyOpen(credential)
     }
 
-    // NM-001 (voucher/close): finalized and replay checks are now applied
+    // NM-001 (voucher/close): closed and replay checks are now applied
     // earlier in doVerify() for all actions including 'open'.
 
     const commitmentAmount = BigInt(payload.amount)
@@ -182,6 +203,11 @@ export function channel(parameters: channel.Parameters) {
           sourceAccount,
         })
 
+        logger.debug('[stellar:channel] On-chain state check', {
+          balance: state.balance.toString(),
+          closeAt: state.closeEffectiveAtLedger,
+        })
+
         // Cache the on-chain state for the caller
         if (store) {
           await store.put(`stellar:channel:state:${channelAddress}`, {
@@ -196,8 +222,12 @@ export function channel(parameters: channel.Parameters) {
           onDisputeDetected?.(state)
 
           if (state.currentLedger >= state.closeEffectiveAtLedger) {
+            logger.warn('[stellar:channel] Channel is closed — effective ledger reached', {
+              closeEffectiveAtLedger: state.closeEffectiveAtLedger,
+              currentLedger: state.currentLedger,
+            })
             throw new ChannelVerificationError(
-              'Channel is closed: close effective ledger has been reached.',
+              '[stellar:channel] Channel is closed: close effective ledger has been reached.',
               {
                 closeEffectiveAtLedger: String(state.closeEffectiveAtLedger),
                 currentLedger: String(state.currentLedger),
@@ -208,8 +238,12 @@ export function channel(parameters: channel.Parameters) {
 
         // NM-003: Reject commitments that exceed the channel's on-chain balance.
         if (commitmentAmount > state.balance) {
+          logger.warn('[stellar:channel] Commitment exceeds channel balance', {
+            commitmentAmount: commitmentAmount.toString(),
+            balance: state.balance.toString(),
+          })
           throw new ChannelVerificationError(
-            `Commitment ${commitmentAmount} exceeds channel balance ${state.balance}.`,
+            `[stellar:channel] Commitment ${commitmentAmount} exceeds channel balance ${state.balance}.`,
             {
               commitmentAmount: commitmentAmount.toString(),
               balance: state.balance.toString(),
@@ -221,23 +255,27 @@ export function channel(parameters: channel.Parameters) {
         if (error instanceof ChannelVerificationError) throw error
         // NM-005: Fail closed — reject the voucher when the on-chain
         // check cannot be completed rather than silently skipping it.
+        logger.warn('[stellar:channel] On-chain state check failed', {
+          error: error instanceof Error ? error.message : String(error),
+        })
         throw new ChannelVerificationError(
-          'On-chain state check failed. Cannot verify channel status.',
+          '[stellar:channel] On-chain state check failed. Cannot verify channel status.',
           { error: error instanceof Error ? error.message : String(error) },
         )
       }
     }
 
     // Validate hex signature format
-    if (!/^[0-9a-f]+$/i.test(signatureHex) || signatureHex.length % 2 !== 0) {
-      throw new ChannelVerificationError('Invalid signature: not a valid hex string.', {
+    try {
+      validateHexSignature(signatureHex)
+    } catch (err) {
+      logger.warn('[stellar:channel] Invalid signature format', {
         signature: signatureHex,
+        length: signatureHex?.length,
       })
-    }
-    if (signatureHex.length !== 128) {
       throw new ChannelVerificationError(
-        `Invalid signature length: expected 128 hex chars (64 bytes), got ${signatureHex.length}.`,
-        { length: String(signatureHex.length) },
+        `[stellar:channel] ${err instanceof Error ? err.message : 'Invalid signature'}`,
+        { signature: signatureHex, length: String(signatureHex?.length ?? 0) },
       )
     }
     const signatureBytes = Buffer.from(signatureHex, 'hex')
@@ -254,15 +292,22 @@ export function channel(parameters: channel.Parameters) {
     // Reject zero or negative requested amounts
     const requestedAmount = BigInt(challengeRequest.amount)
     if (requestedAmount <= 0n) {
-      throw new ChannelVerificationError('Requested amount must be positive.', {
+      logger.warn('[stellar:channel] Non-positive requested amount', {
+        requestedAmount: requestedAmount.toString(),
+      })
+      throw new ChannelVerificationError('[stellar:channel] Requested amount must be positive.', {
         requestedAmount: requestedAmount.toString(),
       })
     }
 
     // The new cumulative must be strictly greater than previous cumulative
     if (commitmentAmount <= previousCumulative) {
+      logger.warn('[stellar:channel] Commitment not greater than previous cumulative', {
+        commitmentAmount: commitmentAmount.toString(),
+        previousCumulative: previousCumulative.toString(),
+      })
       throw new ChannelVerificationError(
-        `Commitment amount ${commitmentAmount} must be greater than previous cumulative ${previousCumulative}.`,
+        `[stellar:channel] Commitment amount ${commitmentAmount} must be greater than previous cumulative ${previousCumulative}.`,
         {
           commitmentAmount: commitmentAmount.toString(),
           previousCumulative: previousCumulative.toString(),
@@ -272,8 +317,13 @@ export function channel(parameters: channel.Parameters) {
 
     // The commitment must cover the requested amount
     if (commitmentAmount < previousCumulative + requestedAmount) {
+      logger.warn('[stellar:channel] Commitment does not cover requested amount', {
+        commitmentAmount: commitmentAmount.toString(),
+        requestedAmount: requestedAmount.toString(),
+        previousCumulative: previousCumulative.toString(),
+      })
       throw new ChannelVerificationError(
-        `Commitment amount ${commitmentAmount} does not cover the requested amount ${requestedAmount} (previous cumulative: ${previousCumulative}).`,
+        `[stellar:channel] Commitment amount ${commitmentAmount} does not cover the requested amount ${requestedAmount} (previous cumulative: ${previousCumulative}).`,
         {
           commitmentAmount: commitmentAmount.toString(),
           requestedAmount: requestedAmount.toString(),
@@ -285,6 +335,7 @@ export function channel(parameters: channel.Parameters) {
     // Verify: call prepare_commitment on the channel contract to
     // reconstruct the expected commitment bytes, then verify the
     // ed25519 signature.
+    logger.debug('[stellar:channel] Verifying commitment signature...')
     const contract = new Contract(channelAddress)
     const call = contract.call(
       'prepare_commitment',
@@ -297,14 +348,15 @@ export function channel(parameters: channel.Parameters) {
       networkPassphrase,
     })
       .addOperation(call)
-      .setTimeout(30)
+      .setTimeout(simulationTimeoutMs / 1000)
       .build()
 
     const simResult = await server.simulateTransaction(simTx)
 
     if (!rpc.Api.isSimulationSuccess(simResult)) {
+      logger.warn('[stellar:channel] prepare_commitment simulation failed')
       throw new ChannelVerificationError(
-        'Failed to simulate prepare_commitment for verification.',
+        '[stellar:channel] Failed to simulate prepare_commitment for verification.',
         {
           error: 'error' in simResult ? String(simResult.error) : 'unknown',
         },
@@ -313,7 +365,10 @@ export function channel(parameters: channel.Parameters) {
 
     const returnValue = simResult.result?.retval
     if (!returnValue) {
-      throw new ChannelVerificationError('prepare_commitment returned no value.', {})
+      throw new ChannelVerificationError(
+        '[stellar:channel] prepare_commitment returned no value.',
+        {},
+      )
     }
 
     const commitmentBytes = returnValue.bytes()
@@ -322,10 +377,17 @@ export function channel(parameters: channel.Parameters) {
     const valid = commitmentKeypair.verify(Buffer.from(commitmentBytes), signatureBytes)
 
     if (!valid) {
-      throw new ChannelVerificationError('Commitment signature verification failed.', {
+      logger.warn('[stellar:channel] Commitment signature verification failed', {
         amount: commitmentAmount.toString(),
         channel: channelAddress,
       })
+      throw new ChannelVerificationError(
+        '[stellar:channel] Commitment signature verification failed.',
+        {
+          amount: commitmentAmount.toString(),
+          channel: channelAddress,
+        },
+      )
     }
 
     // Update cumulative amount in store
@@ -338,7 +400,10 @@ export function channel(parameters: channel.Parameters) {
     // Dispatch on action
     if (action === 'close') {
       if (!signerKeypair) {
-        throw new ChannelVerificationError('Close action requires a signer to be configured.', {})
+        throw new ChannelVerificationError(
+          '[stellar:channel] Close action requires a signer to be configured.',
+          {},
+        )
       }
 
       // Submit the close transaction on-chain
@@ -362,44 +427,36 @@ export function channel(parameters: channel.Parameters) {
 
       let txToSubmit: Transaction | FeeBumpTransaction = prepared
       if (feeBumpKeypair) {
-        const MAX_FEE_BUMP = 10_000_000
-        const bumpFee = Math.min(Number(prepared.fee) * 10, MAX_FEE_BUMP)
-        txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
-          feeBumpKeypair,
-          bumpFee.toString(),
-          prepared,
+        txToSubmit = wrapFeeBump(prepared, feeBumpKeypair, {
           networkPassphrase,
-        )
-        txToSubmit.sign(feeBumpKeypair)
-      }
-
-      const sendResult = await server.sendTransaction(txToSubmit)
-
-      const MAX_POLL_ATTEMPTS = 60
-      let txResult = await server.getTransaction(sendResult.hash)
-      let attempts = 0
-      while (txResult.status === 'NOT_FOUND') {
-        if (++attempts >= MAX_POLL_ATTEMPTS) {
-          throw new ChannelVerificationError(
-            `Close transaction not found after ${MAX_POLL_ATTEMPTS} attempts.`,
-            { hash: sendResult.hash },
-          )
-        }
-        await new Promise((r) => setTimeout(r, 1000))
-        txResult = await server.getTransaction(sendResult.hash)
-      }
-
-      if (txResult.status !== 'SUCCESS') {
-        throw new ChannelVerificationError(`Close transaction failed: ${txResult.status}`, {
-          hash: sendResult.hash,
-          status: txResult.status,
+          maxFeeStroops: maxFeeBumpStroops,
         })
       }
 
-      // Mark channel as finalized in store
+      logger.debug('[stellar:channel] Broadcasting close tx...')
+      const sendResult = await server.sendTransaction(txToSubmit)
+
+      const txResult = await pollTransaction(server, sendResult.hash, {
+        maxAttempts: pollMaxAttempts,
+        delayMs: pollDelayMs,
+        timeoutMs: pollTimeoutMs,
+      })
+
+      if (txResult.status !== 'SUCCESS') {
+        throw new ChannelVerificationError(
+          `[stellar:channel] Close transaction failed: ${txResult.status}`,
+          {
+            hash: sendResult.hash,
+            status: txResult.status,
+          },
+        )
+      }
+
+      // Mark channel as closed in store
+      logger.debug('[stellar:channel] Channel closed, marking in store')
       if (store) {
-        await store.put(`stellar:channel:finalized:${channelAddress}`, {
-          finalizedAt: new Date().toISOString(),
+        await store.put(`stellar:channel:closed:${channelAddress}`, {
+          closedAt: new Date().toISOString(),
           txHash: sendResult.hash,
           amount: commitmentAmount.toString(),
         })
@@ -433,14 +490,25 @@ export function channel(parameters: channel.Parameters) {
     const { transaction: txXdr, amount, signature: signatureHex } = payload
 
     if (!txXdr || typeof txXdr !== 'string') {
-      throw new ChannelVerificationError('Open action requires a signed transaction XDR.', {})
+      throw new ChannelVerificationError(
+        '[stellar:channel] Open action requires a signed transaction XDR.',
+        {},
+      )
     }
 
     // Validate signature format
-    if (!/^[0-9a-f]+$/i.test(signatureHex) || signatureHex.length !== 128) {
-      throw new ChannelVerificationError('Invalid commitment signature for open action.', {
-        length: String(signatureHex?.length ?? 0),
+    try {
+      validateHexSignature(signatureHex)
+    } catch {
+      logger.warn('[stellar:channel] Invalid commitment signature for open action', {
+        length: signatureHex?.length,
       })
+      throw new ChannelVerificationError(
+        '[stellar:channel] Invalid commitment signature for open action.',
+        {
+          length: String(signatureHex?.length ?? 0),
+        },
+      )
     }
 
     const commitmentAmount = BigInt(amount)
@@ -450,18 +518,24 @@ export function channel(parameters: channel.Parameters) {
     // must be positive, and the commitment must cover the requested amount.
     const requestedAmount = BigInt(challenge.request.amount)
     if (requestedAmount <= 0n) {
-      throw new ChannelVerificationError('Open action requires a positive requested amount.', {
-        requestedAmount: requestedAmount.toString(),
-      })
+      throw new ChannelVerificationError(
+        '[stellar:channel] Open action requires a positive requested amount.',
+        {
+          requestedAmount: requestedAmount.toString(),
+        },
+      )
     }
     if (commitmentAmount <= 0n) {
-      throw new ChannelVerificationError('Open action requires a positive commitment amount.', {
-        commitmentAmount: commitmentAmount.toString(),
-      })
+      throw new ChannelVerificationError(
+        '[stellar:channel] Open action requires a positive commitment amount.',
+        {
+          commitmentAmount: commitmentAmount.toString(),
+        },
+      )
     }
     if (commitmentAmount < requestedAmount) {
       throw new ChannelVerificationError(
-        'Commitment amount does not cover requested amount for open action.',
+        '[stellar:channel] Commitment amount does not cover requested amount for open action.',
         {
           commitmentAmount: commitmentAmount.toString(),
           requestedAmount: requestedAmount.toString(),
@@ -474,13 +548,14 @@ export function channel(parameters: channel.Parameters) {
       const existing = await store.get(cumulativeKey)
       if (existing) {
         throw new ChannelVerificationError(
-          'Channel is already open. Cannot replay an open credential.',
+          '[stellar:channel] Channel is already open. Cannot replay an open credential.',
           { channel: channelAddress },
         )
       }
     }
 
     // Verify the initial commitment signature via prepare_commitment simulation
+    logger.debug('[stellar:channel] Verifying commitment signature...')
     const contract = new Contract(channelAddress)
     const call = contract.call(
       'prepare_commitment',
@@ -493,14 +568,14 @@ export function channel(parameters: channel.Parameters) {
       networkPassphrase,
     })
       .addOperation(call)
-      .setTimeout(30)
+      .setTimeout(simulationTimeoutMs / 1000)
       .build()
 
     const simResult = await server.simulateTransaction(simTx)
 
     if (!rpc.Api.isSimulationSuccess(simResult)) {
       throw new ChannelVerificationError(
-        'Failed to simulate prepare_commitment for open verification.',
+        '[stellar:channel] Failed to simulate prepare_commitment for open verification.',
         {
           error: 'error' in simResult ? String(simResult.error) : 'unknown',
         },
@@ -509,7 +584,10 @@ export function channel(parameters: channel.Parameters) {
 
     const returnValue = simResult.result?.retval
     if (!returnValue) {
-      throw new ChannelVerificationError('prepare_commitment returned no value during open.', {})
+      throw new ChannelVerificationError(
+        '[stellar:channel] prepare_commitment returned no value during open.',
+        {},
+      )
     }
 
     const commitmentBytes = returnValue.bytes()
@@ -517,20 +595,25 @@ export function channel(parameters: channel.Parameters) {
     const valid = commitmentKeypair.verify(Buffer.from(commitmentBytes), signatureBytes)
 
     if (!valid) {
-      throw new ChannelVerificationError('Initial commitment signature verification failed.', {
+      logger.warn('[stellar:channel] Initial commitment signature verification failed', {
         amount: commitmentAmount.toString(),
         channel: channelAddress,
       })
+      throw new ChannelVerificationError(
+        '[stellar:channel] Initial commitment signature verification failed.',
+        {
+          amount: commitmentAmount.toString(),
+          channel: channelAddress,
+        },
+      )
     }
 
     // Parse and broadcast the open transaction
-    const { TransactionBuilder: TxBuilder } = await import('@stellar/stellar-sdk')
-
-    let openTx: ReturnType<typeof TxBuilder.fromXDR>
+    let openTx: ReturnType<typeof TransactionBuilder.fromXDR>
     try {
-      openTx = TxBuilder.fromXDR(txXdr, networkPassphrase)
+      openTx = TransactionBuilder.fromXDR(txXdr, networkPassphrase)
     } catch (err) {
-      throw new ChannelVerificationError('Invalid open transaction XDR.', {
+      throw new ChannelVerificationError('[stellar:channel] Invalid open transaction XDR.', {
         error: err instanceof Error ? err.message : String(err),
       })
     }
@@ -539,37 +622,27 @@ export function channel(parameters: channel.Parameters) {
     if (feeBumpKeypair) {
       const innerTx =
         openTx instanceof FeeBumpTransaction ? openTx.innerTransaction : (openTx as Transaction)
-      const MAX_FEE_BUMP = 10_000_000
-      const bumpFee = Math.min(Number(innerTx.fee) * 10, MAX_FEE_BUMP)
-      txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
-        feeBumpKeypair,
-        bumpFee.toString(),
-        innerTx,
+      txToSubmit = wrapFeeBump(innerTx, feeBumpKeypair, {
         networkPassphrase,
-      )
-      ;(txToSubmit as FeeBumpTransaction).sign(feeBumpKeypair)
+        maxFeeStroops: maxFeeBumpStroops,
+      })
     }
     const sendResult = await server.sendTransaction(txToSubmit)
 
-    const MAX_POLL_ATTEMPTS = 60
-    let txResult = await server.getTransaction(sendResult.hash)
-    let attempts = 0
-    while (txResult.status === 'NOT_FOUND') {
-      if (++attempts >= MAX_POLL_ATTEMPTS) {
-        throw new ChannelVerificationError(
-          `Open transaction not found after ${MAX_POLL_ATTEMPTS} attempts.`,
-          { hash: sendResult.hash },
-        )
-      }
-      await new Promise((r) => setTimeout(r, 1000))
-      txResult = await server.getTransaction(sendResult.hash)
-    }
+    const txResult = await pollTransaction(server, sendResult.hash, {
+      maxAttempts: pollMaxAttempts,
+      delayMs: pollDelayMs,
+      timeoutMs: pollTimeoutMs,
+    })
 
     if (txResult.status !== 'SUCCESS') {
-      throw new ChannelVerificationError(`Open transaction failed: ${txResult.status}`, {
-        hash: sendResult.hash,
-        status: txResult.status,
-      })
+      throw new ChannelVerificationError(
+        `[stellar:channel] Open transaction failed: ${txResult.status}`,
+        {
+          hash: sendResult.hash,
+          status: txResult.status,
+        },
+      )
     }
 
     // Initialise cumulative amount in the store
@@ -609,6 +682,16 @@ export async function close(parameters: {
   network?: NetworkId
   /** Custom RPC URL. */
   rpcUrl?: string
+  /** Maximum fee bump in stroops. */
+  maxFeeBumpStroops?: number
+  /** Maximum poll attempts. */
+  pollMaxAttempts?: number
+  /** Poll delay in ms. */
+  pollDelayMs?: number
+  /** Poll timeout in ms. */
+  pollTimeoutMs?: number
+  /** Logger instance. */
+  logger?: Logger
 }): Promise<string> {
   const {
     channel: channelAddress,
@@ -618,6 +701,11 @@ export async function close(parameters: {
     feeBumpSigner,
     network = 'testnet',
     rpcUrl,
+    maxFeeBumpStroops = DEFAULT_MAX_FEE_BUMP_STROOPS,
+    pollMaxAttempts = DEFAULT_POLL_MAX_ATTEMPTS,
+    pollDelayMs = DEFAULT_POLL_DELAY_MS,
+    pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
+    logger: log = noopLogger,
   } = parameters
 
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
@@ -645,38 +733,29 @@ export async function close(parameters: {
 
   let txToSubmit: Transaction | FeeBumpTransaction = prepared
   if (feeBumpSigner) {
-    const MAX_FEE_BUMP = 10_000_000
-    const bumpFee = Math.min(Number(prepared.fee) * 10, MAX_FEE_BUMP)
-    txToSubmit = TransactionBuilder.buildFeeBumpTransaction(
-      feeBumpSigner,
-      bumpFee.toString(),
-      prepared,
+    txToSubmit = wrapFeeBump(prepared, feeBumpSigner, {
       networkPassphrase,
-    )
-    txToSubmit.sign(feeBumpSigner)
+      maxFeeStroops: maxFeeBumpStroops,
+    })
   }
 
+  log.debug('[stellar:channel] Broadcasting close tx...')
   const result = await server.sendTransaction(txToSubmit)
 
-  const MAX_POLL_ATTEMPTS = 60
-  let txResult = await server.getTransaction(result.hash)
-  let attempts = 0
-  while (txResult.status === 'NOT_FOUND') {
-    if (++attempts >= MAX_POLL_ATTEMPTS) {
-      throw new ChannelVerificationError(
-        `Transaction not found after ${MAX_POLL_ATTEMPTS} attempts.`,
-        { hash: result.hash },
-      )
-    }
-    await new Promise((r) => setTimeout(r, 1000))
-    txResult = await server.getTransaction(result.hash)
-  }
+  const txResult = await pollTransaction(server, result.hash, {
+    maxAttempts: pollMaxAttempts,
+    delayMs: pollDelayMs,
+    timeoutMs: pollTimeoutMs,
+  })
 
   if (txResult.status !== 'SUCCESS') {
-    throw new ChannelVerificationError(`Close transaction failed: ${txResult.status}`, {
-      hash: result.hash,
-      status: txResult.status,
-    })
+    throw new ChannelVerificationError(
+      `[stellar:channel] Close transaction failed: ${txResult.status}`,
+      {
+        hash: result.hash,
+        status: txResult.status,
+      },
+    )
   }
 
   return result.hash
@@ -712,6 +791,8 @@ export declare namespace channel {
     commitmentKey: string | Keypair
     /** Number of decimal places for amount conversion. @default 7 */
     decimals?: number
+    /** Maximum fee bump in stroops. @default 10_000_000 */
+    maxFeeBumpStroops?: number
     /** Stellar network. @default 'testnet' */
     network?: NetworkId
     /**
@@ -719,8 +800,16 @@ export declare namespace channel {
      * Use this to trigger a close response before the waiting period elapses.
      */
     onDisputeDetected?: (state: ChannelState) => void
+    /** Maximum poll attempts when waiting for transaction confirmation. @default 30 */
+    pollMaxAttempts?: number
+    /** Poll delay between attempts in milliseconds. @default 1000 */
+    pollDelayMs?: number
+    /** Poll timeout in milliseconds. @default 30_000 */
+    pollTimeoutMs?: number
     /** Custom Soroban RPC URL. */
     rpcUrl?: string
+    /** Simulation timeout in milliseconds. @default 10_000 */
+    simulationTimeoutMs?: number
     /**
      * Funded Stellar account address (G...) used as the source for
      * read-only transaction simulations. If omitted, the commitment
@@ -729,15 +818,7 @@ export declare namespace channel {
     sourceAccount?: string
     /** Store for replay protection and cumulative amount tracking. */
     store?: Store.Store
-  }
-}
-
-class ChannelVerificationError extends Error {
-  details: Record<string, string>
-
-  constructor(message: string, details: Record<string, string>) {
-    super(message)
-    this.name = 'ChannelVerificationError'
-    this.details = details
+    /** Logger for debug/warn messages. @default noopLogger */
+    logger?: Logger
   }
 }

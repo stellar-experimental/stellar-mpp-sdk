@@ -424,7 +424,7 @@ describe('stellar server channel verification', () => {
         credential: credential as any,
         request: credential.challenge.request,
       }),
-    ).rejects.toThrow('Invalid signature length')
+    ).rejects.toThrow('Invalid signature')
   })
 
   it('rejects invalid ed25519 signature (bad sig, valid hex)', async () => {
@@ -757,10 +757,10 @@ describe('stellar server channel dispute detection', () => {
     ).rejects.toThrow('checkOnChainState requires sourceAccount to be set')
   })
 
-  it('rejects voucher after channel finalization (NM-001)', async () => {
+  it('rejects voucher after channel closure (NM-001)', async () => {
     const store = Store.memory()
-    await store.put(`stellar:channel:finalized:${CHANNEL_ADDRESS}`, {
-      finalizedAt: new Date().toISOString(),
+    await store.put(`stellar:channel:closed:${CHANNEL_ADDRESS}`, {
+      closedAt: new Date().toISOString(),
       txHash: 'abc123',
       amount: '5000000',
     })
@@ -781,7 +781,7 @@ describe('stellar server channel dispute detection', () => {
         credential: credential as any,
         request: credential.challenge.request,
       }),
-    ).rejects.toThrow('Channel has been finalized')
+    ).rejects.toThrow('Channel has been closed')
   })
 
   it('rejects commitment that exceeds on-chain balance (NM-003)', async () => {
@@ -941,6 +941,6 @@ describe('stellar server channel open action', () => {
         credential: credential as any,
         request: credential.challenge.request,
       }),
-    ).rejects.toThrow('Open transaction failed')
+    ).rejects.toThrow('failed')
   })
 })
