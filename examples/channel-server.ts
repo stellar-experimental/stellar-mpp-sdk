@@ -19,11 +19,14 @@ import express from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
 import rateLimit from 'express-rate-limit'
+import pino from 'pino'
+import pinoHttp from 'pino-http'
 import { StrKey } from '@stellar/stellar-sdk'
 import { Mppx, Store } from 'mppx/server'
 import { stellar } from '../sdk/src/channel/server/index.js'
 import { Env } from './config/channel-server.js'
 
+const logger = pino({ level: Env.logLevel })
 const app = express()
 
 // Security middleware
@@ -37,6 +40,7 @@ app.use(
   }),
 )
 app.use(rateLimit({ windowMs: Env.rateLimitWindowMs, max: Env.rateLimitMax }))
+app.use(pinoHttp({ logger }))
 app.use(express.json())
 
 // Convert the raw ed25519 public key (hex) to a Stellar G... address for verification
@@ -53,6 +57,7 @@ const mppx = Mppx.create({
       sourceAccount: Env.sourceAccount,
       store,
       network: 'testnet',
+      logger,
     }),
   ],
 })
@@ -90,8 +95,12 @@ app.use(async (req, res) => {
 })
 
 app.listen(Env.port, () => {
-  console.log(`🚀 Stellar MPP Channel server running on http://localhost:${Env.port}`)
-  console.log(`   Channel contract: ${Env.channelContract}`)
-  console.log(`   Commitment key:   ${Env.commitmentPubkey.slice(0, 16)}...`)
-  console.log(`   Charging 0.1 XLM per request (off-chain commitments)`)
+  logger.info(
+    {
+      port: Env.port,
+      channel: Env.channelContract,
+      commitmentKey: Env.commitmentPubkey.slice(0, 16),
+    },
+    'Stellar MPP Channel server started',
+  )
 })

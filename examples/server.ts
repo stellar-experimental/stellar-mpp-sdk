@@ -15,6 +15,8 @@ import express from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
 import rateLimit from 'express-rate-limit'
+import pino from 'pino'
+import pinoHttp from 'pino-http'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Keypair } from '@stellar/stellar-sdk'
@@ -25,6 +27,7 @@ import { stellar as stellarClient } from '../sdk/src/charge/client/index.js'
 import { USDC_SAC_TESTNET } from '../sdk/src/constants.js'
 import { Env } from './config/charge-server.js'
 
+const logger = pino({ level: Env.logLevel })
 const app = express()
 
 // Security middleware
@@ -38,6 +41,7 @@ app.use(
   }),
 )
 app.use(rateLimit({ windowMs: Env.rateLimitWindowMs, max: Env.rateLimitMax }))
+app.use(pinoHttp({ logger }))
 app.use(express.json())
 
 const mppx = Mppx.create({
@@ -47,6 +51,7 @@ const mppx = Mppx.create({
       recipient: Env.stellarRecipient,
       currency: USDC_SAC_TESTNET,
       network: 'testnet',
+      logger,
     }),
   ],
 })
@@ -92,7 +97,7 @@ app.post('/demo/pay', async (req, res) => {
     res.status(response.status).json({ status: response.status, data, events })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
-    console.error('POST /demo/pay error:', err)
+    logger.error({ err }, 'POST /demo/pay error')
     res.status(500).json({ error: message })
   }
 })
@@ -129,7 +134,5 @@ app.use(async (req, res) => {
 })
 
 app.listen(Env.port, () => {
-  console.log(`🚀 Stellar MPP server running on http://localhost:${Env.port}`)
-  console.log(`🌐 Demo UI available at http://localhost:${Env.port}/demo`)
-  console.log(`   Recipient: ${Env.stellarRecipient}`)
+  logger.info({ port: Env.port, recipient: Env.stellarRecipient }, 'Stellar MPP server started')
 })

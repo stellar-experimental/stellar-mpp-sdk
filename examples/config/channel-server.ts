@@ -44,4 +44,8 @@ export class Env {
   static get trustProxy(): string {
     return parseOptional('TRUST_PROXY', 'loopback,linklocal,uniquelocal')!
   }
+
+  static get logLevel(): string {
+    return parseOptional('LOG_LEVEL', 'info')!
+  }
 }
