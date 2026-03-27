@@ -20,22 +20,12 @@
 import { Keypair } from '@stellar/stellar-sdk'
 import { Mppx } from 'mppx/client'
 import { stellar } from '../sdk/src/channel/client/index.js'
+import { parseHexKey, parseOptional, parseRequired } from '../sdk/src/env.js'
 
-const OPEN_TX_XDR = process.env.OPEN_TX_XDR
-const COMMITMENT_SECRET = process.env.COMMITMENT_SECRET
-const INITIAL_AMOUNT = process.env.INITIAL_AMOUNT ?? '10000000' // 1 XLM default
-const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:3001'
-
-if (!OPEN_TX_XDR) {
-  console.error('❌ Set OPEN_TX_XDR to the signed channel-deploy transaction XDR (base64).')
-  console.error('   Build with: stellar contract deploy --send=no ...')
-  process.exit(1)
-}
-
-if (!COMMITMENT_SECRET || COMMITMENT_SECRET.length !== 64) {
-  console.error('❌ Set COMMITMENT_SECRET to the ed25519 commitment secret key (64 hex chars).')
-  process.exit(1)
-}
+const OPEN_TX_XDR = parseRequired('OPEN_TX_XDR')
+const COMMITMENT_SECRET = parseHexKey('COMMITMENT_SECRET')
+const INITIAL_AMOUNT = parseOptional('INITIAL_AMOUNT', '10000000')! // 1 XLM default
+const SERVER_URL = parseOptional('SERVER_URL', 'http://localhost:3001')!
 
 const commitmentKey = Keypair.fromRawEd25519Seed(Buffer.from(COMMITMENT_SECRET, 'hex'))
 const commitmentPubHex = Buffer.from(commitmentKey.rawPublicKey()).toString('hex')
@@ -53,7 +43,7 @@ Mppx.create({
   methods: [
     stellar.channel({
       commitmentKey,
-      sourceAccount: process.env.SOURCE_ACCOUNT,
+      sourceAccount: parseOptional('SOURCE_ACCOUNT'),
       onProgress(event) {
         const ts = new Date().toISOString().slice(11, 23)
         switch (event.type) {

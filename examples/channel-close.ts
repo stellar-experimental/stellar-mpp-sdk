@@ -19,27 +19,18 @@
 import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stellar/stellar-sdk'
 import { close } from '../sdk/src/channel/server/index.js'
 import { NETWORK_PASSPHRASE, SOROBAN_RPC_URLS } from '../sdk/src/constants.js'
+import {
+  parseContractAddress,
+  parseHexKey,
+  parseOptional,
+  parseStellarSecretKey,
+} from '../sdk/src/env.js'
 
-const CHANNEL_CONTRACT = process.env.CHANNEL_CONTRACT
-const COMMITMENT_SECRET = process.env.COMMITMENT_SECRET
-const CLOSE_SECRET = process.env.CLOSE_SECRET
-const AMOUNT = BigInt(process.env.AMOUNT ?? '2000000')
+const CHANNEL_CONTRACT = parseContractAddress('CHANNEL_CONTRACT')
+const COMMITMENT_SECRET = parseHexKey('COMMITMENT_SECRET')
+const CLOSE_SECRET = parseStellarSecretKey('CLOSE_SECRET')
+const AMOUNT = BigInt(parseOptional('AMOUNT', '2000000')!)
 const NETWORK = 'testnet' as const
-
-if (!CHANNEL_CONTRACT?.startsWith('C') || CHANNEL_CONTRACT.length !== 56) {
-  console.error('❌ Set CHANNEL_CONTRACT to the channel contract address (C..., 56 chars)')
-  process.exit(1)
-}
-
-if (!COMMITMENT_SECRET || COMMITMENT_SECRET.length !== 64) {
-  console.error('❌ Set COMMITMENT_SECRET to the ed25519 commitment secret key (64 hex chars)')
-  process.exit(1)
-}
-
-if (!CLOSE_SECRET?.startsWith('S')) {
-  console.error('❌ Set CLOSE_SECRET to a funded Stellar secret key for signing the tx (S...)')
-  process.exit(1)
-}
 
 const commitmentKey = Keypair.fromRawEd25519Seed(Buffer.from(COMMITMENT_SECRET, 'hex'))
 const closeKey = Keypair.fromSecret(CLOSE_SECRET)

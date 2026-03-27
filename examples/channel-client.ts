@@ -11,17 +11,10 @@
 import { Keypair } from '@stellar/stellar-sdk'
 import { Mppx } from 'mppx/client'
 import { stellar } from '../sdk/src/channel/client/index.js'
-
-const commitmentSecret = process.env.COMMITMENT_SECRET
-if (!commitmentSecret || commitmentSecret.length !== 64) {
-  console.error(
-    'Usage: COMMITMENT_SECRET=<64-char-hex-ed25519-secret> npx tsx examples/channel-client.ts',
-  )
-  process.exit(1)
-}
+import { Env } from './config/channel-client.js'
 
 // Convert the raw ed25519 secret key (hex) to a Stellar Keypair for signing
-const commitmentKey = Keypair.fromRawEd25519Seed(Buffer.from(commitmentSecret, 'hex'))
+const commitmentKey = Keypair.fromRawEd25519Seed(Buffer.from(Env.commitmentSecret, 'hex'))
 console.log(`Using commitment key: ${commitmentKey.publicKey()}`)
 
 // Polyfill global fetch with automatic 402 handling
@@ -29,7 +22,7 @@ Mppx.create({
   methods: [
     stellar.channel({
       commitmentKey,
-      sourceAccount: process.env.SOURCE_ACCOUNT,
+      sourceAccount: Env.sourceAccount,
       onProgress(event) {
         const ts = new Date().toISOString().slice(11, 23)
         switch (event.type) {
@@ -54,7 +47,7 @@ Mppx.create({
 })
 
 // Make requests to the payment-gated channel server
-const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:3001'
+const SERVER_URL = Env.serverUrl
 
 console.log(`\nRequesting ${SERVER_URL}...\n`)
 const response = await fetch(SERVER_URL)
