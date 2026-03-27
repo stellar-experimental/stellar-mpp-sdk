@@ -412,10 +412,11 @@ await close({
 
 ## Breaking changes from 0.1.0
 
-- **Import paths changed**: `@stellar/mpp/client` and `@stellar/mpp/server` are no longer valid. Use `@stellar/mpp/charge/client` and `@stellar/mpp/charge/server` instead.
+- **Package renamed**: `stellar-mpp-sdk` is now `@stellar/mpp`. All import paths change accordingly.
+- **Import paths changed**: `stellar-mpp-sdk/client` and `stellar-mpp-sdk/server` are no longer valid. Use `@stellar/mpp/charge/client` and `@stellar/mpp/charge/server` instead.
 - **Root export renamed**: `Methods` is now `ChargeMethods`.
 - **Store keys changed**: Store key format updated to `stellar:{intent}:{type}:{id}`. Existing stored data is not backwards compatible.
-- **`resolveKeypair` moved**: Now exported from the root (`@stellar/mpp`) and from `@stellar/mpp/charge/server`, no longer from `@stellar/mpp/server`.
+- **`resolveKeypair` moved**: Now exported from the root (`@stellar/mpp`) and from `@stellar/mpp/charge/server`, no longer from `stellar-mpp-sdk/server`.
 
 ## Environment variables
 
@@ -463,7 +464,7 @@ See [demo/channel-e2e-output.txt](demo/channel-e2e-output.txt) for example outpu
 ## Project structure
 
 ```
-@stellar/mpp/
+stellar-mpp-sdk/
 ├── eslint.config.mjs       # ESLint 9 flat config
 ├── .prettierrc             # Prettier configuration
 ├── Makefile                # Dev workflow targets (make help)
