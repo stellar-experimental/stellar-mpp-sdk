@@ -11,7 +11,7 @@ Improve project organization, eliminate code duplication, add robustness (timeou
 
 ## Implementation Steps
 
-Steps are ordered by dependency. Steps 3 and 4 are independent but both touch charge/channel server files — do them sequentially.
+Steps are ordered by dependency. Steps 3, 4, and 5 all touch charge/channel server files — do them sequentially to avoid conflicts.
 
 ---
 
@@ -81,7 +81,9 @@ sdk/src/
 - `sdk/src/env.test.ts` → stays
 - `sdk/src/channel/integration.test.ts` → stays
 
-All test import paths updated to match new source locations.
+All test import paths updated to match new source locations. All channel test files (`channel/Methods.test.ts`, `channel/client/Channel.test.ts`, `channel/server/Channel.test.ts`, `channel/server/State.test.ts`, `channel/server/Watcher.test.ts`, `channel/integration.test.ts`) stay in place — no move needed.
+
+> Note: `pnpm lint` and `pnpm format:check` scripts already exist in `package.json` from the prior productionalization work (Step 1 of the previous spec).
 
 **Files removed (old paths):**
 - `sdk/src/Methods.ts` → moved to `sdk/src/charge/Methods.ts`
@@ -180,7 +182,7 @@ Each shared module gets its own colocated test file.
 
 > Note: Raw hex ed25519 seed handling is NOT added to `resolveKeypair`. The channel client's `commitmentSecret` / `commitmentKey` parameter uses `Keypair.fromRawEd25519Seed()` which is a distinct operation (ed25519 raw seed vs Stellar secret key encoding). This stays inline in the channel client as it's specific to commitment key semantics.
 
-**`shared/scval.ts`** — Moved from root `sdk/src/scval.ts`. Same code, new location. Test stays at `sdk/src/shared/scval.test.ts` (if one exists, otherwise scval is tested implicitly through integration tests).
+**`shared/scval.ts`** — Moved from root `sdk/src/scval.ts`. Same code, new location. No dedicated test file exists today — `scval` is tested implicitly through charge and channel integration tests. Exempt from the "each shared module gets its own test" rule.
 
 **`shared/simulate.ts` — Simulation wrapper:**
 - `simulateCall(rpcServer, tx, opts?)` — wraps `simulateTransaction()` with timeout
