@@ -1,4 +1,4 @@
-sagar@sagar-K9FV9RT447-mbp stellar-mpp-sdk % ./demo/run.sh
+sagar@sagar-K9FV9RT447-mbp @stellar/mpp % ./demo/run.sh
 
 Enter your Stellar public key (recipient, starts with G):
   STELLAR_RECIPIENT=GC6ZBCI6M6PMBMRCZQMOGCUOZKFREM7P6G2NC3TD5FMYX3YLPAACQMJY
