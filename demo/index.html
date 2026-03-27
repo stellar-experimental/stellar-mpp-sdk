@@ -378,6 +378,13 @@
     <script>
       const $ = (id) => document.getElementById(id)
 
+      // Escape HTML meta-characters to prevent DOM XSS
+      function esc(str) {
+        const div = document.createElement('div')
+        div.textContent = String(str)
+        return div.innerHTML
+      }
+
       // Tab switching
       function switchTab(tab) {
         document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'))
@@ -397,7 +404,7 @@
         const serverUrl = $('serverUrl').value.replace(/\/+$/, '')
 
         btn.disabled = true
-        output.innerHTML = step('pending', 'Sending request to ' + serverUrl + ' ...')
+        output.innerHTML = step('pending', 'Sending request to ' + esc(serverUrl) + ' ...')
 
         try {
           const res = await fetch(serverUrl)
@@ -426,7 +433,7 @@
               '<span class="badge b402">402 Payment Required</span>' +
               step('success', 'Server returned a payment challenge.') +
               '<pre>' +
-              JSON.stringify(challenge, null, 2) +
+              esc(JSON.stringify(challenge, null, 2)) +
               '</pre>'
 
             // Enable Step 2
@@ -437,21 +444,21 @@
               '<span class="badge b200">200 OK</span>' +
               step('success', 'Server returned content (no payment needed).') +
               '<pre>' +
-              JSON.stringify(data, null, 2) +
+              esc(JSON.stringify(data, null, 2)) +
               '</pre>'
           } else {
             output.innerHTML =
               '<span class="badge error">' +
-              res.status +
+              esc(res.status) +
               '</span>' +
-              step('fail', 'Unexpected response: ' + res.status)
+              step('fail', 'Unexpected response: ' + esc(res.status))
           }
         } catch (err) {
           output.innerHTML =
             '<span class="badge error">Error</span>' +
             step(
               'fail',
-              err.message +
+              esc(err.message) +
                 '<br><br>Start the server first:<br><code>STELLAR_RECIPIENT=G... npx tsx examples/charge-server.ts</code>',
             )
         } finally {
@@ -485,7 +492,8 @@
           const result = await res.json()
 
           if (result.error) {
-            output.innerHTML = '<span class="badge error">Error</span>' + step('fail', result.error)
+            output.innerHTML =
+              '<span class="badge error">Error</span>' + step('fail', esc(result.error))
             return
           }
 
@@ -494,17 +502,17 @@
           if (result.events && result.events.length) {
             eventsHtml = '<ul class="event-list">'
             for (const ev of result.events) {
-              let detail = ev.type
+              let detail = esc(ev.type)
               if (ev.type === 'challenge')
-                detail = '💳 challenge — ' + ev.amount + ' → ' + ev.recipient
+                detail = '💳 challenge — ' + esc(ev.amount) + ' → ' + esc(ev.recipient)
               else if (ev.type === 'signing') detail = '✍️  signing transaction...'
               else if (ev.type === 'signed')
-                detail = '✅ signed (' + (ev.transaction || '').length + ' bytes XDR)'
+                detail = '✅ signed (' + esc((ev.transaction || '').length) + ' bytes XDR)'
               else if (ev.type === 'paying') detail = '📡 broadcasting...'
               else if (ev.type === 'confirming')
-                detail = '⏳ confirming ' + (ev.hash || '').slice(0, 12) + '...'
-              else if (ev.type === 'paid') detail = '🎉 confirmed: ' + (ev.hash || '')
-              eventsHtml += '<li class="ev-' + ev.type + '">' + detail + '</li>'
+                detail = '⏳ confirming ' + esc((ev.hash || '').slice(0, 12)) + '...'
+              else if (ev.type === 'paid') detail = '🎉 confirmed: ' + esc(ev.hash || '')
+              eventsHtml += '<li class="ev-' + esc(ev.type) + '">' + detail + '</li>'
             }
             eventsHtml += '</ul>'
           }
@@ -515,21 +523,22 @@
               step('success', 'End-to-end payment completed successfully.') +
               eventsHtml +
               '<pre>' +
-              JSON.stringify(result.data, null, 2) +
+              esc(JSON.stringify(result.data, null, 2)) +
               '</pre>'
           } else {
             output.innerHTML =
               '<span class="badge error">' +
-              result.status +
+              esc(result.status) +
               '</span>' +
-              step('fail', 'Payment flow returned status ' + result.status) +
+              step('fail', 'Payment flow returned status ' + esc(result.status)) +
               eventsHtml +
               '<pre>' +
-              JSON.stringify(result, null, 2) +
+              esc(JSON.stringify(result, null, 2)) +
               '</pre>'
           }
         } catch (err) {
-          output.innerHTML = '<span class="badge error">Error</span>' + step('fail', err.message)
+          output.innerHTML =
+            '<span class="badge error">Error</span>' + step('fail', esc(err.message))
         } finally {
           btn.disabled = false
         }
