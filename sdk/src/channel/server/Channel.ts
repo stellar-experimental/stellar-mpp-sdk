@@ -44,7 +44,7 @@ import { getChannelState, type ChannelState } from './State.js'
  *
  * @example
  * ```ts
- * import { stellar } from 'stellar-mpp-sdk/channel/server'
+ * import { stellar } from '@stellar/mpp/channel/server'
  * import { Mppx } from 'mppx/server'
  *
  * const mppx = Mppx.create({

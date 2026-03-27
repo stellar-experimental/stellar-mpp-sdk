@@ -1,5 +1,5 @@
 {
-  "name": "stellar-mpp-sdk",
+  "name": "@stellar/mpp",
   "version": "0.2.0",
   "description": "Stellar blockchain payment method for the Machine Payments Protocol (MPP)",
   "type": "module",
@@ -84,6 +84,27 @@
     "vitest": "^4.1.2"
   },
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stellar/stellar-mpp-sdk.git"
+  },
+  "keywords": [
+    "stellar",
+    "blockchain",
+    "payments",
+    "mpp",
+    "machine-payments",
+    "soroban",
+    "payment-channels",
+    "typescript",
+    "sdk",
+    "402",
+    "agentic-payments",
+    "mppx"
+  ],
   "dependencies": {
     "zod": "^4.3.6"
   }

@@ -46,7 +46,7 @@ export type ChannelState = {
  *
  * @example
  * ```ts
- * import { getChannelState } from 'stellar-mpp-sdk/channel/server'
+ * import { getChannelState } from '@stellar/mpp/channel/server'
  *
  * const state = await getChannelState({
  *   channel: 'CABC...',

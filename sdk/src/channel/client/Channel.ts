@@ -23,7 +23,7 @@ import { channel as ChannelMethod } from '../Methods.js'
  * ```ts
  * import { Keypair } from '@stellar/stellar-sdk'
  * import { Mppx } from 'mppx/client'
- * import { stellar } from 'stellar-mpp-sdk/channel/client'
+ * import { stellar } from '@stellar/mpp/channel/client'
  *
  * Mppx.create({
  *   methods: [
