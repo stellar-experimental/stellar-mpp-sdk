@@ -152,6 +152,8 @@ export function watchChannel(parameters: watchChannel.Parameters): () => void {
     // Unblock the sleep promise so the loop can exit promptly
     timerResolve?.()
     timerResolve = undefined
+    // Clean up the abort listener to prevent leaks if the signal outlives the watcher
+    if (signal) signal.removeEventListener('abort', stop)
   }
 
   async function runLoop() {

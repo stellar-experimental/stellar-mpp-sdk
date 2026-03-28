@@ -161,47 +161,43 @@ async function readCloseEffectiveAtLedger(
   server: rpc.Server,
   channelAddress: string,
 ): Promise<number | null> {
-  try {
-    // Build the LedgerKey for the contract's instance entry
-    const contractId = Address.fromString(channelAddress)
-    const instanceKey = xdr.LedgerKey.contractData(
-      new xdr.LedgerKeyContractData({
-        contract: contractId.toScAddress(),
-        key: xdr.ScVal.scvLedgerKeyContractInstance(),
-        durability: xdr.ContractDataDurability.persistent(),
-      }),
-    )
+  // Build the LedgerKey for the contract's instance entry
+  const contractId = Address.fromString(channelAddress)
+  const instanceKey = xdr.LedgerKey.contractData(
+    new xdr.LedgerKeyContractData({
+      contract: contractId.toScAddress(),
+      key: xdr.ScVal.scvLedgerKeyContractInstance(),
+      durability: xdr.ContractDataDurability.persistent(),
+    }),
+  )
 
-    const response = await server.getLedgerEntries(instanceKey)
-    if (!response.entries || response.entries.length === 0) {
-      return null
-    }
-
-    const entry = response.entries[0]
-    const ledgerData = entry.val
-    const contractData = ledgerData?.contractData?.()
-    if (!contractData) return null
-    const instance = contractData.val?.()?.instance?.()
-    if (!instance) return null
-    const storage = instance.storage()
-
-    if (!storage) return null
-
-    // Search for the CloseEffectiveAtLedger key in the instance storage map.
-    // Soroban encodes simple enum variants as ScVal::Vec([ScVal::Symbol(name)])
-    for (const entry of storage) {
-      const key = entry.key()
-      // Check if this key matches DataKey::CloseEffectiveAtLedger
-      if (isEnumVariant(key, 'CloseEffectiveAtLedger')) {
-        const val = entry.val()
-        return val.u32()
-      }
-    }
-
-    return null
-  } catch {
+  const response = await server.getLedgerEntries(instanceKey)
+  if (!response.entries || response.entries.length === 0) {
     return null
   }
+
+  const entry = response.entries[0]
+  const ledgerData = entry.val
+  const contractData = ledgerData?.contractData?.()
+  if (!contractData) return null
+  const instance = contractData.val?.()?.instance?.()
+  if (!instance) return null
+  const storage = instance.storage()
+
+  if (!storage) return null
+
+  // Search for the CloseEffectiveAtLedger key in the instance storage map.
+  // Soroban encodes simple enum variants as ScVal::Vec([ScVal::Symbol(name)])
+  for (const entry of storage) {
+    const key = entry.key()
+    // Check if this key matches DataKey::CloseEffectiveAtLedger
+    if (isEnumVariant(key, 'CloseEffectiveAtLedger')) {
+      const val = entry.val()
+      return val.u32()
+    }
+  }
+
+  return null
 }
 
 /** Check if an ScVal is a Soroban enum variant with the given name. */

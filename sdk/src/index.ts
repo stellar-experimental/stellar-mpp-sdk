@@ -36,4 +36,9 @@ export * as Env from './env.js'
 export type { Logger } from './shared/logger.js'
 
 // Error types (public)
-export { SettlementError } from './shared/errors.js'
+export {
+  StellarMppError,
+  PaymentVerificationError,
+  ChannelVerificationError,
+  SettlementError,
+} from './shared/errors.js'

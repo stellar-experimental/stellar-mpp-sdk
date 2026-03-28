@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { StellarMppError, PaymentVerificationError, ChannelVerificationError } from './errors.js'
+import {
+  StellarMppError,
+  PaymentVerificationError,
+  ChannelVerificationError,
+  SettlementError,
+} from './errors.js'
 
 describe('StellarMppError', () => {
   it('stores message and details', () => {
@@ -32,5 +37,15 @@ describe('ChannelVerificationError', () => {
     expect(err).toBeInstanceOf(Error)
     expect(err.name).toBe('ChannelVerificationError')
     expect(err.details).toEqual({ channel: 'C...' })
+  })
+})
+
+describe('SettlementError', () => {
+  it('extends StellarMppError', () => {
+    const err = new SettlementError('settlement failed', { hash: 'abc' })
+    expect(err).toBeInstanceOf(StellarMppError)
+    expect(err).toBeInstanceOf(Error)
+    expect(err.name).toBe('SettlementError')
+    expect(err.details).toEqual({ hash: 'abc' })
   })
 })

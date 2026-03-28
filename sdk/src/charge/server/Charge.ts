@@ -99,16 +99,17 @@ export function charge(parameters: charge.Parameters) {
     const { challenge } = credential
     const { request: challengeRequest } = challenge
 
-    if (store) {
-      const key = `${STORE_PREFIX}:challenge:${challenge.id}`
-      const existing = await store.get(key)
+    // Check challenge replay early, but only mark as used AFTER successful
+    // verification to avoid permanently burning a challenge on transient failures.
+    const challengeStoreKey = store ? `${STORE_PREFIX}:challenge:${challenge.id}` : undefined
+    if (store && challengeStoreKey) {
+      const existing = await store.get(challengeStoreKey)
       if (existing) {
         throw new PaymentVerificationError(`${LOG_PREFIX} Challenge already used. Replay rejected.`)
       }
-      await store.put(key, { usedAt: new Date().toISOString() })
     }
 
-    const { amount } = challengeRequest
+    const { amount, externalId } = challengeRequest
     const expectedCurrency = challengeRequest.currency
     const expectedRecipient = challengeRequest.recipient
     const expectedAmount = BigInt(amount)
@@ -117,6 +118,13 @@ export function charge(parameters: charge.Parameters) {
 
     switch (payload.type) {
       case 'hash': {
+        // Spec: push mode MUST NOT be used with feePayer=true
+        if (challengeRequest.methodDetails?.feePayer) {
+          throw new PaymentVerificationError(
+            `${LOG_PREFIX} Push mode (type="hash") is not allowed with feePayer=true.`,
+          )
+        }
+
         const hash = payload.hash
 
         // Check tx hash dedup BEFORE verification to reject known replays
@@ -155,9 +163,10 @@ export function charge(parameters: charge.Parameters) {
           networkPassphrase,
         )
 
-        // Mark tx hash as used only after successful verification
+        // Mark challenge + hash as used only after successful verification
         if (store) {
           await store.put(`${STORE_PREFIX}:hash:${hash}`, { usedAt: new Date().toISOString() })
+          await store.put(challengeStoreKey!, { usedAt: new Date().toISOString() })
         }
 
         return Receipt.from({
@@ -165,6 +174,7 @@ export function charge(parameters: charge.Parameters) {
           reference: hash,
           status: 'success',
           timestamp: new Date().toISOString(),
+          ...(externalId ? { externalId } : {}),
         })
       }
 
@@ -275,13 +285,23 @@ export function charge(parameters: charge.Parameters) {
         try {
           logger.debug(`${LOG_PREFIX} Broadcasting tx`)
           sendResult = await server.sendTransaction(txToSubmit)
-          logger.debug(`${LOG_PREFIX} Broadcasting tx`, { hash: sendResult.hash })
+          logger.debug(`${LOG_PREFIX} Broadcast result`, {
+            hash: sendResult.hash,
+            status: sendResult.status,
+          })
         } catch (error) {
           throw new SettlementError(
             `${LOG_PREFIX} Settlement failed: could not broadcast transaction.`,
             {
               details: error instanceof Error ? error.message : String(error),
             },
+          )
+        }
+
+        if (sendResult.status === 'ERROR' || sendResult.status === 'DUPLICATE') {
+          throw new SettlementError(
+            `${LOG_PREFIX} Settlement failed: sendTransaction returned ${sendResult.status}.`,
+            { hash: sendResult.hash, status: sendResult.status },
           )
         }
 
@@ -298,11 +318,17 @@ export function charge(parameters: charge.Parameters) {
           })
         }
 
+        // Mark challenge as used only after successful settlement
+        if (store && challengeStoreKey) {
+          await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
+        }
+
         return Receipt.from({
           method: 'stellar',
           reference: sendResult.hash,
           status: 'success',
           timestamp: new Date().toISOString(),
+          ...(externalId ? { externalId } : {}),
         })
       }
 
@@ -381,12 +407,17 @@ export function charge(parameters: charge.Parameters) {
       for (const entry of authEntries) {
         const credentials = entry.credentials()
 
-        // Only validate address-type credentials
+        // Reject non-address credential types — only sorobanCredentialsAddress is
+        // permitted. Source-account credentials would be implicitly authorized by the
+        // server's envelope signature, allowing the client to piggyback operations.
         if (
           credentials.switch().value !==
           xdr.SorobanCredentialsType.sorobanCredentialsAddress().value
         ) {
-          continue
+          throw new PaymentVerificationError(
+            `${LOG_PREFIX} Only address-type auth entries are permitted.`,
+            { credentialType: credentials.switch().name },
+          )
         }
 
         const addressCred = credentials.address()
@@ -542,6 +573,7 @@ function verifySacTransfer(
     )
   }
 
+  verifyExactlyOneInvokeOp(innerTx)
   verifyFromRawOps(innerTx, expected)
 }
 
@@ -590,15 +622,23 @@ function validateSimulationEvents(
 
   if (transferEvents.length === 0) return
 
-  // Verify at least one transfer matches expected parameters
-  const matchingTransfer = transferEvents.find(
-    (t) =>
-      t.to === expectedRecipient && t.amount === expectedAmount && t.contract === expectedCurrency,
-  )
-
-  if (!matchingTransfer) {
+  // Spec: "events MUST show only expected balance changes; any other balance
+  // change fails verification." Reject if there are unexpected transfers.
+  if (transferEvents.length !== 1) {
     throw new PaymentVerificationError(
-      `${LOG_PREFIX} Simulation events do not contain expected transfer.`,
+      `${LOG_PREFIX} Simulation produced ${transferEvents.length} transfer events; expected exactly 1.`,
+      { count: transferEvents.length },
+    )
+  }
+
+  const transfer = transferEvents[0]
+  if (
+    transfer.to !== expectedRecipient ||
+    transfer.amount !== expectedAmount ||
+    transfer.contract !== expectedCurrency
+  ) {
+    throw new PaymentVerificationError(
+      `${LOG_PREFIX} Simulation transfer event does not match expected parameters.`,
       {
         expectedRecipient,
         expectedAmount: expectedAmount.toString(),

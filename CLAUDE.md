@@ -9,7 +9,7 @@ Stellar MPP SDK — a TypeScript SDK implementing Stellar blockchain payment met
 - **Charge**: One-time on-chain SAC (Stellar Asset Contract) token transfers with pull/push credential modes
 - **Channel**: Off-chain payment commitments via one-way payment channel contracts (batch settlement on close)
 
-Built on the `mppx` framework. Peer dependencies: `@stellar/stellar-sdk` (>=14.0.0) and `mppx` (>=0.4.0).
+Built on the `mppx` framework. Peer dependencies: `@stellar/stellar-sdk` (^14.6.1) and `mppx` (^0.4.11).
 
 ## Commands
 
@@ -33,7 +33,7 @@ After any code change, run **all** of the following to ensure nothing is broken:
 ### 1. Offline checks (always run)
 
 ```bash
-pnpm test -- --run       # 140 unit tests
+pnpm test -- --run       # 256 unit tests
 pnpm run check:types     # TypeScript type check
 pnpm run build           # Compile to dist/
 ```
@@ -46,7 +46,7 @@ Each example must load and execute without import/type errors. Expected behavior
 # Charge server — should start and return 402 on requests
 PORT=3099 STELLAR_RECIPIENT=GBHEGW3KWOY2OFH767EDALFGCUTBOEVBDQMCKUVJ3LKEWI4ZNVPP5EFC \
   npx tsx examples/charge-server.ts
-# → "Stellar MPP server running on http://localhost:3099" — Ctrl+C to stop
+# → pino JSON log with "Stellar MPP server started" — Ctrl+C to stop
 
 # Channel server — should start and return 402 on requests
 CHANNEL_CONTRACT=CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
@@ -54,7 +54,7 @@ CHANNEL_CONTRACT=CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
   SOURCE_ACCOUNT=GBHEGW3KWOY2OFH767EDALFGCUTBOEVBDQMCKUVJ3LKEWI4ZNVPP5EFC \
   PORT=3098 \
   npx tsx examples/channel-server.ts
-# → "Stellar MPP Channel server running on http://localhost:3098" — Ctrl+C to stop
+# → pino JSON log with "Stellar MPP Channel server started" — Ctrl+C to stop
 
 # Client — should load, create keypair, fail on network (no server running)
 STELLAR_SECRET=$(npx tsx -e "import{Keypair}from'@stellar/stellar-sdk';console.log(Keypair.random().secret())" 2>/dev/null) \
@@ -71,11 +71,11 @@ COMMITMENT_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
 
 # Channel open — should exit with env var validation error
 npx tsx examples/channel-open.ts
-# → "Set OPEN_TX_XDR to..." (expected)
+# → "OPEN_TX_XDR is required" (expected)
 
 # Channel close — should exit with env var validation error
 npx tsx examples/channel-close.ts
-# → "Set CLOSE_SECRET to..." (expected)
+# → "CLOSE_SECRET is required" (expected)
 ```
 
 ### 3. E2E demo (run when channel logic changes)
@@ -118,7 +118,7 @@ Methods.ts (Zod schema) → client/ (create credentials) + server/ (verify crede
 | `sdk/src/channel/server/State.ts`   | Queries on-chain channel state (balance, close status, refund period)                                                              |
 | `sdk/src/channel/server/Watcher.ts` | Polls for contract events (close, refund, top_up)                                                                                  |
 | `sdk/src/shared/defaults.ts`        | Internal default constants (poll intervals, fee limits, timeouts)                                                                  |
-| `sdk/src/shared/errors.ts`          | StellarMppError, PaymentVerificationError, ChannelVerificationError                                                                |
+| `sdk/src/shared/errors.ts`          | StellarMppError, PaymentVerificationError, ChannelVerificationError, SettlementError                                               |
 | `sdk/src/shared/fee-bump.ts`        | Fee bump wrapping                                                                                                                  |
 | `sdk/src/shared/keypairs.ts`        | Keypair resolution (Keypair or S... string)                                                                                        |
 | `sdk/src/shared/logger.ts`          | Logger interface (pino-compatible) and noopLogger                                                                                  |

@@ -154,7 +154,8 @@ export function charge(parameters: charge.Parameters) {
           validUntilLedger =
             latestLedger.sequence + Math.ceil(secsUntilExpiry / DEFAULT_LEDGER_CLOSE_TIME)
         } else {
-          validUntilLedger = latestLedger.sequence + Math.ceil(timeout / 5) + 10
+          validUntilLedger =
+            latestLedger.sequence + Math.ceil(timeout / DEFAULT_LEDGER_CLOSE_TIME) + 10
         }
 
         onProgress?.({ type: 'signing' })
@@ -238,6 +239,10 @@ export function charge(parameters: charge.Parameters) {
         // Client broadcasts
         onProgress?.({ type: 'paying' })
         const result = await server.sendTransaction(prepared)
+
+        if (result.status === 'ERROR' || result.status === 'DUPLICATE') {
+          throw new StellarMppError(`Broadcast failed: sendTransaction returned ${result.status}.`)
+        }
 
         // Poll until confirmed
         onProgress?.({ type: 'confirming', hash: result.hash })

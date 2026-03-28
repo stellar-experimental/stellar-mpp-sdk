@@ -29,8 +29,13 @@ describe('validateAmount', () => {
     expect(() => validateAmount('1000000')).not.toThrow()
   })
 
-  it('accepts zero', () => {
-    expect(() => validateAmount('0')).not.toThrow()
+  it('rejects zero', () => {
+    expect(() => validateAmount('0')).toThrow()
+  })
+
+  it('rejects leading zeros', () => {
+    expect(() => validateAmount('01')).toThrow()
+    expect(() => validateAmount('007')).toThrow()
   })
 
   it('throws on non-numeric string', () => {

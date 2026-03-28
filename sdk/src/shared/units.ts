@@ -11,7 +11,11 @@ export function toBaseUnits(amount: string, decimals: number): string {
   if (amount.startsWith('-')) {
     return '-' + toBaseUnits(amount.slice(1), decimals)
   }
-  const [whole = '0', frac = ''] = amount.split('.')
+  const parts = amount.split('.')
+  if (parts.length > 2) {
+    throw new Error(`Invalid amount: "${amount}" contains multiple decimal points`)
+  }
+  const [whole = '0', frac = ''] = parts
   if (decimals === 0) return BigInt(whole).toString()
   const paddedFrac = frac.padEnd(decimals, '0').slice(0, decimals)
   return (BigInt(whole) * 10n ** BigInt(decimals) + BigInt(paddedFrac)).toString()
@@ -30,6 +34,7 @@ export function fromBaseUnits(baseUnits: string, decimals: number): string {
   if (bi < 0n) {
     return '-' + fromBaseUnits((-bi).toString(), decimals)
   }
+  if (decimals === 0) return bi.toString()
   const divisor = 10n ** BigInt(decimals)
   const whole = (bi / divisor).toString()
   const remainder = (bi % divisor).toString().padStart(decimals, '0')

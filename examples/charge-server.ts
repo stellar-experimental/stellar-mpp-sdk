@@ -19,7 +19,7 @@ import pinoHttp from 'pino-http'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Keypair } from '@stellar/stellar-sdk'
-import { Mppx } from 'mppx/server'
+import { Mppx, Store } from 'mppx/server'
 import { Mppx as MppxClient } from 'mppx/client'
 import { stellar } from '../sdk/src/charge/server/index.js'
 import { stellar as stellarClient } from '../sdk/src/charge/client/index.js'
@@ -43,6 +43,7 @@ const mppx = Mppx.create({
       recipient: Env.stellarRecipient,
       currency: USDC_SAC_TESTNET,
       network: 'testnet',
+      store: Store.memory(),
       logger,
     }),
   ],

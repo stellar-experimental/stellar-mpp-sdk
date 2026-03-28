@@ -5,8 +5,9 @@
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=20"
   },
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -60,9 +61,12 @@
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
   "peerDependencies": {
-    "@stellar/stellar-sdk": ">=14.0.0",
-    "mppx": ">=0.4.0"
+    "@stellar/stellar-sdk": "^14.6.1",
+    "mppx": "^0.4.11"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -91,6 +95,7 @@
     "type": "git",
     "url": "git+https://github.com/stellar/stellar-mpp-sdk.git"
   },
+  "homepage": "https://github.com/stellar/stellar-mpp-sdk#readme",
   "keywords": [
     "stellar",
     "blockchain",
@@ -104,8 +109,5 @@
     "402",
     "agentic-payments",
     "mppx"
-  ],
-  "dependencies": {
-    "zod": "^4.3.6"
-  }
+  ]
 }

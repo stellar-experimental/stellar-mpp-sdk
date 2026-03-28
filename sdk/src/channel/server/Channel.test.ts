@@ -1,4 +1,4 @@
-import { Keypair } from '@stellar/stellar-sdk'
+import { Account, Keypair } from '@stellar/stellar-sdk'
 import { Challenge, Credential, Store } from 'mppx'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -8,6 +8,7 @@ const mockSimulateTransaction = vi.fn()
 const mockGetChannelState = vi.fn()
 const mockSendTransaction = vi.fn()
 const mockGetTransaction = vi.fn()
+const mockPrepareTransaction = vi.fn()
 const mockFromXDR = vi.fn()
 
 vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
@@ -31,6 +32,7 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
         this.simulateTransaction = mockSimulateTransaction
         this.sendTransaction = mockSendTransaction
         this.getTransaction = mockGetTransaction
+        this.prepareTransaction = mockPrepareTransaction
       }),
     },
   }
@@ -359,7 +361,7 @@ describe('stellar server channel verification', () => {
         credential: credential as any,
         request: credential.challenge.request,
       }),
-    ).rejects.toThrow('Requested amount must be positive')
+    ).rejects.toThrow('Invalid amount')
   })
 
   it('rejects commitment equal to previous cumulative (no progress)', async () => {
@@ -942,5 +944,97 @@ describe('stellar server channel open action', () => {
         request: credential.challenge.request,
       }),
     ).rejects.toThrow('failed')
+  })
+})
+
+// ── close() standalone function ───────────────────────────────────────────────
+
+describe('close()', () => {
+  // Import close from the same mocked module
+  let closeFn: (typeof import('./Channel.js'))['close']
+
+  it('loads the close function', async () => {
+    const mod = await import('./Channel.js')
+    closeFn = mod.close
+    expect(typeof closeFn).toBe('function')
+  })
+
+  it('broadcasts close transaction and returns hash on success', async () => {
+    const signer = Keypair.random()
+    const signature = new Uint8Array(64).fill(1)
+
+    mockGetAccount.mockResolvedValueOnce(new Account(signer.publicKey(), '100'))
+    mockPrepareTransaction.mockImplementationOnce((tx: any) => tx)
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'close-tx-hash', status: 'PENDING' })
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
+
+    const hash = await closeFn({
+      channel: CHANNEL_ADDRESS,
+      amount: 5000000n,
+      signature,
+      signer,
+      network: 'testnet',
+    })
+
+    expect(hash).toBe('close-tx-hash')
+    expect(mockSendTransaction).toHaveBeenCalled()
+  })
+
+  it('throws ChannelVerificationError when sendTransaction returns ERROR', async () => {
+    const signer = Keypair.random()
+    const signature = new Uint8Array(64).fill(2)
+
+    mockGetAccount.mockResolvedValueOnce(new Account(signer.publicKey(), '101'))
+    mockPrepareTransaction.mockImplementationOnce((tx: any) => tx)
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'err-hash', status: 'ERROR' })
+
+    await expect(
+      closeFn({
+        channel: CHANNEL_ADDRESS,
+        amount: 5000000n,
+        signature,
+        signer,
+        network: 'testnet',
+      }),
+    ).rejects.toThrow('sendTransaction returned ERROR')
+  })
+
+  it('throws ChannelVerificationError when sendTransaction returns DUPLICATE', async () => {
+    const signer = Keypair.random()
+    const signature = new Uint8Array(64).fill(3)
+
+    mockGetAccount.mockResolvedValueOnce(new Account(signer.publicKey(), '102'))
+    mockPrepareTransaction.mockImplementationOnce((tx: any) => tx)
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'dup-hash', status: 'DUPLICATE' })
+
+    await expect(
+      closeFn({
+        channel: CHANNEL_ADDRESS,
+        amount: 5000000n,
+        signature,
+        signer,
+        network: 'testnet',
+      }),
+    ).rejects.toThrow('sendTransaction returned DUPLICATE')
+  })
+
+  it('throws when poll returns non-SUCCESS status', async () => {
+    const signer = Keypair.random()
+    const signature = new Uint8Array(64).fill(4)
+
+    mockGetAccount.mockResolvedValueOnce(new Account(signer.publicKey(), '103'))
+    mockPrepareTransaction.mockImplementationOnce((tx: any) => tx)
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'fail-hash', status: 'PENDING' })
+    mockGetTransaction.mockResolvedValueOnce({ status: 'FAILED', resultXdr: 'error-xdr' })
+
+    await expect(
+      closeFn({
+        channel: CHANNEL_ADDRESS,
+        amount: 5000000n,
+        signature,
+        signer,
+        network: 'testnet',
+      }),
+    ).rejects.toThrow(/failed/i)
   })
 })

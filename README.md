@@ -83,7 +83,7 @@ Client (Funder)                 Server (Recipient)                Stellar
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) 22+
+- [Node.js](https://nodejs.org/) 20+
 - [pnpm](https://pnpm.io/) 10.33+ (via [corepack](https://nodejs.org/api/corepack.html))
 
 ```bash
@@ -205,16 +205,16 @@ const data = await response.json()
 
 ### Exports
 
-| Path                          | Exports                                                                                                                                                                          |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@stellar/mpp`                | `ChargeMethods`, `ChannelMethods`, constants (`USDC_SAC_TESTNET`, `XLM_SAC_MAINNET`, etc.), `toBaseUnits`, `fromBaseUnits`, `resolveKeypair`, `Logger` (type)                    |
-| `@stellar/mpp/charge`         | `charge` (method schema)                                                                                                                                                         |
-| `@stellar/mpp/charge/client`  | `stellar`, `charge`, `Mppx`                                                                                                                                                      |
-| `@stellar/mpp/charge/server`  | `stellar`, `charge`, `Mppx`, `Store`, `Expires`, `resolveKeypair`                                                                                                                |
-| `@stellar/mpp/channel`        | `channel` (method schema)                                                                                                                                                        |
-| `@stellar/mpp/channel/client` | `stellar`, `channel`, `Mppx`                                                                                                                                                     |
-| `@stellar/mpp/channel/server` | `stellar`, `channel`, `close`, `getChannelState`, `watchChannel`, `Mppx`, `Store`, `Expires`                                                                                     |
-| `@stellar/mpp/env`            | `parseRequired`, `parseOptional`, `parsePort`, `parseStellarPublicKey`, `parseStellarSecretKey`, `parseContractAddress`, `parseHexKey`, `parseCommaSeparatedList`, `parseNumber` |
+| Path                          | Exports                                                                                                                                                                                                                                                                          |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@stellar/mpp`                | `ChargeMethods`, `ChannelMethods`, constants (`USDC_SAC_TESTNET`, `XLM_SAC_MAINNET`, etc.), `toBaseUnits`, `fromBaseUnits`, `resolveKeypair`, `Env`, `Logger` (type), error types (`StellarMppError`, `PaymentVerificationError`, `ChannelVerificationError`, `SettlementError`) |
+| `@stellar/mpp/charge`         | `charge` (method schema)                                                                                                                                                                                                                                                         |
+| `@stellar/mpp/charge/client`  | `stellar`, `charge`, `Mppx`                                                                                                                                                                                                                                                      |
+| `@stellar/mpp/charge/server`  | `stellar`, `charge`, `Mppx`, `Store`, `Expires`, `resolveKeypair`                                                                                                                                                                                                                |
+| `@stellar/mpp/channel`        | `channel` (method schema)                                                                                                                                                                                                                                                        |
+| `@stellar/mpp/channel/client` | `stellar`, `channel`, `Mppx`                                                                                                                                                                                                                                                     |
+| `@stellar/mpp/channel/server` | `stellar`, `channel`, `close`, `getChannelState`, `watchChannel`, `resolveKeypair`, `Mppx`, `Store`, `Expires`, `ChannelState` (type), `ChannelEvent` (type)                                                                                                                     |
+| `@stellar/mpp/env`            | `parseRequired`, `parseOptional`, `parsePort`, `parseStellarPublicKey`, `parseStellarSecretKey`, `parseContractAddress`, `parseHexKey`, `parseCommaSeparatedList`, `parseNumber`                                                                                                 |
 
 ### Server options (charge)
 
@@ -463,73 +463,7 @@ See [demo/channel-e2e-output.txt](demo/channel-e2e-output.txt) for example outpu
 
 ## Project structure
 
-```
-stellar-mpp-sdk/
-├── eslint.config.mjs       # ESLint 9 flat config
-├── .prettierrc             # Prettier configuration
-├── Makefile                # Dev workflow targets (make help)
-├── .github/workflows/
-│   └── ci.yml              # GitHub Actions CI pipeline
-├── sdk/src/
-│   ├── constants.ts        # SAC addresses, RPC URLs, network passphrases
-│   ├── env.ts              # Stellar-aware env parsing primitives
-│   ├── index.ts            # Root exports
-│   ├── shared/
-│   │   ├── defaults.ts     # Internal default constants
-│   │   ├── errors.ts       # StellarMppError, PaymentVerificationError, ChannelVerificationError
-│   │   ├── fee-bump.ts     # Fee bump wrapping
-│   │   ├── keypairs.ts     # Keypair resolution (Keypair or S... string)
-│   │   ├── logger.ts       # Logger interface and noopLogger
-│   │   ├── poll.ts         # Transaction polling with backoff and jitter
-│   │   ├── scval.ts        # Soroban ScVal ↔ BigInt conversion
-│   │   ├── simulate.ts     # Simulation with timeout and error classification
-│   │   ├── units.ts        # toBaseUnits / fromBaseUnits
-│   │   └── validation.ts   # Hex signature and amount validation
-│   ├── charge/
-│   │   ├── Methods.ts      # Charge method schema (name: 'stellar', intent: 'charge')
-│   │   ├── index.ts        # Charge root exports
-│   │   ├── client/
-│   │   │   ├── Charge.ts   # Client-side credential creation (SAC transfer)
-│   │   │   ├── Methods.ts  # stellar.charge() convenience wrapper
-│   │   │   └── index.ts
-│   │   └── server/
-│   │       ├── Charge.ts   # Server-side verification + broadcast
-│   │       ├── Methods.ts  # stellar.charge() convenience wrapper
-│   │       └── index.ts
-│   └── channel/
-│       ├── Methods.ts      # Method schema (name: 'stellar', intent: 'channel')
-│       ├── index.ts        # Channel root exports
-│       ├── client/
-│       │   ├── Channel.ts  # Client-side commitment signing
-│       │   ├── Methods.ts  # stellar.channel() convenience wrapper
-│       │   └── index.ts
-│       └── server/
-│           ├── Channel.ts  # Server-side commitment verification + close
-│           ├── State.ts    # On-chain channel state queries
-│           ├── Watcher.ts  # Contract event polling (close, refund, top_up)
-│           ├── Methods.ts  # stellar.channel() convenience wrapper
-│           └── index.ts
-├── examples/
-│   ├── charge-server.ts    # Charge server (Express + helmet/rate-limit)
-│   ├── charge-client.ts    # Charge client with progress events
-│   ├── channel-server.ts   # Channel server (Express + helmet/rate-limit)
-│   ├── channel-client.ts   # Channel client example
-│   ├── channel-open.ts     # Channel deployment example
-│   ├── channel-close.ts    # On-chain channel close example
-│   └── config/
-│       ├── charge-server.ts  # Env class for charge server
-│       ├── charge-client.ts  # Env class for charge client
-│       ├── channel-server.ts # Env class for channel server
-│       └── channel-client.ts # Env class for channel client
-├── demo/
-│   ├── index.html          # Interactive browser UI (served at /demo)
-│   ├── run.sh              # All-in-one charge demo script
-│   ├── run-channel.sh      # Off-chain channel demo script
-│   ├── run-channel-e2e.sh  # Full lifecycle e2e demo (deploy → pay → close)
-│   ├── channel-e2e-output.txt # Example e2e output with Stellar Expert links
-│   └── README.md           # Demo setup instructions
-└── dist/                   # Compiled output
-```
+Source lives in `sdk/src/` with colocated tests (`*.test.ts`). Each payment mode follows a twin client/server pattern: `Methods.ts` (Zod schema) + `client/` + `server/`. Shared utilities in `shared/` are internal. See `examples/` for runnable servers/clients and `demo/` for shell scripts.
 
 ## Development
 
