@@ -10,8 +10,8 @@ describe('constants', () => {
   })
 
   it('exports SOROBAN_RPC_URLS', () => {
-    expect(constants.SOROBAN_RPC_URLS.public).toMatch(/^https:\/\//)
-    expect(constants.SOROBAN_RPC_URLS.testnet).toMatch(/^https:\/\//)
+    expect(constants.SOROBAN_RPC_URLS.public).toBe('https://soroban-rpc.mainnet.stellar.gateway.fm')
+    expect(constants.SOROBAN_RPC_URLS.testnet).toBe('https://soroban-testnet.stellar.org')
   })
 
   it('exports HORIZON_URLS', () => {
@@ -20,13 +20,21 @@ describe('constants', () => {
   })
 
   it('exports USDC SAC contract addresses', () => {
-    expect(constants.USDC_SAC_MAINNET).toMatch(/^C/)
-    expect(constants.USDC_SAC_TESTNET).toMatch(/^C/)
+    expect(constants.USDC_SAC_MAINNET).toBe(
+      'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI',
+    )
+    expect(constants.USDC_SAC_TESTNET).toBe(
+      'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA',
+    )
   })
 
   it('exports XLM SAC contract addresses', () => {
-    expect(constants.XLM_SAC_MAINNET).toMatch(/^C/)
-    expect(constants.XLM_SAC_TESTNET).toMatch(/^C/)
+    expect(constants.XLM_SAC_MAINNET).toBe(
+      'CAS3J7GYLGVE45MR3HPSFG352DAANEV5GGMFTO3IZIE4JMCDALQO57Y',
+    )
+    expect(constants.XLM_SAC_TESTNET).toBe(
+      'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
+    )
   })
 
   it('exports SAC_ADDRESSES map', () => {

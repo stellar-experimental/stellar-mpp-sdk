@@ -108,6 +108,37 @@ describe('pollTransaction', () => {
     expect((caughtError as Error).message).toMatch(/not found after 3 attempts/)
   })
 
+  it('applies exponential backoff between retries', async () => {
+    const rpc = createMockRpc([
+      { status: 'NOT_FOUND' },
+      { status: 'NOT_FOUND' },
+      { status: 'NOT_FOUND' },
+      { status: 'SUCCESS', resultXdr: 'ok' },
+    ])
+
+    const promise = pollTransaction(rpc, 'tx-backoff', {
+      delayMs: 100,
+      backoffMultiplier: 2,
+      jitterMs: 0,
+      timeoutMs: 60_000,
+    })
+
+    // 1st retry delay: 100 * 2^0 = 100ms
+    await vi.advanceTimersByTimeAsync(100)
+    expect(rpc.getTransaction).toHaveBeenCalledTimes(2)
+
+    // 2nd retry delay: 100 * 2^1 = 200ms
+    await vi.advanceTimersByTimeAsync(200)
+    expect(rpc.getTransaction).toHaveBeenCalledTimes(3)
+
+    // 3rd retry delay: 100 * 2^2 = 400ms
+    await vi.advanceTimersByTimeAsync(400)
+    expect(rpc.getTransaction).toHaveBeenCalledTimes(4)
+
+    const result = await promise
+    expect(result).toEqual({ status: 'SUCCESS', resultXdr: 'ok' })
+  })
+
   it('throws immediately on RPC network error', async () => {
     const rpc = {
       getTransaction: vi.fn(async () => {

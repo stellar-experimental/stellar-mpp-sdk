@@ -40,7 +40,7 @@ echo "════════════════════════�
 echo ""
 
 # ── Start server in background ────────────────────────────────────────────────
-PORT=${PORT:-3000}
+export PORT=${PORT:-3000}
 
 # Kill any existing process on the port
 if lsof -ti:$PORT &>/dev/null; then
@@ -56,7 +56,7 @@ trap "kill $SERVER_PID 2>/dev/null" EXIT
 
 # Wait for server to be ready
 for i in $(seq 1 10); do
-  if curl -s http://localhost:3000 >/dev/null 2>&1; then
+  if curl -s http://localhost:$PORT >/dev/null 2>&1; then
     break
   fi
   sleep 0.5
@@ -67,12 +67,12 @@ echo "▶ Running client..."
 echo ""
 
 # ── Run client ────────────────────────────────────────────────────────────────
-npx tsx examples/charge-client.ts
+SERVER_URL="http://localhost:$PORT" npx tsx examples/charge-client.ts
 
 echo ""
 echo "══════════════════════════════════════════════════"
 echo "  Demo complete!"
-echo "  UI also available at: http://localhost:3000/demo"
+echo "  UI also available at: http://localhost:$PORT/demo"
 echo "══════════════════════════════════════════════════"
 echo ""
 echo "Press Ctrl+C to stop the server."

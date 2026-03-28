@@ -9,7 +9,9 @@ export function validateHexSignature(hex: string, expectedLength: number = 128):
 }
 
 export function validateAmount(amount: string): void {
-  if (!/^\d+$/.test(amount)) {
-    throw new StellarMppError(`Invalid amount: "${amount}" must be a non-negative integer string`)
+  if (!/^[1-9]\d*$/.test(amount)) {
+    throw new StellarMppError(
+      `Invalid amount: "${amount}" must be a positive integer string without leading zeros`,
+    )
   }
 }

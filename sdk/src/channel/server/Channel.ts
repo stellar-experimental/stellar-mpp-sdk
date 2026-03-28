@@ -148,6 +148,7 @@ export function channel(parameters: channel.Parameters) {
 
     const payload = credential.payload
     const action = payload.action ?? 'voucher'
+    const { externalId } = challengeRequest
 
     // NM-001: Reject credentials once the channel has been closed on-chain.
     // Applied to all actions including 'open'.
@@ -168,22 +169,23 @@ export function channel(parameters: channel.Parameters) {
     // NM-002: The verifyLock serializes calls so the get→put gap cannot
     // be exploited in a single-process deployment. Multi-process
     // deployments MUST use a store with atomic put-if-absent semantics.
-    if (store) {
-      const replayKey = `${STORE_PREFIX}:challenge:${challenge.id}`
-      const existing = await store.get(replayKey)
+    // Check early but only mark as used AFTER successful verification to
+    // avoid permanently burning a challenge on transient failures.
+    const challengeStoreKey = store ? `${STORE_PREFIX}:challenge:${challenge.id}` : undefined
+    if (store && challengeStoreKey) {
+      const existing = await store.get(challengeStoreKey)
       if (existing) {
         throw new ChannelVerificationError('Challenge already used. Replay rejected.', {
           channel: channelAddress,
         })
       }
-      await store.put(replayKey, { usedAt: new Date().toISOString() })
     }
 
     // Dispatch open action to its own handler — it has completely
     // different semantics (broadcasts an on-chain tx) compared to
     // voucher/close which operate on existing channels.
     if (action === 'open') {
-      return doVerifyOpen(credential)
+      return doVerifyOpen(credential, challengeStoreKey)
     }
 
     // NM-001 (voucher/close): closed and replay checks are now applied
@@ -434,6 +436,13 @@ export function channel(parameters: channel.Parameters) {
       logger.debug(`${LOG_PREFIX} Broadcasting close tx...`)
       const sendResult = await server.sendTransaction(txToSubmit)
 
+      if (sendResult.status === 'ERROR' || sendResult.status === 'DUPLICATE') {
+        throw new ChannelVerificationError(
+          `${LOG_PREFIX} Close broadcast failed: sendTransaction returned ${sendResult.status}.`,
+          { hash: sendResult.hash, status: sendResult.status },
+        )
+      }
+
       const txResult = await pollTransaction(server, sendResult.hash, {
         maxAttempts: pollMaxAttempts,
         delayMs: pollDelayMs,
@@ -460,12 +469,23 @@ export function channel(parameters: channel.Parameters) {
         })
       }
 
+      // Mark challenge as used only after successful close settlement
+      if (store && challengeStoreKey) {
+        await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
+      }
+
       return Receipt.from({
         method: 'stellar',
         reference: sendResult.hash,
         status: 'success',
         timestamp: new Date().toISOString(),
+        ...(externalId ? { externalId } : {}),
       })
+    }
+
+    // Mark challenge as used only after successful voucher verification
+    if (store && challengeStoreKey) {
+      await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
     }
 
     return Receipt.from({
@@ -473,6 +493,7 @@ export function channel(parameters: channel.Parameters) {
       reference: challengeRequest.methodDetails?.reference ?? challenge.id,
       status: 'success',
       timestamp: new Date().toISOString(),
+      ...(externalId ? { externalId } : {}),
     })
   }
 
@@ -482,8 +503,9 @@ export function channel(parameters: channel.Parameters) {
    * broadcasts the transaction, waits for confirmation, then initialises
    * the cumulative amount in the store.
    */
-  async function doVerifyOpen(credential: any) {
+  async function doVerifyOpen(credential: any, challengeStoreKey: string | undefined) {
     const { challenge } = credential
+    const { externalId } = challenge.request
     const payload = credential.payload
     const { transaction: txXdr, amount, signature: signatureHex } = payload
 
@@ -620,6 +642,13 @@ export function channel(parameters: channel.Parameters) {
     }
     const sendResult = await server.sendTransaction(txToSubmit)
 
+    if (sendResult.status === 'ERROR' || sendResult.status === 'DUPLICATE') {
+      throw new ChannelVerificationError(
+        `${LOG_PREFIX} Open broadcast failed: sendTransaction returned ${sendResult.status}.`,
+        { hash: sendResult.hash, status: sendResult.status },
+      )
+    }
+
     const txResult = await pollTransaction(server, sendResult.hash, {
       maxAttempts: pollMaxAttempts,
       delayMs: pollDelayMs,
@@ -643,11 +672,17 @@ export function channel(parameters: channel.Parameters) {
       })
     }
 
+    // Mark challenge as used only after successful open settlement
+    if (store && challengeStoreKey) {
+      await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
+    }
+
     return Receipt.from({
       method: 'stellar',
       reference: sendResult.hash,
       status: 'success',
       timestamp: new Date().toISOString(),
+      ...(externalId ? { externalId } : {}),
     })
   }
 }
@@ -732,6 +767,13 @@ export async function close(parameters: {
 
   log.debug(`${LOG_PREFIX} Broadcasting close tx...`)
   const result = await server.sendTransaction(txToSubmit)
+
+  if (result.status === 'ERROR' || result.status === 'DUPLICATE') {
+    throw new ChannelVerificationError(
+      `${LOG_PREFIX} Close broadcast failed: sendTransaction returned ${result.status}.`,
+      { hash: result.hash, status: result.status },
+    )
+  }
 
   const txResult = await pollTransaction(server, result.hash, {
     maxAttempts: pollMaxAttempts,
