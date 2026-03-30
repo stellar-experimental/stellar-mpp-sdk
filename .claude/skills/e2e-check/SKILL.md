@@ -103,7 +103,7 @@ Full lifecycle: deploy contract -> 2 off-chain payments -> on-chain close -> bal
 
 ## Check 6: CHANGELOG Entry
 
-Every PR must add a line to `CHANGELOG.md` under the current unreleased version section. Each entry must link to its PR using the format:
+Every PR must add a line to `CHANGELOG.md` under the `## [Unreleased]` heading. Each entry must link to its PR using the format:
 
 ```
 - Description of the change [#PR_NUMBER](https://github.com/stellar/stellar-mpp-sdk/pull/PR_NUMBER)
