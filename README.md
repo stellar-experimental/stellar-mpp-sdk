@@ -101,12 +101,12 @@ npm install @stellar/mpp @stellar/stellar-sdk mppx
 Only import the subpath you need to keep your bundle small:
 
 ```ts
-import { stellar } from '@stellar/mpp/charge/server'  // charge server only
-import { stellar } from '@stellar/mpp/charge/client'  // charge client only
+import { stellar } from '@stellar/mpp/charge/server' // charge server only
+import { stellar } from '@stellar/mpp/charge/client' // charge client only
 import { stellar } from '@stellar/mpp/channel/server' // channel server only
 import { stellar } from '@stellar/mpp/channel/client' // channel client only
-import { parsePort } from '@stellar/mpp/env'          // env helpers only
-import { USDC_SAC_TESTNET } from '@stellar/mpp'       // constants, schemas, error types
+import { parsePort } from '@stellar/mpp/env' // env helpers only
+import { USDC_SAC_TESTNET } from '@stellar/mpp' // constants, schemas, error types
 ```
 
 ## Quick start
