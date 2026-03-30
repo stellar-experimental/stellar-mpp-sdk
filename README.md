@@ -93,14 +93,21 @@ corepack enable
 ## Install
 
 ```bash
-corepack enable
-pnpm install
+npm install @stellar/mpp @stellar/stellar-sdk mppx
 ```
 
-For end users:
+`@stellar/stellar-sdk` and `mppx` are peer dependencies of `@stellar/mpp` — you must install compatible versions alongside it.
 
-```bash
-npm install @stellar/mpp mppx @stellar/stellar-sdk
+Only import the subpath you need to keep your bundle small:
+
+```
+# Pick the import for your use case:
+import { stellar } from '@stellar/mpp/charge/server' // charge server only
+import { stellar } from '@stellar/mpp/charge/client' // charge client only
+import { stellar } from '@stellar/mpp/channel/server' // channel server only
+import { stellar } from '@stellar/mpp/channel/client' // channel client only
+import { parsePort } from '@stellar/mpp/env' // env helpers only
+import { USDC_SAC_TESTNET } from '@stellar/mpp' // constants, schemas, error types
 ```
 
 ## Quick start
@@ -468,6 +475,11 @@ Source lives in `sdk/src/` with colocated tests (`*.test.ts`). Each payment mode
 ## Development
 
 ```bash
+corepack enable       # Enable pnpm via corepack
+pnpm install          # Install deps (also compiles TypeScript via prepare script)
+```
+
+```bash
 make help       # Show all available commands
 make check      # Run full quality pipeline (format, lint, typecheck, test, build)
 make test       # Run tests once
@@ -477,7 +489,6 @@ make test-watch # Run tests in watch mode
 See the [Makefile](Makefile) for all targets.
 
 ```bash
-pnpm install          # Install deps
 pnpm run build        # Compile TypeScript
 pnpm run check:types  # Type-check without emitting
 pnpm run lint         # Run ESLint
