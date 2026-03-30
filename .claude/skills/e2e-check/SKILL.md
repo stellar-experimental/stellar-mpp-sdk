@@ -101,6 +101,18 @@ Full lifecycle: deploy contract -> 2 off-chain payments -> on-chain close -> bal
 
 **Pass:** Script completes with `Channel balance after close: 0` and exit code 0.
 
+## Check 6: CHANGELOG Entry
+
+Every PR must add a line to `CHANGELOG.md` under the current unreleased version section. Each entry must link to its PR using the format:
+
+```
+- Description of the change [#PR_NUMBER](https://github.com/stellar/stellar-mpp-sdk/pull/PR_NUMBER)
+```
+
+**Pass:** The diff includes a CHANGELOG.md addition with a PR link in the correct format.
+
+**Fail:** No CHANGELOG entry, or entry missing the `[#N](url)` PR link.
+
 ## Reporting
 
 After running all checks, report:

@@ -9,11 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Bump `path-to-regexp` (8.3.0 → 8.4.0), `picomatch` (4.0.3 → 4.0.4), and `yaml` (2.8.2 → 2.8.3) to address security vulnerabilities (CVE-2026-4926, CVE-2026-4923, CVE-2026-33671, CVE-2026-33672)
+- Bump `path-to-regexp` (8.3.0 → 8.4.0), `picomatch` (4.0.3 → 4.0.4), and `yaml` (2.8.2 → 2.8.3) to address security vulnerabilities (CVE-2026-4926, CVE-2026-4923, CVE-2026-33671, CVE-2026-33672) [#28](https://github.com/stellar/stellar-mpp-sdk/pull/28)
 
 ### Changed
 
-- Rewrote the Install section in the README to focus on npm package consumers, with peer dependency callout and subpath import examples
+- Rewrote the Install section in the README to focus on npm package consumers, with peer dependency callout and subpath import examples [#29](https://github.com/stellar/stellar-mpp-sdk/pull/29)
 
 ## [0.2.0] - 2026-03-30
 
