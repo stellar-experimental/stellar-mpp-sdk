@@ -96,11 +96,12 @@ corepack enable
 npm install @stellar/mpp @stellar/stellar-sdk mppx
 ```
 
-`@stellar/stellar-sdk` and `mppx` are peer dependencies — you must install them alongside the SDK.
+`@stellar/stellar-sdk` and `mppx` are peer dependencies of `@stellar/mpp` — you must install compatible versions alongside it.
 
 Only import the subpath you need to keep your bundle small:
 
-```ts
+```
+# Pick the import for your use case:
 import { stellar } from '@stellar/mpp/charge/server' // charge server only
 import { stellar } from '@stellar/mpp/charge/client' // charge client only
 import { stellar } from '@stellar/mpp/channel/server' // channel server only
