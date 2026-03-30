@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Rewrote the Install section in the README to focus on npm package consumers, with peer dependency callout and subpath import examples [#29](https://github.com/stellar/stellar-mpp-sdk/pull/29)
+- Add CHANGELOG and release structure for v0.2.x [#31](https://github.com/stellar/stellar-mpp-sdk/pull/31)
 
 ## [0.2.0] - 2026-03-30
 
