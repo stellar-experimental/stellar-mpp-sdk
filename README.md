@@ -275,8 +275,10 @@ stellar.channel({
   rpcUrl?: string,                // custom Soroban RPC URL
   sourceAccount?: string,         // funded G... address for simulations
   store?: Store.Store,            // replay protection + cumulative amount tracking
-  signer?: Keypair | string,      // keypair for signing close/open transactions
-  feeBumpSigner?: Keypair | string, // fee bump signer for close/open transactions
+  feePayer?: {                     // fee payer for close/open transactions
+    envelopeSigner: Keypair | string,   // source account + envelope signer
+    feeBumpSigner?: Keypair | string,   // wraps tx in FeeBumpTransaction
+  },
   checkOnChainState?: boolean,    // detect on-chain disputes (default: false)
   onDisputeDetected?: (state) => void, // callback when close_start detected
   maxFeeBumpStroops?: number,     // max fee bump in stroops (default: 10,000,000)
@@ -433,8 +435,8 @@ await close({
   channel: 'CABC...', // channel contract address
   amount: 8000000n, // commitment amount to close with
   signature: commitmentSigBytes, // ed25519 signature from the latest commitment
-  signer: recipientKeypair, // keypair to sign the close transaction
-  network: 'testnet',
+  feePayer: { envelopeSigner: recipientKeypair },
+  network: 'stellar:testnet',
 })
 ```
 

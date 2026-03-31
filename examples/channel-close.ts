@@ -74,7 +74,7 @@ const txHash = await close({
   channel: CHANNEL_CONTRACT,
   amount: AMOUNT,
   signature,
-  signer: closeKey,
+  feePayer: { envelopeSigner: closeKey },
   network: NETWORK,
 })
 
