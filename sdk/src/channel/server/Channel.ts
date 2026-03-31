@@ -403,7 +403,7 @@ export function channel(parameters: channel.Parameters) {
     if (action === 'close') {
       if (!signerKeypair) {
         throw new ChannelVerificationError(
-          `${LOG_PREFIX} Close action requires a feePayer to be configured.`,
+          `${LOG_PREFIX} Close action requires a feePayer.envelopeSigner (transaction source and envelope signer) to be configured.`,
           {},
         )
       }
@@ -708,8 +708,8 @@ export async function close(parameters: {
    * `feeBumpSigner` optionally wraps the tx in a FeeBumpTransaction.
    */
   feePayer: {
-    envelopeSigner: Keypair
-    feeBumpSigner?: Keypair
+    envelopeSigner: Keypair | string
+    feeBumpSigner?: Keypair | string
   }
   /** Network identifier. */
   network?: NetworkId
@@ -751,7 +751,7 @@ export async function close(parameters: {
     nativeToScVal(Buffer.from(signature), { type: 'bytes' }),
   )
 
-  const signer = feePayer.envelopeSigner
+  const signer = resolveKeypair(feePayer.envelopeSigner)
   const account = await server.getAccount(signer.publicKey())
   const tx = new TransactionBuilder(account, {
     fee: DEFAULT_FEE,
@@ -766,7 +766,7 @@ export async function close(parameters: {
 
   let txToSubmit: Transaction | FeeBumpTransaction = prepared
   if (feePayer.feeBumpSigner) {
-    txToSubmit = wrapFeeBump(prepared, feePayer.feeBumpSigner, {
+    txToSubmit = wrapFeeBump(prepared, resolveKeypair(feePayer.feeBumpSigner), {
       networkPassphrase,
       maxFeeStroops: maxFeeBumpStroops,
     })

@@ -40,6 +40,8 @@ import {
  * - **pull** (default): sends the signed XDR to the server to broadcast
  * - **push**: broadcasts itself and sends the tx hash
  *
+ * @see https://paymentauth.org/draft-stellar-charge-00
+ *
  * @example
  * ```ts
  * import { Keypair } from '@stellar/stellar-sdk'
