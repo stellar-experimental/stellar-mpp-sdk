@@ -43,7 +43,7 @@ function mockChallenge(overrides: Record<string, unknown> = {}) {
       channel: CHANNEL_ADDRESS,
       methodDetails: {
         reference: crypto.randomUUID(),
-        network: 'testnet',
+        network: 'stellar:testnet',
         cumulativeAmount: '0',
       },
       ...overrides,
@@ -129,7 +129,7 @@ describe('channel createCredential voucher', () => {
       amount: '500000',
       methodDetails: {
         reference: crypto.randomUUID(),
-        network: 'testnet',
+        network: 'stellar:testnet',
         cumulativeAmount: '2000000', // previous cumulative
       },
     })
@@ -272,7 +272,7 @@ describe('channel createCredential open action', () => {
       amount: '5000000',
       methodDetails: {
         reference: crypto.randomUUID(),
-        network: 'testnet',
+        network: 'stellar:testnet',
         cumulativeAmount: '0', // no previous cumulative for open
       },
     })

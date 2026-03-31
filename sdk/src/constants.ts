@@ -1,12 +1,18 @@
 import { Networks } from '@stellar/stellar-sdk'
 
 // ---------------------------------------------------------------------------
-// Networks
+// Networks (CAIP-2 identifiers)
 // ---------------------------------------------------------------------------
 
+/** Stellar testnet CAIP-2 chain identifier. */
+export const STELLAR_TESTNET = 'stellar:testnet' as const
+
+/** Stellar mainnet (pubnet) CAIP-2 chain identifier. */
+export const STELLAR_PUBNET = 'stellar:pubnet' as const
+
 export const NETWORK_PASSPHRASE = {
-  public: Networks.PUBLIC,
-  testnet: Networks.TESTNET,
+  [STELLAR_PUBNET]: Networks.PUBLIC,
+  [STELLAR_TESTNET]: Networks.TESTNET,
 } as const
 
 export type NetworkId = keyof typeof NETWORK_PASSPHRASE
@@ -16,13 +22,13 @@ export type NetworkId = keyof typeof NETWORK_PASSPHRASE
 // ---------------------------------------------------------------------------
 
 export const SOROBAN_RPC_URLS: Record<NetworkId, string> = {
-  public: 'https://soroban-rpc.mainnet.stellar.gateway.fm',
-  testnet: 'https://soroban-testnet.stellar.org',
+  [STELLAR_PUBNET]: 'https://soroban-rpc.mainnet.stellar.gateway.fm',
+  [STELLAR_TESTNET]: 'https://soroban-testnet.stellar.org',
 }
 
 export const HORIZON_URLS: Record<NetworkId, string> = {
-  public: 'https://horizon.stellar.org',
-  testnet: 'https://horizon-testnet.stellar.org',
+  [STELLAR_PUBNET]: 'https://horizon.stellar.org',
+  [STELLAR_TESTNET]: 'https://horizon-testnet.stellar.org',
 }
 
 // ---------------------------------------------------------------------------
@@ -43,36 +49,15 @@ export const XLM_SAC_TESTNET = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU
 
 /** Map from network to well-known SAC addresses. */
 export const SAC_ADDRESSES = {
-  public: {
+  [STELLAR_PUBNET]: {
     USDC: USDC_SAC_MAINNET,
     XLM: XLM_SAC_MAINNET,
   },
-  testnet: {
+  [STELLAR_TESTNET]: {
     USDC: USDC_SAC_TESTNET,
     XLM: XLM_SAC_TESTNET,
   },
 } as const
-
-// ---------------------------------------------------------------------------
-// CAIP-2 network identifiers
-// ---------------------------------------------------------------------------
-
-/**
- * Maps internal network IDs to CAIP-2 chain identifiers.
- * @see https://github.com/ChainAgnostic/CAIPs/blob/main/CAIPs/caip-2.md
- */
-export const CAIP2_NETWORK: Record<NetworkId, string> = {
-  public: 'stellar:pubnet',
-  testnet: 'stellar:testnet',
-}
-
-/**
- * Reverse map: CAIP-2 chain identifier → internal NetworkId.
- */
-export const CAIP2_TO_NETWORK: Record<string, NetworkId | undefined> = {
-  'stellar:pubnet': 'public',
-  'stellar:testnet': 'testnet',
-}
 
 // ---------------------------------------------------------------------------
 // Defaults

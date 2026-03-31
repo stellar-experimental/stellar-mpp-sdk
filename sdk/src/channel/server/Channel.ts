@@ -14,6 +14,7 @@ import {
   DEFAULT_TIMEOUT,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
+  STELLAR_TESTNET,
   type NetworkId,
 } from '../../constants.js'
 import {
@@ -69,7 +70,7 @@ export function channel(parameters: channel.Parameters) {
     decimals = DEFAULT_DECIMALS,
     feeBumpSigner: feeBumpSignerParam,
     maxFeeBumpStroops = DEFAULT_MAX_FEE_BUMP_STROOPS,
-    network = 'testnet',
+    network = STELLAR_TESTNET,
     onDisputeDetected,
     pollDelayMs = DEFAULT_POLL_DELAY_MS,
     pollMaxAttempts = DEFAULT_POLL_MAX_ATTEMPTS,
@@ -725,7 +726,7 @@ export async function close(parameters: {
     signature,
     signer,
     feeBumpSigner,
-    network = 'testnet',
+    network = STELLAR_TESTNET,
     rpcUrl,
     maxFeeBumpStroops = DEFAULT_MAX_FEE_BUMP_STROOPS,
     pollMaxAttempts = DEFAULT_POLL_MAX_ATTEMPTS,
@@ -826,7 +827,7 @@ export declare namespace channel {
     decimals?: number
     /** Maximum fee bump in stroops. @default 10_000_000 */
     maxFeeBumpStroops?: number
-    /** Stellar network. @default 'testnet' */
+    /** Stellar network. @default 'stellar:testnet' */
     network?: NetworkId
     /**
      * Called when a dispute is detected on-chain (close_start has been called).

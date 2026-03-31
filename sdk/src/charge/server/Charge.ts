@@ -10,12 +10,12 @@ import {
 import { Method, Receipt, Store } from 'mppx'
 import {
   ALL_ZEROS,
-  CAIP2_NETWORK,
   DEFAULT_DECIMALS,
   DEFAULT_LEDGER_CLOSE_TIME,
   DEFAULT_TIMEOUT,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
+  STELLAR_TESTNET,
   type NetworkId,
 } from '../../constants.js'
 import * as Methods from '../Methods.js'
@@ -45,7 +45,7 @@ export function charge(parameters: charge.Parameters) {
     feeBumpSigner: feeBumpSignerParam,
     logger = noopLogger,
     maxFeeBumpStroops = DEFAULT_MAX_FEE_BUMP_STROOPS,
-    network = 'testnet',
+    network = STELLAR_TESTNET,
     pollDelayMs = DEFAULT_POLL_DELAY_MS,
     pollMaxAttempts = DEFAULT_POLL_MAX_ATTEMPTS,
     pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
@@ -78,7 +78,7 @@ export function charge(parameters: charge.Parameters) {
         ...request,
         amount: toBaseUnits(request.amount, decimals),
         methodDetails: {
-          network: CAIP2_NETWORK[network],
+          network,
           ...(signerKeypair ? { feePayer: true } : {}),
         },
       }

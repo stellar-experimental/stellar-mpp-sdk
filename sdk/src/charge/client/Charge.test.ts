@@ -8,7 +8,7 @@ import {
 } from '@stellar/stellar-sdk'
 import { Challenge } from 'mppx'
 import { describe, expect, it, vi } from 'vitest'
-import { CAIP2_TO_NETWORK, USDC_SAC_TESTNET } from '../../constants.js'
+import { USDC_SAC_TESTNET } from '../../constants.js'
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 const mockGetAccount = vi.fn()
@@ -241,37 +241,21 @@ describe('charge createCredential', () => {
   })
 })
 
-// ── CAIP-2 and DID-PKH ────────────────────────────────────────────────────
-
-describe('CAIP-2 network mapping', () => {
-  it('maps stellar:testnet to testnet', () => {
-    expect(CAIP2_TO_NETWORK['stellar:testnet']).toBe('testnet')
-  })
-
-  it('maps stellar:pubnet to public', () => {
-    expect(CAIP2_TO_NETWORK['stellar:pubnet']).toBe('public')
-  })
-
-  it('returns undefined for unknown CAIP-2 identifiers', () => {
-    expect(CAIP2_TO_NETWORK['stellar:unknown']).toBeUndefined()
-  })
-})
+// ── DID-PKH ─────────────────────────────────────────────────────────────
 
 describe('DID-PKH format', () => {
-  it('constructs correct DID-PKH from CAIP-2 network and public key', () => {
+  it('constructs correct DID-PKH from network and public key', () => {
     const kp = Keypair.random()
-    const caip2Network = 'stellar:testnet'
-    const caip2Component = caip2Network.split(':')[1] ?? 'testnet'
-    const source = `did:pkh:stellar:${caip2Component}:${kp.publicKey()}`
+    const network = 'stellar:testnet'
+    const source = `did:pkh:${network}:${kp.publicKey()}`
 
     expect(source).toMatch(/^did:pkh:stellar:testnet:G[A-Z0-9]{55}$/)
   })
 
   it('uses pubnet component for mainnet', () => {
     const kp = Keypair.random()
-    const caip2Network = 'stellar:pubnet'
-    const caip2Component = caip2Network.split(':')[1] ?? 'testnet'
-    const source = `did:pkh:stellar:${caip2Component}:${kp.publicKey()}`
+    const network = 'stellar:pubnet'
+    const source = `did:pkh:${network}:${kp.publicKey()}`
 
     expect(source).toMatch(/^did:pkh:stellar:pubnet:G[A-Z0-9]{55}$/)
   })

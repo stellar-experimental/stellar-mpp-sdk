@@ -42,7 +42,7 @@ const mppx = Mppx.create({
     stellar.charge({
       recipient: Env.stellarRecipient,
       currency: USDC_SAC_TESTNET,
-      network: 'testnet',
+      network: 'stellar:testnet',
       store: Store.memory(),
       logger,
     }),

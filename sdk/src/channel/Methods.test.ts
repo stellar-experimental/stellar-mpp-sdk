@@ -38,12 +38,12 @@ describe('channel method schema', () => {
       channel: 'CABC123',
       methodDetails: {
         reference: 'ref-001',
-        network: 'testnet',
+        network: 'stellar:testnet',
         cumulativeAmount: '5000000',
       },
     })
     expect(result.methodDetails?.reference).toBe('ref-001')
-    expect(result.methodDetails?.network).toBe('testnet')
+    expect(result.methodDetails?.network).toBe('stellar:testnet')
     expect(result.methodDetails?.cumulativeAmount).toBe('5000000')
   })
 

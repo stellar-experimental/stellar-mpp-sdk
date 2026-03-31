@@ -14,12 +14,12 @@ import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
 import {
   ALL_ZEROS,
-  CAIP2_TO_NETWORK,
   DEFAULT_DECIMALS,
   DEFAULT_LEDGER_CLOSE_TIME,
   DEFAULT_TIMEOUT,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
+  STELLAR_TESTNET,
   type NetworkId,
 } from '../../constants.js'
 import * as Methods from '../Methods.js'
@@ -87,8 +87,7 @@ export function charge(parameters: charge.Parameters) {
       const { request } = challenge
       const { amount, currency, recipient } = request
 
-      const caip2Network = request.methodDetails?.network ?? 'stellar:testnet'
-      const network: NetworkId = CAIP2_TO_NETWORK[caip2Network] ?? 'testnet'
+      const network: NetworkId = (request.methodDetails?.network as NetworkId) ?? STELLAR_TESTNET
 
       onProgress?.({
         type: 'challenge',
@@ -188,8 +187,7 @@ export function charge(parameters: charge.Parameters) {
         const signedXdr = prepared.toEnvelope().toXDR('base64')
         onProgress?.({ type: 'signed', transaction: signedXdr })
 
-        const didComponent = network === 'public' ? 'pubnet' : network
-        const source = `did:pkh:stellar:${didComponent}:${keypair.publicKey()}`
+        const source = `did:pkh:${network}:${keypair.publicKey()}`
 
         return Credential.serialize({
           challenge,
@@ -232,8 +230,7 @@ export function charge(parameters: charge.Parameters) {
       const signedXdr = prepared.toXDR()
       onProgress?.({ type: 'signed', transaction: signedXdr })
 
-      const didComponent = network === 'public' ? 'pubnet' : network
-      const source = `did:pkh:stellar:${didComponent}:${keypair.publicKey()}`
+      const source = `did:pkh:${network}:${keypair.publicKey()}`
 
       if (effectiveMode === 'push') {
         // Client broadcasts

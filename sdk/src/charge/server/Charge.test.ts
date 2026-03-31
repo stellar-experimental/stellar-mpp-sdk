@@ -68,7 +68,7 @@ describe('stellar server charge', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      network: 'public',
+      network: 'stellar:pubnet',
     })
     expect(method.name).toBe('stellar')
   })
@@ -137,7 +137,7 @@ describe('charge request transform', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      network: 'testnet',
+      network: 'stellar:testnet',
     })
     const transformed = (method as any).request({
       request: { amount: '1', currency: USDC_SAC_TESTNET, recipient: RECIPIENT },
@@ -149,7 +149,7 @@ describe('charge request transform', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      network: 'public',
+      network: 'stellar:pubnet',
     })
     const transformed = (method as any).request({
       request: { amount: '1', currency: USDC_SAC_TESTNET, recipient: RECIPIENT },

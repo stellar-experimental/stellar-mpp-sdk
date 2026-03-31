@@ -5,6 +5,7 @@ import {
   DEFAULT_FEE,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
+  STELLAR_TESTNET,
   type NetworkId,
 } from '../../constants.js'
 import { DEFAULT_SIMULATION_TIMEOUT_MS } from '../../shared/defaults.js'
@@ -62,7 +63,7 @@ export function channel(parameters: channel.Parameters) {
     async createCredential({ challenge, context }) {
       const { request } = challenge
       const { amount, channel: channelAddress } = request
-      const network: NetworkId = (request.methodDetails?.network as NetworkId) ?? 'testnet'
+      const network: NetworkId = (request.methodDetails?.network as NetworkId) ?? STELLAR_TESTNET
 
       // The server tells us the cumulative amount via methodDetails,
       // or the caller can override via context.
