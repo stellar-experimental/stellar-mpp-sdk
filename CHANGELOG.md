@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Nest channel server `signer` + `feeBumpSigner` into `feePayer: { envelopeSigner, feeBumpSigner? }` to match charge server convention [#34](https://github.com/stellar/stellar-mpp-sdk/pull/34)
+
 ## [0.3.0] - 2026-03-31
 
 ### Changed
