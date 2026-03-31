@@ -278,21 +278,21 @@ describe('stellar server channel', () => {
     expect(method.name).toBe('stellar')
   })
 
-  it('accepts signer for close transaction signing', () => {
+  it('accepts feePayer with envelopeSigner', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
-      signer: Keypair.random(),
+      feePayer: { envelopeSigner: Keypair.random() },
       store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
   })
 
-  it('accepts feeBumpSigner for channel transactions', () => {
+  it('accepts feePayer with envelopeSigner and feeBumpSigner', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
-      feeBumpSigner: Keypair.random(),
+      feePayer: { envelopeSigner: Keypair.random(), feeBumpSigner: Keypair.random() },
       store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
@@ -566,7 +566,7 @@ describe('stellar server channel verification', () => {
         credential: credential as any,
         request: credential.challenge.request,
       }),
-    ).rejects.toThrow('Close action requires a signer')
+    ).rejects.toThrow('Close action requires a feePayer')
   })
 })
 
@@ -972,7 +972,7 @@ describe('close()', () => {
       channel: CHANNEL_ADDRESS,
       amount: 5000000n,
       signature,
-      signer,
+      feePayer: { envelopeSigner: signer },
       network: 'stellar:testnet',
     })
 
@@ -993,7 +993,7 @@ describe('close()', () => {
         channel: CHANNEL_ADDRESS,
         amount: 5000000n,
         signature,
-        signer,
+        feePayer: { envelopeSigner: signer },
         network: 'stellar:testnet',
       }),
     ).rejects.toThrow('sendTransaction returned ERROR')
@@ -1012,7 +1012,7 @@ describe('close()', () => {
         channel: CHANNEL_ADDRESS,
         amount: 5000000n,
         signature,
-        signer,
+        feePayer: { envelopeSigner: signer },
         network: 'stellar:testnet',
       }),
     ).rejects.toThrow('sendTransaction returned DUPLICATE')
@@ -1032,7 +1032,7 @@ describe('close()', () => {
         channel: CHANNEL_ADDRESS,
         amount: 5000000n,
         signature,
-        signer,
+        feePayer: { envelopeSigner: signer },
         network: 'stellar:testnet',
       }),
     ).rejects.toThrow(/failed/i)

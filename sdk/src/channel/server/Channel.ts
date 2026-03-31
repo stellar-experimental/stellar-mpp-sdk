@@ -68,7 +68,7 @@ export function channel(parameters: channel.Parameters) {
     checkOnChainState = false,
     commitmentKey: commitmentKeyParam,
     decimals = DEFAULT_DECIMALS,
-    feeBumpSigner: feeBumpSignerParam,
+    feePayer,
     maxFeeBumpStroops = DEFAULT_MAX_FEE_BUMP_STROOPS,
     network = STELLAR_TESTNET,
     onDisputeDetected,
@@ -77,7 +77,6 @@ export function channel(parameters: channel.Parameters) {
     pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
     rpcUrl,
     simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
-    signer: signerParam,
     sourceAccount,
     store,
     logger = noopLogger,
@@ -95,8 +94,10 @@ export function channel(parameters: channel.Parameters) {
     return commitmentKeyParam
   })()
 
-  const signerKeypair = signerParam ? resolveKeypair(signerParam) : undefined
-  const feeBumpKeypair = feeBumpSignerParam ? resolveKeypair(feeBumpSignerParam) : undefined
+  const signerKeypair = feePayer ? resolveKeypair(feePayer.envelopeSigner) : undefined
+  const feeBumpKeypair = feePayer?.feeBumpSigner
+    ? resolveKeypair(feePayer.feeBumpSigner)
+    : undefined
 
   // Track cumulative amounts per channel in the store
   const cumulativeKey = `${STORE_PREFIX}:cumulative:${channelAddress}`
@@ -402,7 +403,7 @@ export function channel(parameters: channel.Parameters) {
     if (action === 'close') {
       if (!signerKeypair) {
         throw new ChannelVerificationError(
-          `${LOG_PREFIX} Close action requires a signer to be configured.`,
+          `${LOG_PREFIX} Close action requires a feePayer to be configured.`,
           {},
         )
       }
@@ -701,10 +702,15 @@ export async function close(parameters: {
   amount: bigint
   /** Ed25519 signature for the commitment. */
   signature: Uint8Array
-  /** Keypair to sign the close transaction (source account). */
-  signer: Keypair
-  /** Optional fee bump signer. */
-  feeBumpSigner?: Keypair
+  /**
+   * Fee payer configuration for the close transaction.
+   * `envelopeSigner` provides the source account and signs the envelope.
+   * `feeBumpSigner` optionally wraps the tx in a FeeBumpTransaction.
+   */
+  feePayer: {
+    envelopeSigner: Keypair
+    feeBumpSigner?: Keypair
+  }
   /** Network identifier. */
   network?: NetworkId
   /** Custom RPC URL. */
@@ -724,8 +730,7 @@ export async function close(parameters: {
     channel: channelAddress,
     amount,
     signature,
-    signer,
-    feeBumpSigner,
+    feePayer,
     network = STELLAR_TESTNET,
     rpcUrl,
     maxFeeBumpStroops = DEFAULT_MAX_FEE_BUMP_STROOPS,
@@ -746,6 +751,7 @@ export async function close(parameters: {
     nativeToScVal(Buffer.from(signature), { type: 'bytes' }),
   )
 
+  const signer = feePayer.envelopeSigner
   const account = await server.getAccount(signer.publicKey())
   const tx = new TransactionBuilder(account, {
     fee: DEFAULT_FEE,
@@ -759,8 +765,8 @@ export async function close(parameters: {
   prepared.sign(signer)
 
   let txToSubmit: Transaction | FeeBumpTransaction = prepared
-  if (feeBumpSigner) {
-    txToSubmit = wrapFeeBump(prepared, feeBumpSigner, {
+  if (feePayer.feeBumpSigner) {
+    txToSubmit = wrapFeeBump(prepared, feePayer.feeBumpSigner, {
       networkPassphrase,
       maxFeeStroops: maxFeeBumpStroops,
     })
@@ -811,13 +817,17 @@ export declare namespace channel {
      */
     checkOnChainState?: boolean
     /**
-     * Keypair for signing close transactions (provides sequence number).
+     * Fee payer configuration for on-chain channel operations (close, open).
+     *
+     * `envelopeSigner` provides the source account and signs the envelope.
+     * `feeBumpSigner` optionally wraps the transaction in a FeeBumpTransaction.
+     *
      * Required when handling close credential actions.
-     * Accepts a Stellar secret key string (S...) or a Keypair instance.
      */
-    signer?: Keypair | string
-    /** Optional fee bump signer for close/open transactions. */
-    feeBumpSigner?: Keypair | string
+    feePayer?: {
+      envelopeSigner: Keypair | string
+      feeBumpSigner?: Keypair | string
+    }
     /**
      * Ed25519 public key for verifying commitment signatures.
      * Accepts a Stellar public key string (G...) or a Keypair instance.
