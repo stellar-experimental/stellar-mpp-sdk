@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fix CHANGELOG entries for v0.3.0 ([#36](https://github.com/stellar/stellar-mpp-sdk/pull/36))
+
 ## [0.3.0] - 2026-03-31
 
 ### Added
