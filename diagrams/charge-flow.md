@@ -38,9 +38,9 @@ sequenceDiagram
         RPC-->>SC: Verify transfer events match challenge
         SC->>SC: feePayerKeypair.sign(rebuiltTx)
         opt feeBumpSigner configured
-            SC->>SC: Wrap in FeeBumpTransaction
+            SC->>SC: Wrap in FeeBumpTransaction (submissionTx)
         end
-        SC->>RPC: sendTransaction(rebuiltTx)
+        SC->>RPC: sendTransaction(submissionTx)
         RPC->>Chain: Broadcast
         SC->>RPC: Poll getTransaction(hash)
         RPC-->>SC: TX confirmed
