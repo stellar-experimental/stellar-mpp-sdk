@@ -34,7 +34,12 @@ sequenceDiagram
         SC->>RPC: getAccount(feePayerKey)
         RPC-->>SC: Server account with current sequence
         SC->>SC: Rebuild TX with feePayer as source<br/>copy XDR ops + sorobanData + memo/timebounds
+        SC->>RPC: simulateTransaction(rebuiltTx)
+        RPC-->>SC: Verify transfer events match challenge
         SC->>SC: feePayerKeypair.sign(rebuiltTx)
+        opt feeBumpSigner configured
+            SC->>SC: Wrap in FeeBumpTransaction
+        end
         SC->>RPC: sendTransaction(rebuiltTx)
         RPC->>Chain: Broadcast
         SC->>RPC: Poll getTransaction(hash)
@@ -47,10 +52,9 @@ sequenceDiagram
         CC-->>App: Credential {type:'transaction', transaction: xdr}
         App->>SC: Credential with fully-signed XDR
         SC->>SC: verifySacInvocation(tx) — validate structure
-        opt feePayer configured but source is not all-zeros
-            SC->>SC: Wrap in FeeBump transaction (compatibility fallback)
-        end
-        SC->>RPC: sendTransaction(signedTx)
+        SC->>RPC: simulateTransaction(signedTx)
+        RPC-->>SC: Verify transfer events match challenge
+        SC->>RPC: sendTransaction(signedTx as-is)
         RPC->>Chain: Broadcast
         SC->>RPC: Poll getTransaction(hash)
         RPC-->>SC: TX confirmed
@@ -63,7 +67,7 @@ sequenceDiagram
         RPC->>Chain: Broadcast
         CC->>RPC: Poll getTransaction(hash)
         RPC-->>CC: TX confirmed
-        CC-->>App: Credential {type:'signature', hash}
+        CC-->>App: Credential {type:'hash', hash}
         App->>SC: Credential with tx hash
         SC->>RPC: getTransaction(hash)
         RPC-->>SC: TX result
