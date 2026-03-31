@@ -7,13 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Nest channel server `signer` + `feeBumpSigner` into `feePayer: { envelopeSigner, feeBumpSigner? }` to match charge server convention [#34](https://github.com/stellar/stellar-mpp-sdk/pull/34)
-
 ## [0.3.0] - 2026-03-31
+
+### Added
+
+- Add [draft-stellar-charge-00](https://paymentauth.org/draft-stellar-charge-00) spec references to README, JSDoc, and charge-flow diagram; fix diagram for spec compliance [#35](https://github.com/stellar/stellar-mpp-sdk/pull/35)
 
 ### Changed
 
 - Align fee-bump transaction handling with the spec and restructure server signer configuration (`feePayer`) to match cross-chain conventions [#33](https://github.com/stellar/stellar-mpp-sdk/pull/33)
+- Nest channel server `signer` + `feeBumpSigner` into `feePayer: { envelopeSigner, feeBumpSigner? }` to match charge server convention [#34](https://github.com/stellar/stellar-mpp-sdk/pull/34)
 
 ## [0.2.1] - 2026-03-30
 
