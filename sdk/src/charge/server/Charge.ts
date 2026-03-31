@@ -42,7 +42,7 @@ export function charge(parameters: charge.Parameters) {
   const {
     currency,
     decimals = DEFAULT_DECIMALS,
-    feeBumpSigner: feeBumpSignerParam,
+    feePayer,
     logger = noopLogger,
     maxFeeBumpStroops = DEFAULT_MAX_FEE_BUMP_STROOPS,
     network = STELLAR_TESTNET,
@@ -52,7 +52,6 @@ export function charge(parameters: charge.Parameters) {
     recipient,
     rpcUrl,
     simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
-    signer: signerParam,
     store,
   } = parameters
 
@@ -60,9 +59,10 @@ export function charge(parameters: charge.Parameters) {
   const networkPassphrase = NETWORK_PASSPHRASE[network]
   const server = new rpc.Server(resolvedRpcUrl)
 
-  const signerKeypair = signerParam ? resolveKeypair(signerParam) : undefined
-
-  const feeBumpKeypair = feeBumpSignerParam ? resolveKeypair(feeBumpSignerParam) : undefined
+  const signerKeypair = feePayer ? resolveKeypair(feePayer.envelopeSigner) : undefined
+  const feeBumpKeypair = feePayer?.feeBumpSigner
+    ? resolveKeypair(feePayer.feeBumpSigner)
+    : undefined
 
   // Serialize verify operations to prevent concurrent race conditions
   // on tx hash deduplication (get/put is not atomic).
@@ -199,10 +199,10 @@ export function charge(parameters: charge.Parameters) {
 
         if (!signerKeypair && tx.source === ALL_ZEROS) {
           logger.warn(`${LOG_PREFIX} Verification failed`, {
-            error: 'Sponsored source without signer',
+            error: 'Sponsored source without feePayer',
           })
           throw new PaymentVerificationError(
-            `${LOG_PREFIX} Transaction uses a sponsored source account but the server is not configured with a signer.`,
+            `${LOG_PREFIX} Transaction uses a sponsored source account but the server has no feePayer configuration.`,
             {},
           )
         }
@@ -246,6 +246,16 @@ export function charge(parameters: charge.Parameters) {
 
           rebuiltTx.sign(signerKeypair)
           txToSubmit = rebuiltTx
+
+          // Fee bump wrapping (sponsored path only — spec requires
+          // unsponsored transactions to be submitted without modification)
+          if (feeBumpKeypair) {
+            logger.debug(`${LOG_PREFIX} Fee bump wrapping`)
+            txToSubmit = wrapFeeBump(txToSubmit, feeBumpKeypair, {
+              networkPassphrase,
+              maxFeeStroops: maxFeeBumpStroops,
+            })
+          }
         } else {
           // ── Unsponsored path ────────────────────────────────────────
 
@@ -269,15 +279,6 @@ export function charge(parameters: charge.Parameters) {
             expectedRecipient,
             signerKeypair?.publicKey(),
           )
-        }
-
-        // ── Fee bump wrapping ───────────────────────────────────────
-        if (feeBumpKeypair) {
-          logger.debug(`${LOG_PREFIX} Fee bump wrapping`)
-          txToSubmit = wrapFeeBump(txToSubmit, feeBumpKeypair, {
-            networkPassphrase,
-            maxFeeStroops: maxFeeBumpStroops,
-          })
         }
 
         // ── Settlement ──────────────────────────────────────────────
@@ -672,8 +673,20 @@ export declare namespace charge {
     decimals?: number
     network?: NetworkId
     rpcUrl?: string
-    signer?: Keypair | string
-    feeBumpSigner?: Keypair | string
+    /**
+     * Server-sponsored fee configuration.
+     *
+     * When set, the challenge includes `methodDetails.feePayer: true` which
+     * tells the client to use pull mode with an all-zeros placeholder source.
+     * The server rebuilds the transaction with its own account and signs the
+     * envelope.
+     */
+    feePayer?: {
+      /** Keypair providing the source account and envelope signature. */
+      envelopeSigner: Keypair | string
+      /** Optional fee bump signer — wraps the sponsored tx in a FeeBumpTransaction. */
+      feeBumpSigner?: Keypair | string
+    }
     store?: Store.Store
     maxFeeBumpStroops?: number
     pollMaxAttempts?: number
