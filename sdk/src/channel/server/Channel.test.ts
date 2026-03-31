@@ -10,6 +10,7 @@ const mockSendTransaction = vi.fn()
 const mockGetTransaction = vi.fn()
 const mockPrepareTransaction = vi.fn()
 const mockFromXDR = vi.fn()
+const mockWrapFeeBump = vi.fn()
 
 vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@stellar/stellar-sdk')>()
@@ -40,6 +41,10 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
 
 vi.mock('./State.js', () => ({
   getChannelState: (...args: unknown[]) => mockGetChannelState(...args),
+}))
+
+vi.mock('../../shared/fee-bump.js', () => ({
+  wrapFeeBump: (...args: unknown[]) => mockWrapFeeBump(...args),
 }))
 
 // Re-import after mock is set up
@@ -1036,5 +1041,54 @@ describe('close()', () => {
         network: 'stellar:testnet',
       }),
     ).rejects.toThrow(/failed/i)
+  })
+
+  it('wraps in FeeBumpTransaction when feeBumpSigner is provided', async () => {
+    const signer = Keypair.random()
+    const feeBumpSigner = Keypair.random()
+    const signature = new Uint8Array(64).fill(5)
+    const fakeBumpTx = { isBumped: true }
+
+    mockGetAccount.mockResolvedValueOnce(new Account(signer.publicKey(), '104'))
+    mockPrepareTransaction.mockImplementationOnce((tx: any) => tx)
+    mockWrapFeeBump.mockReturnValueOnce(fakeBumpTx)
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'bump-hash', status: 'PENDING' })
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
+
+    const hash = await closeFn({
+      channel: CHANNEL_ADDRESS,
+      amount: 5000000n,
+      signature,
+      feePayer: { envelopeSigner: signer, feeBumpSigner },
+      network: 'stellar:testnet',
+    })
+
+    expect(hash).toBe('bump-hash')
+    expect(mockWrapFeeBump).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ publicKey: feeBumpSigner.publicKey }),
+      expect.objectContaining({ networkPassphrase: expect.any(String) }),
+    )
+    expect(mockSendTransaction).toHaveBeenCalledWith(fakeBumpTx)
+  })
+
+  it('accepts secret key strings for envelopeSigner and feeBumpSigner', async () => {
+    const signer = Keypair.random()
+    const signature = new Uint8Array(64).fill(6)
+
+    mockGetAccount.mockResolvedValueOnce(new Account(signer.publicKey(), '105'))
+    mockPrepareTransaction.mockImplementationOnce((tx: any) => tx)
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'str-hash', status: 'PENDING' })
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
+
+    const hash = await closeFn({
+      channel: CHANNEL_ADDRESS,
+      amount: 5000000n,
+      signature,
+      feePayer: { envelopeSigner: signer.secret() },
+      network: 'stellar:testnet',
+    })
+
+    expect(hash).toBe('str-hash')
   })
 })
