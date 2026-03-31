@@ -229,7 +229,7 @@ const data = await response.json()
 stellar.charge({
   recipient: string,              // Stellar public key (G...) or contract (C...)
   currency: string,               // SAC contract address
-  network?: 'testnet' | 'public', // default: 'testnet'
+  network?: 'stellar:testnet' | 'stellar:pubnet', // default: 'stellar:testnet'
   decimals?: number,              // default: 7
   rpcUrl?: string,                // custom Soroban RPC URL
   feePayer?: {                     // server-sponsored fee configuration
@@ -270,7 +270,7 @@ stellar.charge({
 stellar.channel({
   channel: string,                // on-chain channel contract address (C...)
   commitmentKey: string | Keypair,// ed25519 public key for verifying commitments
-  network?: 'testnet' | 'public', // default: 'testnet'
+  network?: 'stellar:testnet' | 'stellar:pubnet', // default: 'stellar:testnet'
   decimals?: number,              // default: 7
   rpcUrl?: string,                // custom Soroban RPC URL
   sourceAccount?: string,         // funded G... address for simulations

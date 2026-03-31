@@ -291,3 +291,35 @@ describe('channel createCredential open action', () => {
     expect(decoded.payload.amount).toBe('5000000')
   })
 })
+
+describe('network validation', () => {
+  it('throws on unsupported network identifier', async () => {
+    const method = channel({ commitmentKey: TEST_KEYPAIR })
+    const challenge = mockChallenge({
+      methodDetails: {
+        reference: crypto.randomUUID(),
+        network: 'stellar:futurenet',
+        cumulativeAmount: '0',
+      },
+    })
+
+    await expect(
+      method.createCredential({ challenge: challenge as any, context: {} as any }),
+    ).rejects.toThrow('Unsupported Stellar network identifier: "stellar:futurenet"')
+  })
+
+  it('throws on old-style network shorthand', async () => {
+    const method = channel({ commitmentKey: TEST_KEYPAIR })
+    const challenge = mockChallenge({
+      methodDetails: {
+        reference: crypto.randomUUID(),
+        network: 'testnet',
+        cumulativeAmount: '0',
+      },
+    })
+
+    await expect(
+      method.createCredential({ challenge: challenge as any, context: {} as any }),
+    ).rejects.toThrow('Unsupported Stellar network identifier: "testnet"')
+  })
+})

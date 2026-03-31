@@ -260,3 +260,27 @@ describe('DID-PKH format', () => {
     expect(source).toMatch(/^did:pkh:stellar:pubnet:G[A-Z0-9]{55}$/)
   })
 })
+
+describe('network validation', () => {
+  it('throws on unsupported network identifier', async () => {
+    const method = charge({ keypair: TEST_KEYPAIR })
+    const challenge = mockChallenge({
+      methodDetails: { network: 'stellar:futurenet' },
+    })
+
+    await expect(
+      method.createCredential({ challenge: challenge as any, context: {} as any }),
+    ).rejects.toThrow('Unsupported Stellar network identifier: "stellar:futurenet"')
+  })
+
+  it('throws on old-style network shorthand', async () => {
+    const method = charge({ keypair: TEST_KEYPAIR })
+    const challenge = mockChallenge({
+      methodDetails: { network: 'testnet' },
+    })
+
+    await expect(
+      method.createCredential({ challenge: challenge as any, context: {} as any }),
+    ).rejects.toThrow('Unsupported Stellar network identifier: "testnet"')
+  })
+})

@@ -19,13 +19,12 @@ import {
   DEFAULT_TIMEOUT,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
-  STELLAR_TESTNET,
-  type NetworkId,
 } from '../../constants.js'
 import * as Methods from '../Methods.js'
 import { fromBaseUnits } from '../Methods.js'
 import { StellarMppError } from '../../shared/errors.js'
 import { resolveKeypair } from '../../shared/keypairs.js'
+import { resolveNetworkId } from '../../shared/validation.js'
 import { pollTransaction } from '../../shared/poll.js'
 import {
   DEFAULT_POLL_MAX_ATTEMPTS,
@@ -87,7 +86,7 @@ export function charge(parameters: charge.Parameters) {
       const { request } = challenge
       const { amount, currency, recipient } = request
 
-      const network: NetworkId = (request.methodDetails?.network as NetworkId) ?? STELLAR_TESTNET
+      const network = resolveNetworkId(request.methodDetails?.network)
 
       onProgress?.({
         type: 'challenge',
