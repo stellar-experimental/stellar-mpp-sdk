@@ -6,6 +6,15 @@ export interface FeeBumpOptions {
   maxFeeStroops?: number
 }
 
+/**
+ * Wraps a transaction in a `FeeBumpTransaction`.
+ *
+ * The inner transaction's source account and signatures remain intact — the
+ * outer fee bump only overrides who pays the network fee at the protocol
+ * level.
+ *
+ * Already-wrapped `FeeBumpTransaction` instances are returned unchanged.
+ */
 export function wrapFeeBump(
   tx: Transaction | FeeBumpTransaction,
   signer: Keypair,

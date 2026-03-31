@@ -18,7 +18,7 @@ function mockChallenge(overrides: Record<string, unknown> = {}) {
       channel: CHANNEL_ADDRESS,
       methodDetails: {
         reference: crypto.randomUUID(),
-        network: 'testnet',
+        network: 'stellar:testnet',
         cumulativeAmount: '0',
       },
       ...overrides,

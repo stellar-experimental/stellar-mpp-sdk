@@ -30,7 +30,7 @@ const CHANNEL_CONTRACT = parseContractAddress('CHANNEL_CONTRACT')
 const COMMITMENT_SECRET = parseHexKey('COMMITMENT_SECRET')
 const CLOSE_SECRET = parseStellarSecretKey('CLOSE_SECRET')
 const AMOUNT = BigInt(parseOptional('AMOUNT', '2000000')!)
-const NETWORK = 'testnet' as const
+const NETWORK = 'stellar:testnet' as const
 
 const commitmentKey = Keypair.fromRawEd25519Seed(Buffer.from(COMMITMENT_SECRET, 'hex'))
 const closeKey = Keypair.fromSecret(CLOSE_SECRET)

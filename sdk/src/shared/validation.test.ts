@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateHexSignature, validateAmount } from './validation.js'
+import { validateHexSignature, validateAmount, resolveNetworkId } from './validation.js'
 
 describe('validateHexSignature', () => {
   it('accepts valid 128-char hex signature', () => {
@@ -21,6 +21,39 @@ describe('validateHexSignature', () => {
 
   it('accepts custom expected length', () => {
     expect(() => validateHexSignature('abcd1234', 8)).not.toThrow()
+  })
+})
+
+describe('resolveNetworkId', () => {
+  it('returns stellar:testnet when network is null', () => {
+    expect(resolveNetworkId(null)).toBe('stellar:testnet')
+  })
+
+  it('returns stellar:testnet when network is undefined', () => {
+    expect(resolveNetworkId(undefined)).toBe('stellar:testnet')
+  })
+
+  it('accepts stellar:testnet', () => {
+    expect(resolveNetworkId('stellar:testnet')).toBe('stellar:testnet')
+  })
+
+  it('accepts stellar:pubnet', () => {
+    expect(resolveNetworkId('stellar:pubnet')).toBe('stellar:pubnet')
+  })
+
+  it('throws on unsupported network with list of supported networks', () => {
+    expect(() => resolveNetworkId('stellar:futurenet')).toThrow(
+      'Unsupported Stellar network identifier: "stellar:futurenet". Supported networks: stellar:pubnet, stellar:testnet',
+    )
+  })
+
+  it('throws on old-style network identifiers', () => {
+    expect(() => resolveNetworkId('testnet')).toThrow('Unsupported Stellar network identifier')
+    expect(() => resolveNetworkId('public')).toThrow('Unsupported Stellar network identifier')
+  })
+
+  it('throws on non-string values', () => {
+    expect(() => resolveNetworkId(42)).toThrow('Unsupported Stellar network identifier')
   })
 })
 

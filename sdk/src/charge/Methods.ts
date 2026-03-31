@@ -42,7 +42,21 @@ export const charge = Method.from({
         z.object({
           /** CAIP-2 network identifier (e.g. "stellar:testnet", "stellar:pubnet"). */
           network: z.string(),
-          /** Whether the server will sponsor transaction fees. */
+          /**
+           * Whether the server sponsors the transaction.
+           *
+           * When `true`, the server provides the source account, sequence
+           * number, and envelope signature. The client **must** use pull mode
+           * (push is rejected) and build with an all-zeros placeholder source,
+           * signing only the Soroban authorization entries.
+           *
+           * This flag is set automatically by the server when a `feePayer`
+           * configuration is provided. The optional `feeBumpSigner` within
+           * `feePayer` wraps the sponsored transaction in a
+           * `FeeBumpTransaction` — it only applies to the sponsored path
+           * since unsponsored transactions must be submitted as-is per the
+           * spec.
+           */
           feePayer: z.optional(z.boolean()),
         }),
       ),

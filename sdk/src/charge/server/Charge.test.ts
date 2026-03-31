@@ -68,7 +68,7 @@ describe('stellar server charge', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      network: 'public',
+      network: 'stellar:pubnet',
     })
     expect(method.name).toBe('stellar')
   })
@@ -82,38 +82,38 @@ describe('stellar server charge', () => {
     expect(method.name).toBe('stellar')
   })
 
-  it('accepts signer as Keypair', () => {
+  it('accepts feePayer with envelopeSigner as Keypair', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      signer: Keypair.random(),
+      feePayer: { envelopeSigner: Keypair.random() },
     })
     expect(method.name).toBe('stellar')
   })
 
-  it('accepts signer as secret key string', () => {
+  it('accepts feePayer with envelopeSigner as secret key string', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      signer: Keypair.random().secret(),
+      feePayer: { envelopeSigner: Keypair.random().secret() },
     })
     expect(method.name).toBe('stellar')
   })
 
-  it('accepts feeBumpSigner as Keypair', () => {
+  it('accepts feePayer with feeBumpSigner as Keypair', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      feeBumpSigner: Keypair.random(),
+      feePayer: { envelopeSigner: Keypair.random(), feeBumpSigner: Keypair.random() },
     })
     expect(method.name).toBe('stellar')
   })
 
-  it('accepts feeBumpSigner as secret key string', () => {
+  it('accepts feePayer with feeBumpSigner as secret key string', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      feeBumpSigner: Keypair.random().secret(),
+      feePayer: { envelopeSigner: Keypair.random(), feeBumpSigner: Keypair.random().secret() },
     })
     expect(method.name).toBe('stellar')
   })
@@ -137,7 +137,7 @@ describe('charge request transform', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      network: 'testnet',
+      network: 'stellar:testnet',
     })
     const transformed = (method as any).request({
       request: { amount: '1', currency: USDC_SAC_TESTNET, recipient: RECIPIENT },
@@ -149,7 +149,7 @@ describe('charge request transform', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      network: 'public',
+      network: 'stellar:pubnet',
     })
     const transformed = (method as any).request({
       request: { amount: '1', currency: USDC_SAC_TESTNET, recipient: RECIPIENT },
@@ -157,11 +157,11 @@ describe('charge request transform', () => {
     expect(transformed.methodDetails.network).toBe('stellar:pubnet')
   })
 
-  it('includes feePayer when signer is configured', () => {
+  it('includes feePayer when feePayer is configured', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      signer: Keypair.random(),
+      feePayer: { envelopeSigner: Keypair.random() },
     })
     const transformed = (method as any).request({
       request: { amount: '1', currency: USDC_SAC_TESTNET, recipient: RECIPIENT },
@@ -169,7 +169,7 @@ describe('charge request transform', () => {
     expect(transformed.methodDetails.feePayer).toBe(true)
   })
 
-  it('omits feePayer when no signer configured', () => {
+  it('omits feePayer when no feePayer configured', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
@@ -243,7 +243,7 @@ describe('charge hash+feePayer rejection', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      signer: Keypair.random(),
+      feePayer: { envelopeSigner: Keypair.random() },
     })
 
     await expect(
@@ -423,7 +423,7 @@ describe('charge transaction verification', () => {
     ).rejects.toThrow('matching SAC transfer invocation')
   })
 
-  it('rejects sponsored source without signer configured', async () => {
+  it('rejects sponsored source without feePayer configured', async () => {
     const tx = buildTransferTx({
       source: ALL_ZEROS,
       from: PAYER.publicKey(),
@@ -433,12 +433,12 @@ describe('charge transaction verification', () => {
     })
 
     const cred = makeTransactionCredential(tx.toXDR())
-    // No signer configured
+    // No feePayer configured
     const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
-    ).rejects.toThrow('sponsored source account but the server is not configured with a signer')
+    ).rejects.toThrow('sponsored source account but the server has no feePayer configuration')
   })
 
   it('rejects unsupported credential type', async () => {

@@ -1,5 +1,5 @@
 import { rpc, xdr } from '@stellar/stellar-sdk'
-import { SOROBAN_RPC_URLS, type NetworkId } from '../../constants.js'
+import { SOROBAN_RPC_URLS, STELLAR_TESTNET, type NetworkId } from '../../constants.js'
 import { scValToBigInt } from '../../shared/scval.js'
 
 // ---------------------------------------------------------------------------
@@ -43,7 +43,7 @@ const KNOWN_TOPICS = new Set(['close', 'close_start', 'refund', 'top_up'])
 export function watchChannel(parameters: watchChannel.Parameters): () => void {
   const {
     channel,
-    network = 'testnet',
+    network = STELLAR_TESTNET,
     rpcUrl,
     intervalMs = 5_000,
     onEvent,
@@ -191,7 +191,7 @@ export declare namespace watchChannel {
   interface Parameters {
     /** Channel contract address (C...). */
     channel: string
-    /** Network identifier. Defaults to 'testnet'. */
+    /** Network identifier. Defaults to 'stellar:testnet'. */
     network?: NetworkId
     /** Custom Soroban RPC URL. */
     rpcUrl?: string

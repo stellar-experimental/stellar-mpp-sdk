@@ -229,11 +229,13 @@ const data = await response.json()
 stellar.charge({
   recipient: string,              // Stellar public key (G...) or contract (C...)
   currency: string,               // SAC contract address
-  network?: 'testnet' | 'public', // default: 'testnet'
+  network?: 'stellar:testnet' | 'stellar:pubnet', // default: 'stellar:testnet'
   decimals?: number,              // default: 7
   rpcUrl?: string,                // custom Soroban RPC URL
-  signer?: Keypair | string,      // source account for sponsored tx signing
-  feeBumpSigner?: Keypair | string, // wraps all txs in FeeBumpTransaction
+  feePayer?: {                     // server-sponsored fee configuration
+    envelopeSigner: Keypair | string,   // source account + envelope signer
+    feeBumpSigner?: Keypair | string,   // wraps sponsored tx in FeeBumpTransaction
+  },
   store?: Store.Store,            // replay protection
   maxFeeBumpStroops?: number,     // max fee bump in stroops (default: 10,000,000)
   pollMaxAttempts?: number,       // max polling attempts (default: 30)
@@ -268,7 +270,7 @@ stellar.charge({
 stellar.channel({
   channel: string,                // on-chain channel contract address (C...)
   commitmentKey: string | Keypair,// ed25519 public key for verifying commitments
-  network?: 'testnet' | 'public', // default: 'testnet'
+  network?: 'stellar:testnet' | 'stellar:pubnet', // default: 'stellar:testnet'
   decimals?: number,              // default: 7
   rpcUrl?: string,                // custom Soroban RPC URL
   sourceAccount?: string,         // funded G... address for simulations
@@ -322,25 +324,53 @@ The `onProgress` callback receives events at each stage:
 | `signing`   | ---                                     | Before signing commitment |
 | `signed`    | `cumulativeAmount`                      | Commitment signed         |
 
-### Fee sponsorship
+### Fee sponsorship and fee bumping
 
-The server can decouple sequence-number management from fee payment:
+The `feePayer` option controls server-sponsored fees per the [Stellar Charge spec](https://paymentauth.org/draft-stellar-charge-00). It groups two keypairs that operate at different stages of the sponsored transaction lifecycle:
 
-- **`signer`** --- keypair providing the source account and sequence number for sponsored transactions.
-- **`feeBumpSigner`** --- optional dedicated fee payer. When set, all submitted transactions are wrapped in a `FeeBumpTransaction` signed by this key.
+#### `feePayer.envelopeSigner` — transaction sponsor
+
+Provides the source account, sequence number, and envelope signature for sponsored transactions. The challenge includes `methodDetails.feePayer: true`, which tells the client:
+
+- **Pull mode is required** — the client must send signed XDR for the server to broadcast (push mode is rejected).
+- The client builds the transaction with an **all-zeros placeholder source** and signs only the Soroban authorization entries (not the envelope). The server rebuilds the transaction with its own account and signs the envelope.
+
+Without `feePayer`, both push and pull modes are available and the client builds and signs the full transaction. Per the spec, unsponsored transactions are submitted as-is — the server MUST NOT modify them.
+
+#### `feePayer.feeBumpSigner` — fee bump wrapper (sponsored path only)
+
+When set, the server wraps the **sponsored** transaction in a [`FeeBumpTransaction`](https://developers.stellar.org/docs/learn/glossary#fee-bump-transaction) before broadcasting. This is a post-verification step that applies after the server rebuilds and signs the transaction.
+
+`feeBumpSigner` is nested inside `feePayer` because it only applies to the sponsored path. The spec requires unsponsored transactions to be submitted without modification, so fee bumping an unsponsored transaction would violate the spec.
 
 ```ts
 import { stellar } from '@stellar/mpp/charge/server'
 
+// Sponsored with fee bumping
 stellar.charge({
   recipient: 'G...',
   currency: USDC_SAC_TESTNET,
-  signer: Keypair.fromSecret('S...'), // source account
-  feeBumpSigner: Keypair.fromSecret('S...'), // pays all fees
+  feePayer: {
+    envelopeSigner: Keypair.fromSecret('S...'), // source account + envelope sig
+    feeBumpSigner: Keypair.fromSecret('S...'), // wraps in FeeBumpTransaction
+  },
+})
+
+// Sponsored without fee bumping
+stellar.charge({
+  recipient: 'G...',
+  currency: USDC_SAC_TESTNET,
+  feePayer: {
+    envelopeSigner: Keypair.fromSecret('S...'),
+  },
+})
+
+// Unsponsored (no feePayer — both push and pull available)
+stellar.charge({
+  recipient: 'G...',
+  currency: USDC_SAC_TESTNET,
 })
 ```
-
-The client is automatically informed of fee sponsorship via `methodDetails.feePayer` in the challenge.
 
 ### Replay protection
 

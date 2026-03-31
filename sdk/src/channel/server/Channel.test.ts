@@ -77,7 +77,7 @@ function makeCredential(opts: {
       channel: CHANNEL_ADDRESS,
       methodDetails: {
         reference: crypto.randomUUID(),
-        network: 'testnet',
+        network: 'stellar:testnet',
         cumulativeAmount: opts.cumulativeAmount ?? '0',
       },
     },
@@ -112,7 +112,7 @@ function makeSignedCredential(opts: {
       channel: CHANNEL_ADDRESS,
       methodDetails: {
         reference: crypto.randomUUID(),
-        network: 'testnet',
+        network: 'stellar:testnet',
         cumulativeAmount: opts.previousCumulative ?? '0',
       },
     },
@@ -156,7 +156,7 @@ function makeOpenCredential(opts: {
       channel: CHANNEL_ADDRESS,
       methodDetails: {
         reference: crypto.randomUUID(),
-        network: 'testnet',
+        network: 'stellar:testnet',
         cumulativeAmount: '0',
       },
     },
@@ -191,7 +191,7 @@ function makeSignedOpenCredential(opts: {
       channel: CHANNEL_ADDRESS,
       methodDetails: {
         reference: crypto.randomUUID(),
-        network: 'testnet',
+        network: 'stellar:testnet',
         cumulativeAmount: '0',
       },
     },
@@ -238,7 +238,7 @@ describe('stellar server channel', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
-      network: 'public',
+      network: 'stellar:pubnet',
     })
     expect(method.name).toBe('stellar')
   })
@@ -973,7 +973,7 @@ describe('close()', () => {
       amount: 5000000n,
       signature,
       signer,
-      network: 'testnet',
+      network: 'stellar:testnet',
     })
 
     expect(hash).toBe('close-tx-hash')
@@ -994,7 +994,7 @@ describe('close()', () => {
         amount: 5000000n,
         signature,
         signer,
-        network: 'testnet',
+        network: 'stellar:testnet',
       }),
     ).rejects.toThrow('sendTransaction returned ERROR')
   })
@@ -1013,7 +1013,7 @@ describe('close()', () => {
         amount: 5000000n,
         signature,
         signer,
-        network: 'testnet',
+        network: 'stellar:testnet',
       }),
     ).rejects.toThrow('sendTransaction returned DUPLICATE')
   })
@@ -1033,7 +1033,7 @@ describe('close()', () => {
         amount: 5000000n,
         signature,
         signer,
-        network: 'testnet',
+        network: 'stellar:testnet',
       }),
     ).rejects.toThrow(/failed/i)
   })

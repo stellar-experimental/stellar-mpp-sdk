@@ -3,6 +3,7 @@ import {
   DEFAULT_FEE,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
+  STELLAR_TESTNET,
   type NetworkId,
 } from '../../constants.js'
 import { DEFAULT_SIM_TIMEOUT_SECS } from '../../shared/defaults.js'
@@ -61,7 +62,7 @@ export type ChannelState = {
 export async function getChannelState(
   parameters: getChannelState.Parameters,
 ): Promise<ChannelState> {
-  const { channel: channelAddress, network = 'testnet', rpcUrl, sourceAccount } = parameters
+  const { channel: channelAddress, network = STELLAR_TESTNET, rpcUrl, sourceAccount } = parameters
 
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
   const networkPassphrase = NETWORK_PASSPHRASE[network]
@@ -132,7 +133,7 @@ export declare namespace getChannelState {
   type Parameters = {
     /** Channel contract address (C...). */
     channel: string
-    /** Stellar network. @default 'testnet' */
+    /** Stellar network. @default 'stellar:testnet' */
     network?: NetworkId
     /** Custom Soroban RPC URL. */
     rpcUrl?: string

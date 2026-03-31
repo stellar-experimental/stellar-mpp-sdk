@@ -1,15 +1,11 @@
 import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stellar/stellar-sdk'
 import { Credential, Method } from 'mppx'
 import { z } from 'zod/mini'
-import {
-  DEFAULT_FEE,
-  NETWORK_PASSPHRASE,
-  SOROBAN_RPC_URLS,
-  type NetworkId,
-} from '../../constants.js'
+import { DEFAULT_FEE, NETWORK_PASSPHRASE, SOROBAN_RPC_URLS } from '../../constants.js'
 import { DEFAULT_SIMULATION_TIMEOUT_MS } from '../../shared/defaults.js'
 import { StellarMppError } from '../../shared/errors.js'
 import { simulateCall } from '../../shared/simulate.js'
+import { resolveNetworkId } from '../../shared/validation.js'
 import { channel as ChannelMethod } from '../Methods.js'
 
 /**
@@ -62,7 +58,7 @@ export function channel(parameters: channel.Parameters) {
     async createCredential({ challenge, context }) {
       const { request } = challenge
       const { amount, channel: channelAddress } = request
-      const network: NetworkId = (request.methodDetails?.network as NetworkId) ?? 'testnet'
+      const network = resolveNetworkId(request.methodDetails?.network)
 
       // The server tells us the cumulative amount via methodDetails,
       // or the caller can override via context.

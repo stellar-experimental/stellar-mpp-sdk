@@ -1,3 +1,4 @@
+import { NETWORK_PASSPHRASE, STELLAR_TESTNET, type NetworkId } from '../constants.js'
 import { StellarMppError } from './errors.js'
 
 export function validateHexSignature(hex: string, expectedLength: number = 128): void {
@@ -6,6 +7,15 @@ export function validateHexSignature(hex: string, expectedLength: number = 128):
       `Invalid signature: expected ${expectedLength} hex characters, got ${hex.length}`,
     )
   }
+}
+
+export function resolveNetworkId(network: unknown): NetworkId {
+  if (network == null) return STELLAR_TESTNET
+  if (typeof network === 'string' && network in NETWORK_PASSPHRASE) return network as NetworkId
+  const supported = Object.keys(NETWORK_PASSPHRASE).join(', ')
+  throw new StellarMppError(
+    `Unsupported Stellar network identifier: "${network}". Supported networks: ${supported}`,
+  )
 }
 
 export function validateAmount(amount: string): void {

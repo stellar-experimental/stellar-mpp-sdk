@@ -4,8 +4,6 @@ export * as ChannelMethods from './channel/Methods.js'
 
 // Constants (public)
 export {
-  CAIP2_NETWORK,
-  CAIP2_TO_NETWORK,
   DEFAULT_CHALLENGE_EXPIRY,
   DEFAULT_DECIMALS,
   DEFAULT_FEE,
@@ -15,6 +13,8 @@ export {
   NETWORK_PASSPHRASE,
   SAC_ADDRESSES,
   SOROBAN_RPC_URLS,
+  STELLAR_PUBNET,
+  STELLAR_TESTNET,
   USDC_SAC_MAINNET,
   USDC_SAC_TESTNET,
   XLM_SAC_MAINNET,
