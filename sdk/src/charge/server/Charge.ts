@@ -38,6 +38,14 @@ import {
 const LOG_PREFIX = '[stellar:charge]'
 const STORE_PREFIX = 'stellar:charge'
 
+/**
+ * Creates a Stellar charge method for use on the **server**.
+ *
+ * Verifies and settles Soroban SAC `transfer` invocations received as
+ * pull-mode (signed XDR) or push-mode (on-chain tx hash) credentials.
+ *
+ * @see https://paymentauth.org/draft-stellar-charge-00
+ */
 export function charge(parameters: charge.Parameters) {
   const {
     currency,

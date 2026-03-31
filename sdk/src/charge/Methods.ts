@@ -12,7 +12,7 @@ import { z } from 'zod/mini'
  *   Client broadcasts itself and sends the transaction hash.
  *   The server looks it up on-chain for verification.
  *
- * @see https://stellar.org
+ * @see https://paymentauth.org/draft-stellar-charge-00
  */
 export const charge = Method.from({
   name: 'stellar',

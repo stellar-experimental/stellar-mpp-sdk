@@ -1,5 +1,7 @@
 # Charge Payment Flow — On-Chain SAC Transfer
 
+> Implements [draft-stellar-charge-00](https://paymentauth.org/draft-stellar-charge-00)
+
 ```mermaid
 sequenceDiagram
     participant App as Client App

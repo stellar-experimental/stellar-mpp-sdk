@@ -2,6 +2,10 @@
 
 Stellar blockchain payment method for the [Machine Payments Protocol (MPP)](https://mpp.dev). Enables machine-to-machine payments using Soroban SAC token transfers on the Stellar network, with optional support for [one-way payment channels](https://github.com/stellar-experimental/one-way-channel) for high-frequency off-chain payments.
 
+## Specification
+
+The charge payment mode implements the [draft-stellar-charge-00](https://paymentauth.org/draft-stellar-charge-00) specification ([source](https://github.com/tempoxyz/mpp-specs/blob/main/specs/methods/stellar/draft-stellar-charge-00.md)), which defines the `stellar` payment method with a `charge` intent for one-time SEP-41 token transfers under the HTTP Payment Authentication scheme.
+
 ## Payment modes
 
 ### Charge (one-time transfers)
