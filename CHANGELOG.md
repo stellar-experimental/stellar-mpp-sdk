@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-31
+
+### Changed
+
+- Align fee-bump transaction handling with the spec and restructure server signer configuration (`feePayer`) to match cross-chain conventions [#33](https://github.com/stellar/stellar-mpp-sdk/pull/33)
+
 ## [0.2.1] - 2026-03-30
 
 ### Fixed
@@ -29,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Env parsing primitives for Stellar-aware configuration
 - Shared utilities: fee bump wrapping, transaction polling with backoff, Soroban simulation, unit conversion, keypair resolution
 
-[Unreleased]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/stellar/stellar-mpp-sdk/releases/tag/v0.2.0
