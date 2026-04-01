@@ -31,6 +31,7 @@ describe('channel server creation', () => {
     const method = serverChannel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
+      store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
     expect(method.intent).toBe('channel')
@@ -45,6 +46,7 @@ describe('channel server creation', () => {
         serverChannel({
           channel: CHANNEL_ADDRESS,
           commitmentKey: COMMITMENT_KEY.publicKey(),
+          store: Store.memory(),
         }),
       ],
     })
