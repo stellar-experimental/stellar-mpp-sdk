@@ -371,7 +371,7 @@ describe('charge transaction verification', () => {
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
-    ).rejects.toThrow('matching SAC transfer invocation')
+    ).rejects.toThrow('matching SEP-41 transfer invocation')
   })
 
   it('rejects transaction with wrong amount', async () => {
@@ -395,7 +395,7 @@ describe('charge transaction verification', () => {
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
-    ).rejects.toThrow('matching SAC transfer invocation')
+    ).rejects.toThrow('matching SEP-41 transfer invocation')
   })
 
   it('rejects transaction with wrong currency', async () => {
@@ -420,7 +420,7 @@ describe('charge transaction verification', () => {
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
-    ).rejects.toThrow('matching SAC transfer invocation')
+    ).rejects.toThrow('matching SEP-41 transfer invocation')
   })
 
   it('rejects sponsored source without feePayer configured', async () => {

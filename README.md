@@ -1,6 +1,6 @@
 # @stellar/mpp
 
-Stellar blockchain payment method for the [Machine Payments Protocol (MPP)](https://mpp.dev). Enables machine-to-machine payments using Soroban SAC token transfers on the Stellar network, with optional support for [one-way payment channels](https://github.com/stellar-experimental/one-way-channel) for high-frequency off-chain payments.
+Stellar blockchain payment method for the [Machine Payments Protocol (MPP)](https://mpp.dev). Enables machine-to-machine payments using Soroban SEP-41 token transfers on the Stellar network, with optional support for [one-way payment channels](https://github.com/stellar-experimental/one-way-channel) for high-frequency off-chain payments.
 
 ## Specification
 
@@ -10,7 +10,7 @@ The charge payment mode implements the [draft-stellar-charge-00](https://payment
 
 ### Charge (one-time transfers)
 
-Each payment is a Soroban SAC `transfer` settled on-chain individually.
+Each payment is a Soroban SEP-41 `transfer` settled on-chain individually.
 
 ```
 Client                          Server                         Stellar
@@ -23,7 +23,7 @@ Client                          Server                         Stellar
   |<------------------------------|                               |
   |                               |                               |
   |  prepareTransaction ----------------- (simulate) ------------>|
-  |  Sign SAC transfer            |                               |
+  |  Sign SEP-41 transfer          |                               |
   |  Send credential (XDR)        |                               |
   |------------------------------>|                               |
   |                               |  sendTransaction ------------>|
@@ -232,7 +232,7 @@ const data = await response.json()
 ```ts
 stellar.charge({
   recipient: string,              // Stellar public key (G...) or contract (C...)
-  currency: string,               // SAC contract address
+  currency: string,               // SEP-41 token contract address
   network?: 'stellar:testnet' | 'stellar:pubnet', // default: 'stellar:testnet'
   decimals?: number,              // default: 7
   rpcUrl?: string,                // custom Soroban RPC URL

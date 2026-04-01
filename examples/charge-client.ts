@@ -2,7 +2,7 @@
  * Example: Stellar MPP Client
  *
  * Automatically handles 402 Payment Required responses by paying
- * via Soroban SAC transfer on Stellar testnet.
+ * via Soroban SEP-41 transfer on Stellar testnet.
  *
  * Usage:
  *   STELLAR_SECRET=SYOUR_SECRET_KEY npx tsx examples/charge-client.ts

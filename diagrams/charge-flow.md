@@ -1,4 +1,4 @@
-# Charge Payment Flow — On-Chain SAC Transfer
+# Charge Payment Flow — On-Chain SEP-41 Transfer
 
 > Implements [draft-stellar-charge-00](https://paymentauth.org/draft-stellar-charge-00)
 
@@ -18,7 +18,7 @@ sequenceDiagram
     SC-->>App: 402 + Challenge JSON<br/>{amount, currency, recipient, methodDetails}
 
     App->>CC: createCredential(challenge)
-    CC->>CC: Resolve network, build SAC transfer(from, to, amount)
+    CC->>CC: Resolve network, build SEP-41 transfer(from, to, amount)
 
     alt Pull Mode — Sponsored (feePayer: true, default when server has feePayer)
         Note over CC: Uses all-zeros source account (GAAA...WHF)<br/>so server can substitute its own account
@@ -29,7 +29,7 @@ sequenceDiagram
         CC->>CC: Sign only sorobanCredentialsAddress<br/>auth entries (not the envelope)
         CC-->>App: Credential {type:'transaction', transaction: xdr}
         App->>SC: Credential with auth-entry-signed XDR
-        SC->>SC: verifySacInvocation(tx) — validate structure
+        SC->>SC: verifyTokenInvocation(tx) — validate structure
         SC->>SC: Detect all-zeros source → spec rebuild path
         SC->>RPC: getAccount(feePayerKey)
         RPC-->>SC: Server account with current sequence
@@ -51,7 +51,7 @@ sequenceDiagram
         CC->>CC: keypair.sign(preparedTx)
         CC-->>App: Credential {type:'transaction', transaction: xdr}
         App->>SC: Credential with fully-signed XDR
-        SC->>SC: verifySacInvocation(tx) — validate structure
+        SC->>SC: verifyTokenInvocation(tx) — validate structure
         SC->>RPC: simulateTransaction(signedTx)
         RPC-->>SC: Verify transfer events match challenge
         SC->>RPC: sendTransaction(signedTx as-is)
@@ -71,7 +71,7 @@ sequenceDiagram
         App->>SC: Credential with tx hash
         SC->>RPC: getTransaction(hash)
         RPC-->>SC: TX result
-        SC->>SC: verifySacTransfer(result) — verify on-chain
+        SC->>SC: verifyTokenTransfer(result) — verify on-chain
         SC-->>App: Receipt {status:'success', reference:hash}
     end
 ```

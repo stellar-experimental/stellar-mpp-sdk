@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Stellar MPP SDK — a TypeScript SDK implementing Stellar blockchain payment methods for the Machine Payments Protocol (MPP). Provides two payment modes:
 
-- **Charge**: One-time on-chain SAC (Stellar Asset Contract) token transfers with pull/push credential modes
+- **Charge**: One-time on-chain SEP-41 token transfers with pull/push credential modes
 - **Channel**: Off-chain payment commitments via one-way payment channel contracts (batch settlement on close)
 
 Built on the `mppx` framework. Peer dependencies: `@stellar/stellar-sdk` (^14.6.1) and `mppx` (^0.4.11).
@@ -110,8 +110,8 @@ Methods.ts (Zod schema) → client/ (create credentials) + server/ (verify crede
 | Path                                | Role                                                                                                                               |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `sdk/src/charge/Methods.ts`         | Charge method schema (Zod discriminated union: `transaction` vs `hash` credentials)                                                |
-| `sdk/src/charge/client/Charge.ts`   | Creates SAC `transfer` invocations; handles pull (send XDR) and push (broadcast + send hash) flows                                 |
-| `sdk/src/charge/server/Charge.ts`   | Verifies and broadcasts SAC transfers; supports fee sponsorship via FeeBumpTransaction                                             |
+| `sdk/src/charge/client/Charge.ts`   | Creates SEP-41 `transfer` invocations; handles pull (send XDR) and push (broadcast + send hash) flows                              |
+| `sdk/src/charge/server/Charge.ts`   | Verifies and broadcasts SEP-41 transfers; supports fee sponsorship via FeeBumpTransaction                                          |
 | `sdk/src/channel/Methods.ts`        | Channel method schema (discriminated union: `open` / `voucher` / `close` actions)                                                  |
 | `sdk/src/channel/client/Channel.ts` | Signs cumulative commitment amounts off-chain via ed25519; handles `open` action (sends signed deploy tx XDR + initial commitment) |
 | `sdk/src/channel/server/Channel.ts` | Verifies commitment signatures via contract simulation; `open` action broadcasts the deploy tx and initialises cumulative store    |
@@ -158,7 +158,7 @@ All other `shared/` modules are strictly internal and consumed only by `charge/`
 
 - **mppx integration**: Methods defined via `Method.from()`, adapted with `.toClient()` / `.toServer()`. Namespaced as `stellar.charge()` and `stellar.channel()`.
 - **Serialization locks**: Both Charge and Channel servers use Promise-based locks (`let verifyLock: Promise<unknown> = Promise.resolve()`) to serialize verification and prevent race conditions on store get/put.
-- **Contract simulation**: Uses Soroban RPC `simulateTransaction` for read-only verification — SAC transfer validation, `prepare_commitment` for commitment bytes, and channel state queries.
+- **Contract simulation**: Uses Soroban RPC `simulateTransaction` for read-only verification — SEP-41 transfer validation, `prepare_commitment` for commitment bytes, and channel state queries.
 - **Zod validation**: All method schemas use Zod v4 with discriminated unions for credential/action types.
 - **Shared utility extraction**: Common logic (polling, fee bumps, simulation, keypair resolution, validation, error types, logging) lives in `shared/` and is imported by both `charge/` and `channel/`.
 - **Configurable defaults**: Server and client functions accept optional parameters (`pollMaxAttempts`, `pollDelayMs`, `pollTimeoutMs`, `simulationTimeoutMs`, `maxFeeBumpStroops`, `logger`) with defaults from `shared/defaults.ts`, applied via parameter destructuring.

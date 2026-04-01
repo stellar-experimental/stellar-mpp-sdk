@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Initial release of `@stellar/mpp` — a TypeScript SDK for Stellar blockchain payment methods in the Machine Payments Protocol (MPP)
-- **Charge module**: one-time on-chain SAC token transfers with pull (transaction credential) and push (hash credential) modes, following the [draft-stellar-charge-00](https://paymentauth.org/draft-stellar-charge-00) specification
+- **Charge module**: one-time on-chain SEP-41 token transfers with pull (transaction credential) and push (hash credential) modes, following the [draft-stellar-charge-00](https://paymentauth.org/draft-stellar-charge-00) specification
 - **Channel module**: off-chain payment commitments via one-way payment channel contracts with batch settlement on close (session spec in progress)
 - Subpath exports for selective imports (`@stellar/mpp/charge/client`, `@stellar/mpp/charge/server`, `@stellar/mpp/channel/client`, `@stellar/mpp/channel/server`, `@stellar/mpp/env`)
 - Env parsing primitives for Stellar-aware configuration

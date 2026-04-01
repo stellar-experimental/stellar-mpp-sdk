@@ -1,7 +1,7 @@
 /**
  * Example: Stellar MPP Server
  *
- * Charges 0.01 USDC per request via Soroban SAC transfer.
+ * Charges 0.01 USDC per request via Soroban SEP-41 transfer.
  * Uses Express with security headers (helmet, rate limiting).
  *
  * Usage:

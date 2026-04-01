@@ -41,7 +41,7 @@ const STORE_PREFIX = 'stellar:charge'
 /**
  * Creates a Stellar charge method for use on the **server**.
  *
- * Verifies and settles Soroban SAC `transfer` invocations received as
+ * Verifies and settles Soroban SEP-41 `transfer` invocations received as
  * pull-mode (signed XDR) or push-mode (on-chain tx hash) credentials.
  *
  * @see https://paymentauth.org/draft-stellar-charge-00
@@ -161,7 +161,7 @@ export function charge(parameters: charge.Parameters) {
           timeoutMs: pollTimeoutMs,
         })
 
-        verifySacTransfer(
+        verifyTokenTransfer(
           txResult,
           {
             amount: expectedAmount,
@@ -195,7 +195,7 @@ export function charge(parameters: charge.Parameters) {
 
         verifyExactlyOneInvokeOp(tx)
 
-        verifySacInvocation(tx, {
+        verifyTokenInvocation(tx, {
           amount: expectedAmount,
           currency: expectedCurrency,
           recipient: expectedRecipient,
@@ -485,7 +485,7 @@ function verifyExactlyOneInvokeOp(tx: Transaction) {
   }
 }
 
-function verifySacInvocation(
+function verifyTokenInvocation(
   tx: Transaction,
   expected: { amount: bigint; currency: string; recipient: string },
 ) {
@@ -534,7 +534,7 @@ function verifyFromRawOps(
 
   if (!found) {
     throw new PaymentVerificationError(
-      `${LOG_PREFIX} Transaction does not contain a matching SAC transfer invocation.`,
+      `${LOG_PREFIX} Transaction does not contain a matching SEP-41 transfer invocation.`,
       {
         currency: expected.currency,
         recipient: expected.recipient,
@@ -544,7 +544,7 @@ function verifyFromRawOps(
   }
 }
 
-function verifySacTransfer(
+function verifyTokenTransfer(
   txResult: rpc.Api.GetSuccessfulTransactionResponse,
   expected: { amount: bigint; currency: string; recipient: string },
   networkPassphrase: string,
