@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Replace generic SAC terminology with SEP-41 across docs, comments, and error messages ([#39](https://github.com/stellar/stellar-mpp-sdk/pull/39))
+
 ### Fixed
 
 - Fix CHANGELOG entries for v0.3.0 ([#36](https://github.com/stellar/stellar-mpp-sdk/pull/36))
