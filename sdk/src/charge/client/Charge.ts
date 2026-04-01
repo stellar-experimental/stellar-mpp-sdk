@@ -36,7 +36,7 @@ import {
 /**
  * Creates a Stellar charge method for use on the **client**.
  *
- * Builds a Soroban SAC `transfer` invocation, signs it, and either:
+ * Builds a Soroban SEP-41 `transfer` invocation, signs it, and either:
  * - **pull** (default): sends the signed XDR to the server to broadcast
  * - **push**: broadcasts itself and sends the tx hash
  *
@@ -101,7 +101,7 @@ export function charge(parameters: charge.Parameters) {
       const networkPassphrase = NETWORK_PASSPHRASE[network]
       const server = new rpc.Server(resolvedRpcUrl)
 
-      // Build SAC `transfer(from, to, amount)` invocation
+      // Build SEP-41 `transfer(from, to, amount)` invocation
       const contract = new Contract(currency)
       const stellarAmount = BigInt(amount)
 

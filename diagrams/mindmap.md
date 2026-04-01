@@ -40,8 +40,8 @@ mindmap
         defaults hook: currency + recipient
         request hook: toBaseUnits, UUID, methodDetails
         verify hook
-          Pull: verifySacInvocation → broadcast → poll
-          Push: fetch tx → verifySacTransfer
+          Pull: verifyTokenInvocation → broadcast → poll
+          Push: fetch tx → verifyTokenTransfer
           Fee-bump wrapping
           Replay protection via Store
       Channel — channel/server/Channel.ts
