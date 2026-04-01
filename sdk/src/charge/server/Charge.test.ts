@@ -197,7 +197,7 @@ describe('charge request transform', () => {
 // Transaction hash dedup tests (hash flow with mocked RPC)
 // ---------------------------------------------------------------------------
 
-function makeHashCredential(opts: { hash: string; challengeId?: string }) {
+function makeHashCredential(opts: { hash: string; challengeId?: string; source?: string }) {
   const challenge = Challenge.from({
     id: opts.challengeId ?? `test-${crypto.randomUUID()}`,
     realm: 'localhost',
@@ -212,10 +212,15 @@ function makeHashCredential(opts: { hash: string; challengeId?: string }) {
       },
     },
   })
-  return Credential.from({
+  const cred = Credential.from({
     challenge,
     payload: { type: 'hash', hash: opts.hash },
   })
+  // source is explicitly settable; omitting it tests the "no source" rejection path
+  if (opts.source !== undefined) {
+    return Object.assign(cred, { source: opts.source })
+  }
+  return cred
 }
 
 describe('charge hash+feePayer rejection', () => {
@@ -341,31 +346,49 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
     expect(receipt.status).toBe('success')
   })
 
-  it('skips from-check when credential has no source (backward compat)', async () => {
-    // Credentials without source still pass — graceful degradation.
-    const tx = buildTransferTx({
-      source: PAYER.publicKey(),
-      from: PAYER.publicKey(),
-      to: RECIPIENT,
-      amount: 10000000n,
-      currency: USDC_SAC_TESTNET,
-    })
-    tx.sign(PAYER)
-
+  it('rejects credential with no source (source is mandatory)', async () => {
     mockGetTransaction.mockResolvedValueOnce({
       status: 'SUCCESS',
-      envelopeXdr: tx.toXDR(),
+      envelopeXdr: 'unused',
     })
 
-    const cred = makeHashCredential({ hash: 'no-source-hash' }) // no source field
+    const cred = makeHashCredential({ hash: 'no-source-hash' }) // source field absent
 
     const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
 
-    const receipt = await method.verify({
-      credential: cred as any,
-      request: cred.challenge.request,
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('Credential source is required')
+  })
+
+  it('rejects credential with malformed source DID', async () => {
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: 'unused',
     })
-    expect(receipt.status).toBe('success')
+
+    const challenge = Challenge.from({
+      id: `test-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: { network: 'stellar:testnet' },
+      },
+    })
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'hash', hash: 'bad-did-hash' } }),
+      { source: 'not-a-valid-did' },
+    )
+
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('invalid format')
   })
 })
 
@@ -387,7 +410,10 @@ describe('charge push-mode verification (NM-001 regression)', () => {
       envelopeXdr: wrongAmountTx.toXDR(),
     })
 
-    const cred = makeHashCredential({ hash: 'wrong-amount-tx-hash' })
+    const cred = makeHashCredential({
+      hash: 'wrong-amount-tx-hash',
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
     const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
 
     await expect(
@@ -411,7 +437,10 @@ describe('charge push-mode verification (NM-001 regression)', () => {
       envelopeXdr: tx.toXDR(),
     })
 
-    const cred = makeHashCredential({ hash: 'wrong-recipient-tx-hash' })
+    const cred = makeHashCredential({
+      hash: 'wrong-recipient-tx-hash',
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
     const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
 
     await expect(
@@ -435,7 +464,10 @@ describe('charge push-mode verification (NM-001 regression)', () => {
       envelopeXdr: tx.toXDR(),
     })
 
-    const cred = makeHashCredential({ hash: 'wrong-currency-tx-hash' })
+    const cred = makeHashCredential({
+      hash: 'wrong-currency-tx-hash',
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
     const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
 
     await expect(
@@ -449,7 +481,10 @@ describe('charge push-mode verification (NM-001 regression)', () => {
       envelopeXdr: undefined,
     })
 
-    const cred = makeHashCredential({ hash: 'no-envelope-hash' })
+    const cred = makeHashCredential({
+      hash: 'no-envelope-hash',
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
     const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
 
     await expect(
@@ -533,7 +568,11 @@ function buildTransferTx(opts: {
     .build()
 }
 
-function makeTransactionCredential(txXdr: string, challengeAmount: string = '10000000') {
+function makeTransactionCredential(
+  txXdr: string,
+  challengeAmount: string = '10000000',
+  source: string = `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+) {
   const challenge = Challenge.from({
     id: `test-${crypto.randomUUID()}`,
     realm: 'localhost',
@@ -548,10 +587,10 @@ function makeTransactionCredential(txXdr: string, challengeAmount: string = '100
       },
     },
   })
-  return Credential.from({
-    challenge,
-    payload: { type: 'transaction', transaction: txXdr },
-  })
+  return Object.assign(
+    Credential.from({ challenge, payload: { type: 'transaction', transaction: txXdr } }),
+    { source },
+  )
 }
 
 describe('charge transaction verification', () => {
@@ -735,10 +774,10 @@ describe('charge transaction verification', () => {
         methodDetails: { network: 'stellar:testnet' },
       },
     })
-    const cred = Credential.from({
-      challenge,
-      payload: { type: 'transaction', transaction: tx.toXDR() },
-    })
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'transaction', transaction: tx.toXDR() } }),
+      { source: `did:pkh:stellar:testnet:${PAYER.publicKey()}` },
+    )
 
     // First call succeeds
     await method.verify({ credential: cred as any, request: cred.challenge.request })
@@ -783,10 +822,10 @@ describe('charge transaction verification', () => {
         methodDetails: { network: 'stellar:testnet' },
       },
     })
-    const cred = Credential.from({
-      challenge,
-      payload: { type: 'transaction', transaction: tx.toXDR() },
-    })
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'transaction', transaction: tx.toXDR() } }),
+      { source: `did:pkh:stellar:testnet:${PAYER.publicKey()}` },
+    )
 
     const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
 

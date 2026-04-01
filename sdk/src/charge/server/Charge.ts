@@ -365,7 +365,7 @@ export function charge(parameters: charge.Parameters) {
     expectedCurrency: string,
     expectedRecipient: string,
     serverAddress: string | undefined,
-    expectedFrom: string | undefined,
+    expectedFrom: string,
   ) {
     let simResponse: rpc.Api.SimulateTransactionSuccessResponse
     try {
@@ -498,14 +498,14 @@ function verifyExactlyOneInvokeOp(tx: Transaction) {
 
 function verifySacInvocation(
   tx: Transaction,
-  expected: { amount: bigint; currency: string; recipient: string; from?: string },
+  expected: { amount: bigint; currency: string; recipient: string; from: string },
 ) {
   verifyFromRawOps(tx, expected)
 }
 
 function verifyFromRawOps(
   tx: Transaction,
-  expected: { amount: bigint; currency: string; recipient: string; from?: string },
+  expected: { amount: bigint; currency: string; recipient: string; from: string },
 ) {
   let found = false
   const xdrEnvelope = tx.toXDR()
@@ -536,10 +536,8 @@ function verifyFromRawOps(
     // Verify the sender matches the credential's claimed identity.
     // Prevents a third party from stealing a tx hash and claiming payment
     // that was funded by someone else.
-    if (expected.from !== undefined) {
-      const fromAddress = Address.fromScVal(args[0]).toString()
-      if (fromAddress !== expected.from) continue
-    }
+    const fromAddress = Address.fromScVal(args[0]).toString()
+    if (fromAddress !== expected.from) continue
 
     const toAddress = Address.fromScVal(args[1]).toString()
     if (toAddress !== expected.recipient) continue
@@ -565,7 +563,7 @@ function verifyFromRawOps(
 
 function verifySacTransfer(
   txResult: rpc.Api.GetSuccessfulTransactionResponse,
-  expected: { amount: bigint; currency: string; recipient: string; from?: string },
+  expected: { amount: bigint; currency: string; recipient: string; from: string },
   networkPassphrase: string,
 ) {
   if (!txResult.envelopeXdr) {
@@ -615,7 +613,7 @@ function validateSimulationEvents(
   expectedCurrency: string,
   expectedRecipient: string,
   serverAddress: string | undefined,
-  expectedFrom: string | undefined,
+  expectedFrom: string,
 ) {
   const transferEvents: Array<{ from: string; to: string; amount: bigint; contract: string }> = []
 
@@ -665,7 +663,7 @@ function validateSimulationEvents(
     transfer.to !== expectedRecipient ||
     transfer.amount !== expectedAmount ||
     transfer.contract !== expectedCurrency ||
-    (expectedFrom !== undefined && transfer.from !== expectedFrom)
+    transfer.from !== expectedFrom
   ) {
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Simulation transfer event does not match expected parameters.`,
@@ -673,7 +671,7 @@ function validateSimulationEvents(
         expectedRecipient,
         expectedAmount: expectedAmount.toString(),
         expectedCurrency,
-        ...(expectedFrom !== undefined ? { expectedFrom } : {}),
+        expectedFrom,
       },
     )
   }
@@ -701,18 +699,27 @@ function validateSimulationEvents(
  *
  * Format: `did:pkh:stellar:{network}:{G...publicKey}`
  *
- * Returns `undefined` when the source is absent or in an unexpected format,
- * in which case the `from` check is skipped (graceful degradation for
- * credentials produced without a source field).
+ * Throws `PaymentVerificationError` if the source is absent, not a string,
+ * or does not conform to the expected `did:pkh` format. A credential without
+ * a verifiable source must be rejected — silently skipping the sender check
+ * would leave the hash-theft attack vector open.
  */
-function publicKeyFromDID(source: unknown): string | undefined {
-  if (typeof source !== 'string') return undefined
+function publicKeyFromDID(source: unknown): string {
+  if (typeof source !== 'string' || !source) {
+    throw new PaymentVerificationError(
+      `${LOG_PREFIX} Credential source is required to verify the sender address.`,
+      {},
+    )
+  }
   const parts = source.split(':')
   // did : pkh : stellar : {network} : {pubkey}
   if (parts.length >= 4 && parts[0] === 'did' && parts[1] === 'pkh') {
     return parts[parts.length - 1]
   }
-  return undefined
+  throw new PaymentVerificationError(
+    `${LOG_PREFIX} Credential source has invalid format — expected did:pkh:stellar:{network}:{pubkey}.`,
+    { source },
+  )
 }
 
 // ---------------------------------------------------------------------------
