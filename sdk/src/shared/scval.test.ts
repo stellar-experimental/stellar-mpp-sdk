@@ -30,11 +30,29 @@ describe('scValToBigInt', () => {
     expect(scValToBigInt(val)).toBe((1n << 64n) | 1n)
   })
 
-  it('converts scvI128', () => {
+  it('converts scvI128 with hi=0', () => {
     const val = xdr.ScVal.scvI128(
       new xdr.Int128Parts({ hi: new xdr.Int64(0), lo: new xdr.Uint64(99) }),
     )
     expect(scValToBigInt(val)).toBe(99n)
+  })
+
+  it('converts scvI128 with non-zero hi (large SAC amounts, regression for NM-006)', () => {
+    // Verifies hi << 64 | lo is computed correctly for large token amounts.
+    // Before the fix, inconsistent implementations could produce wrong results.
+    const val = xdr.ScVal.scvI128(
+      new xdr.Int128Parts({ hi: new xdr.Int64(1), lo: new xdr.Uint64(99) }),
+    )
+    // 1 * 2^64 + 99
+    expect(scValToBigInt(val)).toBe((1n << 64n) + 99n)
+  })
+
+  it('converts scvU128 with non-zero hi (large amounts)', () => {
+    // Verifies u128 with significant hi bits also decodes correctly
+    const val = xdr.ScVal.scvU128(
+      new xdr.UInt128Parts({ hi: new xdr.Uint64(2), lo: new xdr.Uint64(0) }),
+    )
+    expect(scValToBigInt(val)).toBe(2n << 64n)
   })
 
   it('converts scvU128 zero', () => {

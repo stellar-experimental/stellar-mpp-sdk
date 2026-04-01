@@ -161,12 +161,17 @@ export function charge(parameters: charge.Parameters) {
           timeoutMs: pollTimeoutMs,
         })
 
+        // Extract the payer's public key from the credential DID to verify
+        // the on-chain transfer's `from` address matches the credential's
+        // claimed identity, preventing hash-theft attacks against clients.
+        const expectedFrom = publicKeyFromDID(credential.source)
         verifySacTransfer(
           txResult,
           {
             amount: expectedAmount,
             currency: expectedCurrency,
             recipient: expectedRecipient,
+            from: expectedFrom,
           },
           networkPassphrase,
         )
@@ -195,10 +200,12 @@ export function charge(parameters: charge.Parameters) {
 
         verifyExactlyOneInvokeOp(tx)
 
+        const expectedFrom = publicKeyFromDID(credential.source)
         verifySacInvocation(tx, {
           amount: expectedAmount,
           currency: expectedCurrency,
           recipient: expectedRecipient,
+          from: expectedFrom,
         })
 
         let txToSubmit: Transaction | FeeBumpTransaction = parsed as
@@ -250,6 +257,7 @@ export function charge(parameters: charge.Parameters) {
             expectedCurrency,
             expectedRecipient,
             signerKeypair.publicKey(),
+            expectedFrom,
           )
 
           rebuiltTx.sign(signerKeypair)
@@ -286,6 +294,7 @@ export function charge(parameters: charge.Parameters) {
             expectedCurrency,
             expectedRecipient,
             signerKeypair?.publicKey(),
+            expectedFrom,
           )
         }
 
@@ -356,6 +365,7 @@ export function charge(parameters: charge.Parameters) {
     expectedCurrency: string,
     expectedRecipient: string,
     serverAddress: string | undefined,
+    expectedFrom: string,
   ) {
     let simResponse: rpc.Api.SimulateTransactionSuccessResponse
     try {
@@ -379,6 +389,7 @@ export function charge(parameters: charge.Parameters) {
         expectedCurrency,
         expectedRecipient,
         serverAddress,
+        expectedFrom,
       )
     }
   }
@@ -487,14 +498,14 @@ function verifyExactlyOneInvokeOp(tx: Transaction) {
 
 function verifySacInvocation(
   tx: Transaction,
-  expected: { amount: bigint; currency: string; recipient: string },
+  expected: { amount: bigint; currency: string; recipient: string; from: string },
 ) {
   verifyFromRawOps(tx, expected)
 }
 
 function verifyFromRawOps(
   tx: Transaction,
-  expected: { amount: bigint; currency: string; recipient: string },
+  expected: { amount: bigint; currency: string; recipient: string; from: string },
 ) {
   let found = false
   const xdrEnvelope = tx.toXDR()
@@ -522,6 +533,12 @@ function verifyFromRawOps(
     if (contractAddress !== expected.currency) continue
     if (args.length < 3) continue
 
+    // Verify the sender matches the credential's claimed identity.
+    // Prevents a third party from stealing a tx hash and claiming payment
+    // that was funded by someone else.
+    const fromAddress = Address.fromScVal(args[0]).toString()
+    if (fromAddress !== expected.from) continue
+
     const toAddress = Address.fromScVal(args[1]).toString()
     if (toAddress !== expected.recipient) continue
 
@@ -536,6 +553,7 @@ function verifyFromRawOps(
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Transaction does not contain a matching SAC transfer invocation.`,
       {
+        from: expected.from,
         currency: expected.currency,
         recipient: expected.recipient,
         amount: expected.amount.toString(),
@@ -546,7 +564,7 @@ function verifyFromRawOps(
 
 function verifySacTransfer(
   txResult: rpc.Api.GetSuccessfulTransactionResponse,
-  expected: { amount: bigint; currency: string; recipient: string },
+  expected: { amount: bigint; currency: string; recipient: string; from: string },
   networkPassphrase: string,
 ) {
   if (!txResult.envelopeXdr) {
@@ -596,6 +614,7 @@ function validateSimulationEvents(
   expectedCurrency: string,
   expectedRecipient: string,
   serverAddress: string | undefined,
+  expectedFrom: string,
 ) {
   const transferEvents: Array<{ from: string; to: string; amount: bigint; contract: string }> = []
 
@@ -644,7 +663,8 @@ function validateSimulationEvents(
   if (
     transfer.to !== expectedRecipient ||
     transfer.amount !== expectedAmount ||
-    transfer.contract !== expectedCurrency
+    transfer.contract !== expectedCurrency ||
+    transfer.from !== expectedFrom
   ) {
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Simulation transfer event does not match expected parameters.`,
@@ -652,6 +672,7 @@ function validateSimulationEvents(
         expectedRecipient,
         expectedAmount: expectedAmount.toString(),
         expectedCurrency,
+        expectedFrom,
       },
     )
   }
@@ -668,6 +689,53 @@ function validateSimulationEvents(
       )
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Identity helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts the Stellar public key from a `did:pkh` DID string.
+ *
+ * Format: `did:pkh:stellar:{network}:{G...publicKey}`
+ *
+ * Throws `PaymentVerificationError` if the source is absent, not a string,
+ * or does not conform to the expected `did:pkh` format. A credential without
+ * a verifiable source must be rejected — silently skipping the sender check
+ * would leave the hash-theft attack vector open.
+ */
+function publicKeyFromDID(source: unknown): string {
+  if (typeof source !== 'string' || !source) {
+    throw new PaymentVerificationError(
+      `${LOG_PREFIX} Credential source is required to verify the sender address.`,
+      {},
+    )
+  }
+  const parts = source.split(':')
+  // did : pkh : stellar : {network} : {pubkey}
+  if (
+    parts.length === 5 &&
+    parts[0] === 'did' &&
+    parts[1] === 'pkh' &&
+    parts[2] === 'stellar' &&
+    parts[3] // non-empty network
+  ) {
+    const pubKey = parts[4]
+    try {
+      Keypair.fromPublicKey(pubKey)
+    } catch {
+      throw new PaymentVerificationError(
+        `${LOG_PREFIX} Credential source contains an invalid Stellar public key.`,
+        { source },
+      )
+    }
+    return pubKey
+  }
+  throw new PaymentVerificationError(
+    `${LOG_PREFIX} Credential source has invalid format — expected did:pkh:stellar:{network}:{pubkey}.`,
+    { source },
+  )
 }
 
 // ---------------------------------------------------------------------------

@@ -197,7 +197,7 @@ describe('charge request transform', () => {
 // Transaction hash dedup tests (hash flow with mocked RPC)
 // ---------------------------------------------------------------------------
 
-function makeHashCredential(opts: { hash: string; challengeId?: string }) {
+function makeHashCredential(opts: { hash: string; challengeId?: string; source?: string }) {
   const challenge = Challenge.from({
     id: opts.challengeId ?? `test-${crypto.randomUUID()}`,
     realm: 'localhost',
@@ -212,10 +212,15 @@ function makeHashCredential(opts: { hash: string; challengeId?: string }) {
       },
     },
   })
-  return Credential.from({
+  const cred = Credential.from({
     challenge,
     payload: { type: 'hash', hash: opts.hash },
   })
+  // source is explicitly settable; omitting it tests the "no source" rejection path
+  if (opts.source !== undefined) {
+    return Object.assign(cred, { source: opts.source })
+  }
+  return cred
 }
 
 describe('charge hash+feePayer rejection', () => {
@@ -249,6 +254,290 @@ describe('charge hash+feePayer rejection', () => {
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
     ).rejects.toThrow('Push mode (type="hash") is not allowed with feePayer=true')
+  })
+})
+
+describe('charge push-mode sender verification (hash-theft attack prevention)', () => {
+  it('rejects hash where the on-chain `from` does not match the credential source', async () => {
+    // Attack: attacker steals a client's tx hash and submits it with their own challenge.
+    // The tx transfers from LEGITIMATE_CLIENT but the attacker's credential claims
+    // source = ATTACKER. The server must compare args[0] against credential.source.
+    const legitimateClient = Keypair.random()
+    const tx = buildTransferTx({
+      source: legitimateClient.publicKey(),
+      from: legitimateClient.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(legitimateClient)
+
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: tx.toXDR(),
+    })
+
+    const attackerKey = Keypair.random().publicKey()
+    const challenge = Challenge.from({
+      id: `test-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: { network: 'stellar:testnet' },
+      },
+    })
+    // Attacker's credential claims their own key as source
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'hash', hash: 'stolen-hash' } }),
+      { source: `did:pkh:stellar:testnet:${attackerKey}` },
+    )
+
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('matching SAC transfer invocation')
+  })
+
+  it('accepts hash where the on-chain `from` matches the credential source', async () => {
+    const client = PAYER // PAYER key defined in test scope
+    const tx = buildTransferTx({
+      source: client.publicKey(),
+      from: client.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(client)
+
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: tx.toXDR(),
+    })
+
+    const challenge = Challenge.from({
+      id: `test-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: { network: 'stellar:testnet' },
+      },
+    })
+    // Credential source matches the actual `from` in the tx
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'hash', hash: 'legit-hash' } }),
+      { source: `did:pkh:stellar:testnet:${client.publicKey()}` },
+    )
+
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    const receipt = await method.verify({
+      credential: cred as any,
+      request: cred.challenge.request,
+    })
+    expect(receipt.status).toBe('success')
+  })
+
+  it('rejects credential with no source (source is mandatory)', async () => {
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: 'unused',
+    })
+
+    const cred = makeHashCredential({ hash: 'no-source-hash' }) // source field absent
+
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('Credential source is required')
+  })
+
+  it('rejects credential with malformed source DID', async () => {
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS', envelopeXdr: 'unused' })
+    const challenge = Challenge.from({
+      id: `test-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: { network: 'stellar:testnet' },
+      },
+    })
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'hash', hash: 'bad-did-hash' } }),
+      { source: 'not-a-valid-did' },
+    )
+
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('invalid format')
+  })
+
+  it('rejects source DID with non-stellar namespace', async () => {
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS', envelopeXdr: 'unused' })
+    const challenge = Challenge.from({
+      id: `test-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: { network: 'stellar:testnet' },
+      },
+    })
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'hash', hash: 'eip155-hash' } }),
+      { source: `did:pkh:eip155:1:0xabc123` },
+    )
+
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('invalid format')
+  })
+
+  it('rejects source DID with invalid Stellar public key', async () => {
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS', envelopeXdr: 'unused' })
+    const challenge = Challenge.from({
+      id: `test-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: { network: 'stellar:testnet' },
+      },
+    })
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'hash', hash: 'bad-key-hash' } }),
+      { source: 'did:pkh:stellar:testnet:NOT_A_VALID_KEY' },
+    )
+
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('invalid Stellar public key')
+  })
+})
+
+describe('charge push-mode verification (NM-001 regression)', () => {
+  it('rejects hash whose on-chain tx has wrong amount (NM-001)', async () => {
+    // Before the fix, verifySacTransfer swallowed all errors — any successful on-chain tx
+    // would be accepted as payment. Now it must throw on wrong transfer parameters.
+    const wrongAmountTx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 5000000n, // wrong — challenge expects 10000000
+      currency: USDC_SAC_TESTNET,
+    })
+    wrongAmountTx.sign(PAYER)
+
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: wrongAmountTx.toXDR(),
+    })
+
+    const cred = makeHashCredential({
+      hash: 'wrong-amount-tx-hash',
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('matching SAC transfer invocation')
+  })
+
+  it('rejects hash whose on-chain tx transfers to wrong recipient (NM-001)', async () => {
+    const wrongRecipient = Keypair.random().publicKey()
+    const tx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: wrongRecipient,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(PAYER)
+
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: tx.toXDR(),
+    })
+
+    const cred = makeHashCredential({
+      hash: 'wrong-recipient-tx-hash',
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('matching SAC transfer invocation')
+  })
+
+  it('rejects hash whose on-chain tx uses wrong currency (NM-001)', async () => {
+    const wrongCurrency = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC'
+    const tx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: wrongCurrency, // wrong SAC contract
+    })
+    tx.sign(PAYER)
+
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: tx.toXDR(),
+    })
+
+    const cred = makeHashCredential({
+      hash: 'wrong-currency-tx-hash',
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('matching SAC transfer invocation')
+  })
+
+  it('rejects hash when on-chain tx has no envelopeXdr (NM-001)', async () => {
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: undefined,
+    })
+
+    const cred = makeHashCredential({
+      hash: 'no-envelope-hash',
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('missing envelope XDR')
   })
 })
 
@@ -327,7 +616,11 @@ function buildTransferTx(opts: {
     .build()
 }
 
-function makeTransactionCredential(txXdr: string, challengeAmount: string = '10000000') {
+function makeTransactionCredential(
+  txXdr: string,
+  challengeAmount: string = '10000000',
+  source: string = `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+) {
   const challenge = Challenge.from({
     id: `test-${crypto.randomUUID()}`,
     realm: 'localhost',
@@ -342,13 +635,41 @@ function makeTransactionCredential(txXdr: string, challengeAmount: string = '100
       },
     },
   })
-  return Credential.from({
-    challenge,
-    payload: { type: 'transaction', transaction: txXdr },
-  })
+  return Object.assign(
+    Credential.from({ challenge, payload: { type: 'transaction', transaction: txXdr } }),
+    { source },
+  )
 }
 
 describe('charge transaction verification', () => {
+  it('rejects transaction where from address does not match credential source', async () => {
+    const actualPayer = Keypair.random()
+    const tx = buildTransferTx({
+      source: actualPayer.publicKey(),
+      from: actualPayer.publicKey(), // tx was built by actualPayer
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(actualPayer)
+
+    mockSimulateTransaction.mockResolvedValueOnce({
+      result: { retval: null },
+      events: [],
+      transactionData: 'mock',
+    })
+
+    // Credential claims PAYER as source, but tx `from` is actualPayer — mismatch
+    const cred = Object.assign(makeTransactionCredential(tx.toXDR()), {
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('matching SAC transfer invocation')
+  })
+
   it('rejects transaction with wrong recipient', async () => {
     const wrongRecipient = Keypair.random().publicKey()
     const tx = buildTransferTx({
@@ -501,10 +822,10 @@ describe('charge transaction verification', () => {
         methodDetails: { network: 'stellar:testnet' },
       },
     })
-    const cred = Credential.from({
-      challenge,
-      payload: { type: 'transaction', transaction: tx.toXDR() },
-    })
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'transaction', transaction: tx.toXDR() } }),
+      { source: `did:pkh:stellar:testnet:${PAYER.publicKey()}` },
+    )
 
     // First call succeeds
     await method.verify({ credential: cred as any, request: cred.challenge.request })
@@ -549,10 +870,10 @@ describe('charge transaction verification', () => {
         methodDetails: { network: 'stellar:testnet' },
       },
     })
-    const cred = Credential.from({
-      challenge,
-      payload: { type: 'transaction', transaction: tx.toXDR() },
-    })
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'transaction', transaction: tx.toXDR() } }),
+      { source: `did:pkh:stellar:testnet:${PAYER.publicKey()}` },
+    )
 
     const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
 

@@ -1,5 +1,5 @@
 import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stellar/stellar-sdk'
-import { Credential, Method } from 'mppx'
+import { Credential, Method, Store } from 'mppx'
 import { z } from 'zod/mini'
 import { DEFAULT_FEE, NETWORK_PASSPHRASE, SOROBAN_RPC_URLS } from '../../constants.js'
 import { DEFAULT_SIMULATION_TIMEOUT_MS } from '../../shared/defaults.js'
@@ -38,6 +38,7 @@ export function channel(parameters: channel.Parameters) {
     rpcUrl,
     simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
     sourceAccount,
+    store,
   } = parameters
 
   if (!commitmentKeyParam && !commitmentSecret) {
@@ -72,7 +73,24 @@ export function channel(parameters: channel.Parameters) {
         }
       }
 
-      const previousCumulative = BigInt(request.methodDetails?.cumulativeAmount ?? '0')
+      // Read locally tracked cumulative from store (if provided).
+      // The client tracks the last signed cumulative independently of the
+      // server to prevent a rogue server from resetting the baseline.
+      let localPrevious = 0n
+      const clientCumulativeKey = `stellar:channel:client:${network}:${channelAddress}:cumulative`
+      if (store) {
+        const localStored = await store.get(clientCumulativeKey)
+        if (localStored && typeof localStored === 'object' && 'amount' in localStored) {
+          localPrevious = BigInt((localStored as { amount: string }).amount)
+        }
+      }
+
+      // Take the maximum of the locally tracked baseline and the
+      // server-reported value. This prevents the server from artificially
+      // resetting the cumulative below what the client has already committed.
+      const serverReported = BigInt(request.methodDetails?.cumulativeAmount ?? '0')
+      const previousCumulative = localPrevious > serverReported ? localPrevious : serverReported
+
       const cumulativeAmount =
         context?.cumulativeAmount !== undefined
           ? BigInt(context.cumulativeAmount)
@@ -124,6 +142,12 @@ export function channel(parameters: channel.Parameters) {
       // Convert signature to hex string
       const sigHex = signature.toString('hex')
 
+      // Persist the signed cumulative amount so future calls can use the
+      // locally tracked baseline instead of trusting the server's claim.
+      if (store) {
+        await store.put(clientCumulativeKey, { amount: cumulativeAmount.toString() })
+      }
+
       onProgress?.({
         type: 'signed',
         cumulativeAmount: cumulativeAmount.toString(),
@@ -168,6 +192,16 @@ export declare namespace channel {
      * key's public key is used, which requires it to be a funded account.
      */
     sourceAccount?: string
+    /**
+     * Optional persistent store for client-side cumulative amount tracking.
+     *
+     * When provided, the client persists the last signed cumulative amount
+     * and uses it as the baseline for subsequent commitments, taking the
+     * maximum of the locally tracked value and the server-reported value.
+     * This prevents a malicious or compromised server from resetting the
+     * client's cumulative baseline to inflate the signed commitment.
+     */
+    store?: Store.Store
     /** Callback invoked at each lifecycle stage. */
     onProgress?: (event: ProgressEvent) => void
   }
