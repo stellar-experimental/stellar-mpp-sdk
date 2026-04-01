@@ -32,7 +32,7 @@ export const HORIZON_URLS: Record<NetworkId, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// USDC SEP-41 token contract addresses (SAC)
+// Well-known SAC (SEP-41) token contract addresses
 // ---------------------------------------------------------------------------
 
 /** USDC SEP-41 token contract address on Stellar mainnet (SAC). */
@@ -47,7 +47,7 @@ export const XLM_SAC_MAINNET = 'CAS3J7GYLGVE45MR3HPSFG352DAANEV5GGMFTO3IZIE4JMCD
 /** Native XLM SEP-41 token contract address on testnet (SAC). */
 export const XLM_SAC_TESTNET = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC'
 
-/** Map from network to well-known SEP-41 token addresses. */
+/** Map from network to well-known SAC (SEP-41) token addresses (USDC/XLM). */
 export const SAC_ADDRESSES = {
   [STELLAR_PUBNET]: {
     USDC: USDC_SAC_MAINNET,
