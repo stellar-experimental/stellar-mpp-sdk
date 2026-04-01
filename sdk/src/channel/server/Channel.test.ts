@@ -217,6 +217,7 @@ describe('stellar server channel', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
+      store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
     expect(method.intent).toBe('channel')
@@ -226,11 +227,12 @@ describe('stellar server channel', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
+      store: Store.memory(),
     })
     expect(typeof method.verify).toBe('function')
   })
 
-  it('accepts store for replay protection', () => {
+  it('requires store for replay protection and cumulative tracking', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
@@ -244,6 +246,7 @@ describe('stellar server channel', () => {
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       network: 'stellar:pubnet',
+      store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
   })
@@ -253,6 +256,7 @@ describe('stellar server channel', () => {
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       rpcUrl: 'https://custom.rpc.example.com',
+      store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
   })
@@ -261,6 +265,7 @@ describe('stellar server channel', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
   })
@@ -270,6 +275,7 @@ describe('stellar server channel', () => {
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       decimals: 6,
+      store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
   })
@@ -279,6 +285,7 @@ describe('stellar server channel', () => {
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       sourceAccount: Keypair.random().publicKey(),
+      store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
   })
@@ -315,6 +322,7 @@ describe('stellar server channel verification', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
     })
 
     await expect(
@@ -359,6 +367,7 @@ describe('stellar server channel verification', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
     })
 
     await expect(
@@ -404,6 +413,7 @@ describe('stellar server channel verification', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
     })
 
     await expect(
@@ -424,6 +434,7 @@ describe('stellar server channel verification', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
     })
 
     await expect(
@@ -448,6 +459,7 @@ describe('stellar server channel verification', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
     })
 
     await expect(
@@ -564,6 +576,7 @@ describe('stellar server channel verification', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
     })
 
     await expect(
@@ -597,6 +610,7 @@ describe('stellar server channel dispute detection', () => {
       commitmentKey: COMMITMENT_KEY,
       checkOnChainState: true,
       sourceAccount: MOCK_SOURCE_KEY.publicKey(),
+      store: Store.memory(),
     })
 
     await expect(
@@ -636,6 +650,7 @@ describe('stellar server channel dispute detection', () => {
       checkOnChainState: true,
       sourceAccount: MOCK_SOURCE_KEY.publicKey(),
       onDisputeDetected,
+      store: Store.memory(),
     })
 
     const receipt = await method.verify({
@@ -662,6 +677,7 @@ describe('stellar server channel dispute detection', () => {
       commitmentKey: COMMITMENT_KEY,
       checkOnChainState: true,
       sourceAccount: MOCK_SOURCE_KEY.publicKey(),
+      store: Store.memory(),
     })
 
     // NM-005: Fail closed — on-chain check failure now rejects the voucher
@@ -733,6 +749,7 @@ describe('stellar server channel dispute detection', () => {
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
       // checkOnChainState defaults to false
+      store: Store.memory(),
     })
 
     const receipt = await method.verify({
@@ -754,6 +771,7 @@ describe('stellar server channel dispute detection', () => {
       commitmentKey: COMMITMENT_KEY,
       checkOnChainState: true,
       // sourceAccount intentionally omitted
+      store: Store.memory(),
     })
 
     await expect(
@@ -812,6 +830,7 @@ describe('stellar server channel dispute detection', () => {
       commitmentKey: COMMITMENT_KEY,
       checkOnChainState: true,
       sourceAccount: MOCK_SOURCE_KEY.publicKey(),
+      store: Store.memory(),
     })
 
     await expect(
@@ -834,6 +853,7 @@ describe('stellar server channel open action', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
     })
 
     await expect(
@@ -854,6 +874,7 @@ describe('stellar server channel open action', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
     })
 
     await expect(
@@ -877,6 +898,7 @@ describe('stellar server channel open action', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
     })
 
     await expect(
@@ -941,6 +963,7 @@ describe('stellar server channel open action', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
     })
 
     await expect(

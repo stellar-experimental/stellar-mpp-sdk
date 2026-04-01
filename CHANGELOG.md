@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - Nest channel server `signer` + `feeBumpSigner` into `feePayer: { envelopeSigner, feeBumpSigner? }` to match charge server convention [#34](https://github.com/stellar/stellar-mpp-sdk/pull/34)
+- Make `store` required in `channel()` server — channel security model (replay protection, cumulative tracking, post-close rejection) depends entirely on the store; add startup info log advising multi-process deployments to use atomic put-if-absent semantics [#36](https://github.com/stellar/stellar-mpp-sdk/pull/36)
+- Add optional client-side `store` to `channel()` client — persists signed cumulative and uses `max(local, server-reported)` as baseline, preventing a rogue server from resetting the client's cumulative state [#36](https://github.com/stellar/stellar-mpp-sdk/pull/36)
 
 ## [0.3.0] - 2026-03-31
 

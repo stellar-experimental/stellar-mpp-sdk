@@ -1,5 +1,5 @@
 import { Keypair } from '@stellar/stellar-sdk'
-import { Challenge } from 'mppx'
+import { Challenge, Store } from 'mppx'
 import { describe, expect, it, vi } from 'vitest'
 
 const mockGetAccount = vi.fn()
@@ -289,6 +289,114 @@ describe('channel createCredential open action', () => {
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'))
     // 0 + 5000000 = 5000000
     expect(decoded.payload.amount).toBe('5000000')
+  })
+})
+
+describe('client-side cumulative tracking (store)', () => {
+  it('persists signed cumulative to store after signing', async () => {
+    const commitmentBytes = Buffer.from('store-persist-test')
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+
+    const store = Store.memory()
+    const method = channel({ commitmentKey: TEST_KEYPAIR, store })
+    const challenge = mockChallenge()
+
+    await method.createCredential({ challenge: challenge as any, context: {} as any })
+
+    const stored = (await store.get(`stellar:channel:client:${CHANNEL_ADDRESS}:cumulative`)) as {
+      amount: string
+    }
+    expect(stored).not.toBeNull()
+    expect(stored.amount).toBe('1000000') // 0 + 1000000
+  })
+
+  it('uses locally tracked cumulative over lower server-reported value', async () => {
+    const commitmentBytes = Buffer.from('local-over-server-test')
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+
+    const store = Store.memory()
+    // Simulate client has already committed 5000000 locally
+    await store.put(`stellar:channel:client:${CHANNEL_ADDRESS}:cumulative`, {
+      amount: '5000000',
+    })
+
+    const method = channel({ commitmentKey: TEST_KEYPAIR, store })
+    // Server reports only 2000000 (reset attack — would normally be 5000000)
+    const challenge = mockChallenge({
+      amount: '1000000',
+      methodDetails: {
+        reference: crypto.randomUUID(),
+        network: 'stellar:testnet',
+        cumulativeAmount: '2000000', // server under-reports local state
+      },
+    })
+
+    const credential = await method.createCredential({
+      challenge: challenge as any,
+      context: {} as any,
+    })
+
+    const token = credential.replace(/^Payment\s+/, '')
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'))
+    // Uses local (5000000) not server-reported (2000000) as base → 5000000 + 1000000 = 6000000
+    expect(decoded.payload.amount).toBe('6000000')
+  })
+
+  it('uses server-reported cumulative when no local state exists (first connection)', async () => {
+    const commitmentBytes = Buffer.from('first-connection-test')
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+
+    const store = Store.memory() // empty — no prior local state
+    const method = channel({ commitmentKey: TEST_KEYPAIR, store })
+    const challenge = mockChallenge({
+      amount: '500000',
+      methodDetails: {
+        reference: crypto.randomUUID(),
+        network: 'stellar:testnet',
+        cumulativeAmount: '3000000', // server reports existing cumulative
+      },
+    })
+
+    const credential = await method.createCredential({
+      challenge: challenge as any,
+      context: {} as any,
+    })
+
+    const token = credential.replace(/^Payment\s+/, '')
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'))
+    // No local state → falls back to server-reported 3000000 + 500000 = 3500000
+    expect(decoded.payload.amount).toBe('3500000')
+
+    // And persists the new cumulative for next call
+    const stored = (await store.get(`stellar:channel:client:${CHANNEL_ADDRESS}:cumulative`)) as {
+      amount: string
+    }
+    expect(stored.amount).toBe('3500000')
+  })
+
+  it('behaves identically to no-store when store is omitted', async () => {
+    const commitmentBytes = Buffer.from('no-store-compat-test')
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+
+    const method = channel({ commitmentKey: TEST_KEYPAIR }) // no store
+    const challenge = mockChallenge({
+      amount: '500000',
+      methodDetails: {
+        reference: crypto.randomUUID(),
+        network: 'stellar:testnet',
+        cumulativeAmount: '2000000',
+      },
+    })
+
+    const credential = await method.createCredential({
+      challenge: challenge as any,
+      context: {} as any,
+    })
+
+    const token = credential.replace(/^Payment\s+/, '')
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'))
+    // Without store: trusts server-reported 2000000 + 500000 = 2500000
+    expect(decoded.payload.amount).toBe('2500000')
   })
 })
 

@@ -252,6 +252,95 @@ describe('charge hash+feePayer rejection', () => {
   })
 })
 
+describe('charge push-mode verification (NM-001 regression)', () => {
+  it('rejects hash whose on-chain tx has wrong amount (NM-001)', async () => {
+    // Before the fix, verifySacTransfer swallowed all errors — any successful on-chain tx
+    // would be accepted as payment. Now it must throw on wrong transfer parameters.
+    const wrongAmountTx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 5000000n, // wrong — challenge expects 10000000
+      currency: USDC_SAC_TESTNET,
+    })
+    wrongAmountTx.sign(PAYER)
+
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: wrongAmountTx.toXDR(),
+    })
+
+    const cred = makeHashCredential({ hash: 'wrong-amount-tx-hash' })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('matching SAC transfer invocation')
+  })
+
+  it('rejects hash whose on-chain tx transfers to wrong recipient (NM-001)', async () => {
+    const wrongRecipient = Keypair.random().publicKey()
+    const tx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: wrongRecipient,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(PAYER)
+
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: tx.toXDR(),
+    })
+
+    const cred = makeHashCredential({ hash: 'wrong-recipient-tx-hash' })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('matching SAC transfer invocation')
+  })
+
+  it('rejects hash whose on-chain tx uses wrong currency (NM-001)', async () => {
+    const wrongCurrency = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC'
+    const tx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: wrongCurrency, // wrong SAC contract
+    })
+    tx.sign(PAYER)
+
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: tx.toXDR(),
+    })
+
+    const cred = makeHashCredential({ hash: 'wrong-currency-tx-hash' })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('matching SAC transfer invocation')
+  })
+
+  it('rejects hash when on-chain tx has no envelopeXdr (NM-001)', async () => {
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: undefined,
+    })
+
+    const cred = makeHashCredential({ hash: 'no-envelope-hash' })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('missing envelope XDR')
+  })
+})
+
 describe('charge tx hash dedup', () => {
   it('rejects a second verify with the same tx hash', async () => {
     mockGetTransaction.mockResolvedValue({

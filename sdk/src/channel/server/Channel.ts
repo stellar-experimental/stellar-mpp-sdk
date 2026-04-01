@@ -107,6 +107,10 @@ export function channel(parameters: channel.Parameters) {
   // read the same cumulative amount, both pass, and only one write wins.
   let verifyLock: Promise<unknown> = Promise.resolve()
 
+  logger.info(
+    `${LOG_PREFIX} Initialized. Multi-process deployments require the store to provide atomic put-if-absent semantics for replay protection.`,
+  )
+
   return Method.toServer(ChannelMethod, {
     defaults: {
       channel: channelAddress,
@@ -114,11 +118,9 @@ export function channel(parameters: channel.Parameters) {
     async request({ request }) {
       // Retrieve current cumulative amount from store
       let currentCumulative = '0'
-      if (store) {
-        const stored = await store.get(cumulativeKey)
-        if (stored && typeof stored === 'object' && 'amount' in stored) {
-          currentCumulative = (stored as { amount: string }).amount
-        }
+      const stored = await store.get(cumulativeKey)
+      if (stored && typeof stored === 'object' && 'amount' in stored) {
+        currentCumulative = (stored as { amount: string }).amount
       }
 
       return {
@@ -154,17 +156,15 @@ export function channel(parameters: channel.Parameters) {
 
     // NM-001: Reject credentials once the channel has been closed on-chain.
     // Applied to all actions including 'open'.
-    if (store) {
-      const closed = await store.get(`${STORE_PREFIX}:closed:${channelAddress}`)
-      if (closed) {
-        logger.warn(`${LOG_PREFIX} Rejecting credential — channel already closed`, {
-          channel: channelAddress,
-        })
-        throw new ChannelVerificationError(
-          `${LOG_PREFIX} Channel has been closed. No further credentials accepted.`,
-          { channel: channelAddress },
-        )
-      }
+    const closed = await store.get(`${STORE_PREFIX}:closed:${channelAddress}`)
+    if (closed) {
+      logger.warn(`${LOG_PREFIX} Rejecting credential — channel already closed`, {
+        channel: channelAddress,
+      })
+      throw new ChannelVerificationError(
+        `${LOG_PREFIX} Channel has been closed. No further credentials accepted.`,
+        { channel: channelAddress },
+      )
     }
 
     // Replay protection — applied to all actions including 'open'.
@@ -173,14 +173,12 @@ export function channel(parameters: channel.Parameters) {
     // deployments MUST use a store with atomic put-if-absent semantics.
     // Check early but only mark as used AFTER successful verification to
     // avoid permanently burning a challenge on transient failures.
-    const challengeStoreKey = store ? `${STORE_PREFIX}:challenge:${challenge.id}` : undefined
-    if (store && challengeStoreKey) {
-      const existing = await store.get(challengeStoreKey)
-      if (existing) {
-        throw new ChannelVerificationError('Challenge already used. Replay rejected.', {
-          channel: channelAddress,
-        })
-      }
+    const challengeStoreKey = `${STORE_PREFIX}:challenge:${challenge.id}`
+    const existingChallenge = await store.get(challengeStoreKey)
+    if (existingChallenge) {
+      throw new ChannelVerificationError('Challenge already used. Replay rejected.', {
+        channel: channelAddress,
+      })
     }
 
     // Dispatch open action to its own handler — it has completely
@@ -296,11 +294,9 @@ export function channel(parameters: channel.Parameters) {
 
     // Retrieve the previous cumulative amount
     let previousCumulative = 0n
-    if (store) {
-      const stored = await store.get(cumulativeKey)
-      if (stored && typeof stored === 'object' && 'amount' in stored) {
-        previousCumulative = BigInt((stored as { amount: string }).amount)
-      }
+    const storedCumulative = await store.get(cumulativeKey)
+    if (storedCumulative && typeof storedCumulative === 'object' && 'amount' in storedCumulative) {
+      previousCumulative = BigInt((storedCumulative as { amount: string }).amount)
     }
 
     // Reject zero or negative requested amounts
@@ -393,11 +389,9 @@ export function channel(parameters: channel.Parameters) {
     }
 
     // Update cumulative amount in store
-    if (store) {
-      await store.put(cumulativeKey, {
-        amount: commitmentAmount.toString(),
-      })
-    }
+    await store.put(cumulativeKey, {
+      amount: commitmentAmount.toString(),
+    })
 
     // Dispatch on action
     if (action === 'close') {
@@ -463,18 +457,14 @@ export function channel(parameters: channel.Parameters) {
 
       // Mark channel as closed in store
       logger.debug(`${LOG_PREFIX} Channel closed, marking in store`)
-      if (store) {
-        await store.put(`${STORE_PREFIX}:closed:${channelAddress}`, {
-          closedAt: new Date().toISOString(),
-          txHash: sendResult.hash,
-          amount: commitmentAmount.toString(),
-        })
-      }
+      await store.put(`${STORE_PREFIX}:closed:${channelAddress}`, {
+        closedAt: new Date().toISOString(),
+        txHash: sendResult.hash,
+        amount: commitmentAmount.toString(),
+      })
 
       // Mark challenge as used only after successful close settlement
-      if (store && challengeStoreKey) {
-        await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
-      }
+      await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
 
       return Receipt.from({
         method: 'stellar',
@@ -486,9 +476,7 @@ export function channel(parameters: channel.Parameters) {
     }
 
     // Mark challenge as used only after successful voucher verification
-    if (store && challengeStoreKey) {
-      await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
-    }
+    await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
 
     return Receipt.from({
       method: 'stellar',
@@ -505,7 +493,7 @@ export function channel(parameters: channel.Parameters) {
    * broadcasts the transaction, waits for confirmation, then initialises
    * the cumulative amount in the store.
    */
-  async function doVerifyOpen(credential: any, challengeStoreKey: string | undefined) {
+  async function doVerifyOpen(credential: any, challengeStoreKey: string) {
     const { challenge } = credential
     const { externalId } = challenge.request
     const payload = credential.payload
@@ -568,14 +556,12 @@ export function channel(parameters: channel.Parameters) {
     }
 
     // Reject if the channel is already opened (cumulativeKey already set).
-    if (store) {
-      const existing = await store.get(cumulativeKey)
-      if (existing) {
-        throw new ChannelVerificationError(
-          `${LOG_PREFIX} Channel is already open. Cannot replay an open credential.`,
-          { channel: channelAddress },
-        )
-      }
+    const existingChannel = await store.get(cumulativeKey)
+    if (existingChannel) {
+      throw new ChannelVerificationError(
+        `${LOG_PREFIX} Channel is already open. Cannot replay an open credential.`,
+        { channel: channelAddress },
+      )
     }
 
     // Verify the initial commitment signature via prepare_commitment simulation
@@ -668,16 +654,12 @@ export function channel(parameters: channel.Parameters) {
     }
 
     // Initialise cumulative amount in the store
-    if (store) {
-      await store.put(cumulativeKey, {
-        amount: commitmentAmount.toString(),
-      })
-    }
+    await store.put(cumulativeKey, {
+      amount: commitmentAmount.toString(),
+    })
 
     // Mark challenge as used only after successful open settlement
-    if (store && challengeStoreKey) {
-      await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
-    }
+    await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
 
     return Receipt.from({
       method: 'stellar',
@@ -860,8 +842,20 @@ export declare namespace channel {
      * key's public key is used, which requires it to be a funded account.
      */
     sourceAccount?: string
-    /** Store for replay protection and cumulative amount tracking. */
-    store?: Store.Store
+    /**
+     * Persistent store for replay protection, cumulative amount tracking,
+     * and channel lifecycle state (open/closed).
+     *
+     * Required — the channel security model depends entirely on this store.
+     * Without it, replay attacks, non-monotonic commitments, and post-close
+     * voucher acceptance are all possible.
+     *
+     * For multi-process deployments (e.g., multiple Node.js pods behind a
+     * load balancer), the store must provide atomic put-if-absent semantics
+     * to prevent TOCTOU races in replay protection. The in-process
+     * `verifyLock` serializes calls within a single process only.
+     */
+    store: Store.Store
     /** Logger for debug/warn messages. @default noopLogger */
     logger?: Logger
   }
