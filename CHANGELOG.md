@@ -7,10 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-01
+
+### Changed
+
+- **BREAKING:** Make `store` required in `channel()` server — channel security model (replay protection, cumulative tracking, post-close rejection) depends entirely on the store; add startup info log advising multi-process deployments to use atomic put-if-absent semantics [#36](https://github.com/stellar/stellar-mpp-sdk/pull/36)
+- **BREAKING:** Verify SEP-41 transfer `from` address against credential source in both push and pull modes — `credential.source` (DID) is now mandatory; prevents hash-theft attacks where a third party intercepts a client's tx hash and claims the payment benefit before the legitimate client can [#36](https://github.com/stellar/stellar-mpp-sdk/pull/36)
 - Nest channel server `signer` + `feeBumpSigner` into `feePayer: { envelopeSigner, feeBumpSigner? }` to match charge server convention [#34](https://github.com/stellar/stellar-mpp-sdk/pull/34)
-- Make `store` required in `channel()` server — channel security model (replay protection, cumulative tracking, post-close rejection) depends entirely on the store; add startup info log advising multi-process deployments to use atomic put-if-absent semantics [#36](https://github.com/stellar/stellar-mpp-sdk/pull/36)
-- Add optional client-side `store` to `channel()` client — persists signed cumulative and uses `max(local, server-reported)` as baseline, preventing a rogue server from resetting the client's cumulative state [#36](https://github.com/stellar/stellar-mpp-sdk/pull/36)
-- Verify SAC transfer `from` address against credential source in both push and pull modes — prevents hash-theft attacks where a third party intercepts a client's tx hash and claims the payment benefit before the legitimate client can [#36](https://github.com/stellar/stellar-mpp-sdk/pull/36)
+
+### Added
+
+- Optional client-side `store` to `channel()` client — persists signed cumulative and uses `max(local, server-reported)` as baseline, preventing a rogue server from resetting the client's cumulative state [#36](https://github.com/stellar/stellar-mpp-sdk/pull/36)
 
 ## [0.3.0] - 2026-03-31
 
@@ -40,7 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Env parsing primitives for Stellar-aware configuration
 - Shared utilities: fee bump wrapping, transaction polling with backoff, Soroban simulation, unit conversion, keypair resolution
 
-[Unreleased]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/stellar/stellar-mpp-sdk/releases/tag/v0.2.0
