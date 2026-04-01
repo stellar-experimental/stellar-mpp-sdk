@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix charge client so it sends a transaction with signed auth entries when the server is sponsoring transaction fees ([#37](https://github.com/stellar/stellar-mpp-sdk/pull/36))
 - Fix CHANGELOG entries for v0.3.0 ([#36](https://github.com/stellar/stellar-mpp-sdk/pull/36))
 
 ## [0.3.0] - 2026-03-31
