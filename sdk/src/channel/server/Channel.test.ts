@@ -213,6 +213,15 @@ function makeSignedOpenCredential(opts: {
 }
 
 describe('stellar server channel', () => {
+  it('throws at construction when store is omitted (JS runtime guard)', () => {
+    expect(() =>
+      channel({
+        channel: CHANNEL_ADDRESS,
+        commitmentKey: COMMITMENT_KEY.publicKey(),
+      } as any),
+    ).toThrow('store is required')
+  })
+
   it('creates a server method with correct name and intent', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,

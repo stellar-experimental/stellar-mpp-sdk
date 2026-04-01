@@ -303,7 +303,9 @@ describe('client-side cumulative tracking (store)', () => {
 
     await method.createCredential({ challenge: challenge as any, context: {} as any })
 
-    const stored = (await store.get(`stellar:channel:client:${CHANNEL_ADDRESS}:cumulative`)) as {
+    const stored = (await store.get(
+      `stellar:channel:client:stellar:testnet:${CHANNEL_ADDRESS}:cumulative`,
+    )) as {
       amount: string
     }
     expect(stored).not.toBeNull()
@@ -316,7 +318,7 @@ describe('client-side cumulative tracking (store)', () => {
 
     const store = Store.memory()
     // Simulate client has already committed 5000000 locally
-    await store.put(`stellar:channel:client:${CHANNEL_ADDRESS}:cumulative`, {
+    await store.put(`stellar:channel:client:stellar:testnet:${CHANNEL_ADDRESS}:cumulative`, {
       amount: '5000000',
     })
 
@@ -368,7 +370,9 @@ describe('client-side cumulative tracking (store)', () => {
     expect(decoded.payload.amount).toBe('3500000')
 
     // And persists the new cumulative for next call
-    const stored = (await store.get(`stellar:channel:client:${CHANNEL_ADDRESS}:cumulative`)) as {
+    const stored = (await store.get(
+      `stellar:channel:client:stellar:testnet:${CHANNEL_ADDRESS}:cumulative`,
+    )) as {
       amount: string
     }
     expect(stored.amount).toBe('3500000')

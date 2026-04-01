@@ -362,11 +362,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
   })
 
   it('rejects credential with malformed source DID', async () => {
-    mockGetTransaction.mockResolvedValueOnce({
-      status: 'SUCCESS',
-      envelopeXdr: 'unused',
-    })
-
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS', envelopeXdr: 'unused' })
     const challenge = Challenge.from({
       id: `test-${crypto.randomUUID()}`,
       realm: 'localhost',
@@ -389,6 +385,58 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
     ).rejects.toThrow('invalid format')
+  })
+
+  it('rejects source DID with non-stellar namespace', async () => {
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS', envelopeXdr: 'unused' })
+    const challenge = Challenge.from({
+      id: `test-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: { network: 'stellar:testnet' },
+      },
+    })
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'hash', hash: 'eip155-hash' } }),
+      { source: `did:pkh:eip155:1:0xabc123` },
+    )
+
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('invalid format')
+  })
+
+  it('rejects source DID with invalid Stellar public key', async () => {
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS', envelopeXdr: 'unused' })
+    const challenge = Challenge.from({
+      id: `test-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: { network: 'stellar:testnet' },
+      },
+    })
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'hash', hash: 'bad-key-hash' } }),
+      { source: 'did:pkh:stellar:testnet:NOT_A_VALID_KEY' },
+    )
+
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('invalid Stellar public key')
   })
 })
 

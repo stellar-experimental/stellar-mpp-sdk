@@ -63,6 +63,13 @@ const LOG_PREFIX = '[stellar:channel]'
 const STORE_PREFIX = 'stellar:channel'
 
 export function channel(parameters: channel.Parameters) {
+  if (!parameters.store) {
+    throw new ChannelVerificationError(
+      `${LOG_PREFIX} A store is required for channel mode. Provide a Store instance for replay protection, cumulative tracking, and channel lifecycle state.`,
+      {},
+    )
+  }
+
   const {
     channel: channelAddress,
     checkOnChainState = false,

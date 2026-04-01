@@ -553,6 +553,7 @@ function verifyFromRawOps(
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Transaction does not contain a matching SAC transfer invocation.`,
       {
+        from: expected.from,
         currency: expected.currency,
         recipient: expected.recipient,
         amount: expected.amount.toString(),
@@ -713,8 +714,23 @@ function publicKeyFromDID(source: unknown): string {
   }
   const parts = source.split(':')
   // did : pkh : stellar : {network} : {pubkey}
-  if (parts.length >= 4 && parts[0] === 'did' && parts[1] === 'pkh') {
-    return parts[parts.length - 1]
+  if (
+    parts.length === 5 &&
+    parts[0] === 'did' &&
+    parts[1] === 'pkh' &&
+    parts[2] === 'stellar' &&
+    parts[3] // non-empty network
+  ) {
+    const pubKey = parts[4]
+    try {
+      Keypair.fromPublicKey(pubKey)
+    } catch {
+      throw new PaymentVerificationError(
+        `${LOG_PREFIX} Credential source contains an invalid Stellar public key.`,
+        { source },
+      )
+    }
+    return pubKey
   }
   throw new PaymentVerificationError(
     `${LOG_PREFIX} Credential source has invalid format — expected did:pkh:stellar:{network}:{pubkey}.`,

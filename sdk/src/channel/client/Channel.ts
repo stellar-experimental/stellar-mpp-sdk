@@ -77,7 +77,7 @@ export function channel(parameters: channel.Parameters) {
       // The client tracks the last signed cumulative independently of the
       // server to prevent a rogue server from resetting the baseline.
       let localPrevious = 0n
-      const clientCumulativeKey = `stellar:channel:client:${channelAddress}:cumulative`
+      const clientCumulativeKey = `stellar:channel:client:${network}:${channelAddress}:cumulative`
       if (store) {
         const localStored = await store.get(clientCumulativeKey)
         if (localStored && typeof localStored === 'object' && 'amount' in localStored) {
