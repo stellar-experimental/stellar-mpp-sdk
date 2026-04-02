@@ -49,7 +49,7 @@ const STORE_PREFIX = 'stellar:charge'
 /**
  * Creates a Stellar charge method for use on the **server**.
  *
- * Verifies and settles Soroban SAC `transfer` invocations received as
+ * Verifies and settles SEP-41 token `transfer` invocations received as
  * pull-mode (signed XDR) or push-mode (on-chain tx hash) credentials.
  *
  * @see https://paymentauth.org/draft-stellar-charge-00
@@ -68,34 +68,29 @@ export function charge(parameters: charge.Parameters) {
     recipient,
     rpcUrl,
     simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
-    store,
+    store = Store.memory(),
   } = parameters
 
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
   const networkPassphrase = NETWORK_PASSPHRASE[network]
   const server = new rpc.Server(resolvedRpcUrl)
 
-  const signerKeypair = feePayer ? resolveKeypair(feePayer.envelopeSigner) : undefined
-  const feeBumpKeypair = feePayer?.feeBumpSigner
-    ? resolveKeypair(feePayer.feeBumpSigner)
-    : undefined
+  const envelopeKP = feePayer ? resolveKeypair(feePayer.envelopeSigner) : undefined
+  const feeBumpKP = feePayer?.feeBumpSigner ? resolveKeypair(feePayer.feeBumpSigner) : undefined
 
   // Serialize verify operations to prevent concurrent race conditions
   // on tx hash deduplication (get/put is not atomic).
   let verifyLock: Promise<unknown> = Promise.resolve()
 
   return Method.toServer(Methods.charge, {
-    defaults: {
-      currency,
-      recipient,
-    },
+    defaults: { currency, recipient },
     request({ request }) {
       return {
         ...request,
         amount: toBaseUnits(request.amount, decimals),
         methodDetails: {
           network,
-          ...(signerKeypair ? { feePayer: true } : {}),
+          ...(envelopeKP ? { feePayer: true } : {}),
         },
       }
     },
@@ -103,8 +98,8 @@ export function charge(parameters: charge.Parameters) {
       // Serialize through the lock to prevent concurrent race conditions
       const result = await new Promise<Receipt.Receipt>((resolve, reject) => {
         verifyLock = verifyLock.then(
-          () => doVerify(credential).then(resolve, reject),
-          () => doVerify(credential).then(resolve, reject),
+          () => doVerify(credential).then(resolve, reject), // previous succeeded
+          () => doVerify(credential).then(resolve, reject), // previous failed
         )
       })
       return result
@@ -124,12 +119,10 @@ export function charge(parameters: charge.Parameters) {
 
     // Check challenge replay early, but only mark as used AFTER successful
     // verification to avoid permanently burning a challenge on transient failures.
-    const challengeStoreKey = store ? `${STORE_PREFIX}:challenge:${challenge.id}` : undefined
-    if (store && challengeStoreKey) {
-      const existing = await store.get(challengeStoreKey)
-      if (existing) {
-        throw new PaymentVerificationError(`${LOG_PREFIX} Challenge already used. Replay rejected.`)
-      }
+    const challengeStoreKey = `${STORE_PREFIX}:challenge:${challenge.id}`
+    const existingChallenge = await store.get(challengeStoreKey)
+    if (existingChallenge) {
+      throw new PaymentVerificationError(`${LOG_PREFIX} Challenge already used. Replay rejected.`)
     }
 
     const { amount, externalId } = challengeRequest
@@ -153,21 +146,17 @@ export function charge(parameters: charge.Parameters) {
         // Check tx hash dedup BEFORE verification to reject known replays
         // early, but only mark as used AFTER successful verification to
         // avoid permanently burning a hash on transient failures.
-        if (store) {
-          const hashKey = `${STORE_PREFIX}:hash:${hash}`
-          const hashUsed = await store.get(hashKey)
-          if (hashUsed) {
-            logger.warn(`${LOG_PREFIX} Verification failed`, {
-              error: 'Transaction hash already used',
-              hash,
-            })
-            throw new PaymentVerificationError(
-              `${LOG_PREFIX} Transaction hash already used. Replay rejected.`,
-              {
-                hash,
-              },
-            )
-          }
+        const hashKey = `${STORE_PREFIX}:hash:${hash}`
+        const hashUsed = await store.get(hashKey)
+        if (hashUsed) {
+          logger.warn(`${LOG_PREFIX} Verification failed`, {
+            error: 'Transaction hash already used',
+            hash,
+          })
+          throw new PaymentVerificationError(
+            `${LOG_PREFIX} Transaction hash already used. Replay rejected.`,
+            { hash },
+          )
         }
 
         const txResult = await pollTransaction(server, hash, {
@@ -192,10 +181,8 @@ export function charge(parameters: charge.Parameters) {
         )
 
         // Mark challenge + hash as used only after successful verification
-        if (store) {
-          await store.put(`${STORE_PREFIX}:hash:${hash}`, { usedAt: new Date().toISOString() })
-          await store.put(challengeStoreKey!, { usedAt: new Date().toISOString() })
-        }
+        await store.put(`${STORE_PREFIX}:hash:${hash}`, { usedAt: new Date().toISOString() })
+        await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
 
         return Receipt.from({
           method: 'stellar',
@@ -214,7 +201,7 @@ export function charge(parameters: charge.Parameters) {
           parsed instanceof FeeBumpTransaction ? parsed.innerTransaction : (parsed as Transaction)
 
         verifyExactlyOneInvokeOp(tx)
-        verifyNoSigningAddressInSources(tx, signerKeypair, feeBumpKeypair)
+        verifyNoSigningAddressInSources(tx, envelopeKP, feeBumpKP)
 
         const expectedFrom = publicKeyFromDID(credential.source)
         verifySacInvocation(tx, {
@@ -228,7 +215,7 @@ export function charge(parameters: charge.Parameters) {
           | Transaction
           | FeeBumpTransaction
 
-        if (!signerKeypair && tx.source === ALL_ZEROS) {
+        if (!envelopeKP && tx.source === ALL_ZEROS) {
           logger.warn(`${LOG_PREFIX} Verification failed`, {
             error: 'Sponsored source without feePayer',
           })
@@ -243,14 +230,14 @@ export function charge(parameters: charge.Parameters) {
           ? Math.floor(new Date(challenge.expires).getTime() / 1000)
           : undefined
 
-        if (signerKeypair && tx.source === ALL_ZEROS) {
+        if (envelopeKP && tx.source === ALL_ZEROS) {
           // ── Sponsored path ──────────────────────────────────────────
 
-          await validateAuthEntries(tx, signerKeypair.publicKey(), expiresTimestamp)
+          await validateAuthEntries(tx, envelopeKP.publicKey(), expiresTimestamp)
 
           // Rebuild the tx with the signer's account as source
           logger.debug(`${LOG_PREFIX} Rebuilding sponsored tx...`)
-          const serverAccount = await server.getAccount(signerKeypair.publicKey())
+          const serverAccount = await server.getAccount(envelopeKP.publicKey())
           const envelopeTx = tx.toEnvelope().v1().tx()
           const sorobanData = envelopeTx.ext().sorobanData()
           const rebuilt = new TransactionBuilder(serverAccount, {
@@ -270,18 +257,18 @@ export function charge(parameters: charge.Parameters) {
             expectedAmount,
             expectedCurrency,
             expectedRecipient,
-            signerKeypair.publicKey(),
+            envelopeKP.publicKey(),
             expectedFrom,
           )
 
-          rebuiltTx.sign(signerKeypair)
+          rebuiltTx.sign(envelopeKP)
           txToSubmit = rebuiltTx
 
           // Fee bump wrapping (sponsored path only — spec requires
           // unsponsored transactions to be submitted without modification)
-          if (feeBumpKeypair) {
+          if (feeBumpKP) {
             logger.debug(`${LOG_PREFIX} Fee bump wrapping`)
-            txToSubmit = wrapFeeBump(txToSubmit, feeBumpKeypair, {
+            txToSubmit = wrapFeeBump(txToSubmit, feeBumpKP, {
               networkPassphrase,
               maxFeeStroops: maxFeeBumpStroops,
             })
@@ -307,7 +294,7 @@ export function charge(parameters: charge.Parameters) {
             expectedAmount,
             expectedCurrency,
             expectedRecipient,
-            signerKeypair?.publicKey(),
+            envelopeKP?.publicKey(),
             expectedFrom,
           )
         }
@@ -351,9 +338,7 @@ export function charge(parameters: charge.Parameters) {
         }
 
         // Mark challenge as used only after successful settlement
-        if (store && challengeStoreKey) {
-          await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
-        }
+        await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
 
         return Receipt.from({
           method: 'stellar',
@@ -574,7 +559,7 @@ function verifyNoSigningAddressInSources(
 }
 
 /**
- * Validates that the transaction's single operation is a SAC `transfer`
+ * Validates that the transaction's single operation is a SEP-41 `transfer`
  * contract invocation matching the expected parameters.
  *
  * Inspects the raw XDR envelope directly. Each validation step throws a
@@ -664,7 +649,7 @@ function verifySacInvocation(
 
 /**
  * Verifies an on-chain transaction result (push mode) contains a valid
- * SAC `transfer` invocation matching the expected parameters.
+ * SEP-41 `transfer` invocation matching the expected parameters.
  *
  * Parses the envelope XDR from the RPC response, then delegates to
  * {@link verifyExactlyOneInvokeOp} and {@link verifySacInvocation}.
@@ -861,10 +846,27 @@ function publicKeyFromDID(source: unknown): string {
 
 export declare namespace charge {
   type Parameters = {
+    /** Recipient Stellar public key (G…) or contract address (C…). */
     recipient: string
+    /**
+     * SEP-41 token contract address (C…) for the asset to transfer.
+     *
+     * This is the Soroban contract ID of the token, not the classic asset code.
+     * For SAC-wrapped native assets use the corresponding SAC address, e.g.
+     * `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` for XLM
+     * on testnet.
+     */
     currency: string
+    /** Number of decimal places for amount conversion. @defaultValue `7` */
     decimals?: number
+    /** CAIP-2 network identifier. @defaultValue `"stellar:testnet"` */
     network?: NetworkId
+    /**
+     * Soroban RPC endpoint URL.
+     *
+     * @defaultValue `"https://soroban-testnet.stellar.org"` (testnet) or
+     *   `"https://soroban-rpc.mainnet.stellar.gateway.fm"` (pubnet)
+     */
     rpcUrl?: string
     /**
      * Server-sponsored fee configuration.
@@ -880,12 +882,27 @@ export declare namespace charge {
       /** Optional fee bump signer — wraps the sponsored tx in a FeeBumpTransaction. */
       feeBumpSigner?: Keypair | string
     }
+    /**
+     * Replay protection store for challenge and tx hash deduplication.
+     *
+     * Defaults to an in-memory store when omitted — suitable for development
+     * and single-process deployments only. In production, pass a persistent
+     * store (e.g. backed by Redis, PostgreSQL, or a similar durable backend)
+     * so that consumed hashes and challenges survive restarts and are visible
+     * across all instances.
+     */
     store?: Store.Store
+    /** Maximum fee in stroops for the inner transaction and fee bump. @defaultValue `10_000_000` (1 XLM) */
     maxFeeBumpStroops?: number
+    /** Maximum number of polling attempts when waiting for tx confirmation. @defaultValue `30` */
     pollMaxAttempts?: number
+    /** Base delay between polling attempts in milliseconds. @defaultValue `1_000` */
     pollDelayMs?: number
+    /** Overall timeout for transaction polling in milliseconds. @defaultValue `30_000` */
     pollTimeoutMs?: number
+    /** Timeout for Soroban RPC simulation calls in milliseconds. @defaultValue `10_000` */
     simulationTimeoutMs?: number
+    /** Logger instance (pino and console compatible API). Defaults to a no-op logger. */
     logger?: Logger
   }
 }

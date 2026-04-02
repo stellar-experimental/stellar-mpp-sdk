@@ -44,6 +44,7 @@ describe('stellar server charge', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
     expect(method.intent).toBe('charge')
@@ -53,15 +54,15 @@ describe('stellar server charge', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
     })
     expect(typeof method.verify).toBe('function')
   })
 
-  it('accepts store for replay protection', () => {
+  it('defaults to in-memory store when store is omitted', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
-      store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
   })
@@ -70,6 +71,7 @@ describe('stellar server charge', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
       network: 'stellar:pubnet',
     })
     expect(method.name).toBe('stellar')
@@ -79,6 +81,7 @@ describe('stellar server charge', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
       rpcUrl: 'https://custom.rpc.example.com',
     })
     expect(method.name).toBe('stellar')
@@ -124,6 +127,7 @@ describe('stellar server charge', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
       decimals: 6,
     })
     expect(method.name).toBe('stellar')
@@ -139,6 +143,7 @@ describe('charge request transform', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
       network: 'stellar:testnet',
     })
     const transformed = (method as any).request({
@@ -151,6 +156,7 @@ describe('charge request transform', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
       network: 'stellar:pubnet',
     })
     const transformed = (method as any).request({
@@ -175,6 +181,7 @@ describe('charge request transform', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
     })
     const transformed = (method as any).request({
       request: { amount: '1', currency: USDC_SAC_TESTNET, recipient: RECIPIENT },
@@ -186,6 +193,7 @@ describe('charge request transform', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
       decimals: 7,
     })
     const transformed = (method as any).request({
@@ -251,6 +259,7 @@ describe('charge hash+feePayer rejection', () => {
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
       feePayer: { envelopeSigner: Keypair.random() },
+      store: Store.memory(),
     })
 
     await expect(
@@ -298,7 +307,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
       { source: `did:pkh:stellar:testnet:${attackerKey}` },
     )
 
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -339,7 +348,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
       { source: `did:pkh:stellar:testnet:${client.publicKey()}` },
     )
 
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     const receipt = await method.verify({
       credential: cred as any,
@@ -356,7 +365,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
 
     const cred = makeHashCredential({ hash: 'no-source-hash' }) // source field absent
 
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -382,7 +391,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
       { source: 'not-a-valid-did' },
     )
 
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -408,7 +417,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
       { source: `did:pkh:eip155:1:0xabc123` },
     )
 
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -434,7 +443,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
       { source: 'did:pkh:stellar:testnet:NOT_A_VALID_KEY' },
     )
 
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -464,7 +473,7 @@ describe('charge push-mode verification (NM-001 regression)', () => {
       hash: 'wrong-amount-tx-hash',
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
     })
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -491,7 +500,7 @@ describe('charge push-mode verification (NM-001 regression)', () => {
       hash: 'wrong-recipient-tx-hash',
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
     })
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -518,7 +527,7 @@ describe('charge push-mode verification (NM-001 regression)', () => {
       hash: 'wrong-currency-tx-hash',
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
     })
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -535,7 +544,7 @@ describe('charge push-mode verification (NM-001 regression)', () => {
       hash: 'no-envelope-hash',
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
     })
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -693,7 +702,7 @@ describe('charge transaction verification', () => {
     tx.sign(PAYER)
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -739,6 +748,7 @@ describe('charge transaction verification', () => {
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
       feePayer: { envelopeSigner: Keypair.random() },
+      store: Store.memory(),
     })
 
     await expect(
@@ -761,7 +771,7 @@ describe('charge transaction verification', () => {
     const cred = Object.assign(makeTransactionCredential(tx.toXDR()), {
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
     })
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -780,7 +790,7 @@ describe('charge transaction verification', () => {
     tx.sign(PAYER)
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -798,7 +808,7 @@ describe('charge transaction verification', () => {
     tx.sign(PAYER)
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -817,7 +827,7 @@ describe('charge transaction verification', () => {
     tx.sign(PAYER)
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -835,7 +845,7 @@ describe('charge transaction verification', () => {
 
     const cred = makeTransactionCredential(tx.toXDR())
     // No feePayer configured
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -860,7 +870,7 @@ describe('charge transaction verification', () => {
       payload: { type: 'unknown' as any },
     })
 
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -955,7 +965,7 @@ describe('charge transaction verification', () => {
       { source: `did:pkh:stellar:testnet:${PAYER.publicKey()}` },
     )
 
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -981,7 +991,7 @@ describe('charge transaction verification', () => {
     mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     const receipt = await method.verify({
       credential: cred as any,
@@ -1010,7 +1020,7 @@ describe('charge transaction verification', () => {
     mockSendTransaction.mockRejectedValueOnce(new Error('RPC down'))
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -1036,7 +1046,7 @@ describe('charge transaction verification', () => {
     mockGetTransaction.mockResolvedValue({ status: 'FAILED', resultXdr: 'tx_failed' })
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -1061,7 +1071,7 @@ describe('charge transaction verification', () => {
     mockSendTransaction.mockResolvedValueOnce({ hash: 'error-hash', status: 'ERROR' })
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -1086,7 +1096,7 @@ describe('charge transaction verification', () => {
     mockSendTransaction.mockResolvedValueOnce({ hash: 'dup-hash', status: 'DUPLICATE' })
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -1159,7 +1169,7 @@ describe('charge simulation event validation', () => {
     })
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -1182,7 +1192,7 @@ describe('charge simulation event validation', () => {
     })
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -1221,7 +1231,7 @@ describe('charge simulation event validation', () => {
     })
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -1256,7 +1266,7 @@ describe('charge transaction structure validation', () => {
     tx.sign(PAYER)
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -1283,7 +1293,7 @@ describe('charge transaction structure validation', () => {
     tx.sign(PAYER)
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -1311,7 +1321,7 @@ describe('charge SAC invocation validation (fail-closed)', () => {
     tx.sign(PAYER)
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
@@ -1339,6 +1349,7 @@ describe('charge server signing address protection', () => {
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
       feePayer: { envelopeSigner: signerKp },
+      store: Store.memory(),
     })
 
     await expect(
@@ -1366,6 +1377,7 @@ describe('charge server signing address protection', () => {
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
       feePayer: { envelopeSigner: signerKp, feeBumpSigner: feeBumpKp },
+      store: Store.memory(),
     })
 
     await expect(
@@ -1392,7 +1404,7 @@ describe('charge server signing address protection', () => {
     mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
 
     const cred = makeTransactionCredential(tx.toXDR())
-    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory() })
 
     const receipt = await method.verify({
       credential: cred as any,
@@ -1454,6 +1466,7 @@ describe('charge sponsored path fee cap', () => {
       currency: USDC_SAC_TESTNET,
       feePayer: { envelopeSigner: signerKp },
       maxFeeBumpStroops: 10_000_000,
+      store: Store.memory(),
     })
 
     await method.verify({ credential: cred as any, request: cred.challenge.request })
