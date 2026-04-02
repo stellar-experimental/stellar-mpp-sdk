@@ -71,6 +71,14 @@ export function charge(parameters: charge.Parameters) {
     store = Store.memory(),
   } = parameters
 
+  if (!parameters.store) {
+    logger.warn(
+      `${LOG_PREFIX} No store provided — using in-memory store. ` +
+        `Replay protection will not survive restarts or work across multiple instances. ` +
+        `Pass a persistent store in production.`,
+    )
+  }
+
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
   const networkPassphrase = NETWORK_PASSPHRASE[network]
   const server = new rpc.Server(resolvedRpcUrl)
@@ -664,7 +672,8 @@ function verifyTokenTransferFromResult(
   let innerTx: Transaction
   try {
     const parsed = TransactionBuilder.fromXDR(envelope.toXDR('base64'), networkPassphrase)
-    innerTx = parsed instanceof FeeBumpTransaction ? parsed.innerTransaction : (parsed as Transaction)
+    innerTx =
+      parsed instanceof FeeBumpTransaction ? parsed.innerTransaction : (parsed as Transaction)
   } catch {
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Could not parse transaction envelope for verification.`,

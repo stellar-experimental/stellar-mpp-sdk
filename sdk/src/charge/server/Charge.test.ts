@@ -69,6 +69,18 @@ describe('stellar server charge', () => {
     expect(method.name).toBe('stellar')
   })
 
+  it('warns when no store is provided', () => {
+    const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() }
+    charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, logger })
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No store provided'))
+  })
+
+  it('does not warn when a store is explicitly provided', () => {
+    const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() }
+    charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory(), logger })
+    expect(logger.warn).not.toHaveBeenCalled()
+  })
+
   it('accepts custom network', () => {
     const method = charge({
       recipient: RECIPIENT,
