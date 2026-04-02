@@ -7,7 +7,8 @@ import {
   rpc,
   xdr,
 } from '@stellar/stellar-sdk'
-import { Method, Receipt, Store } from 'mppx'
+import { type Challenge, type Credential, Method, Receipt, Store } from 'mppx'
+import type { z } from 'zod/mini'
 import {
   ALL_ZEROS,
   DEFAULT_DECIMALS,
@@ -34,6 +35,13 @@ import {
   DEFAULT_POLL_TIMEOUT_MS,
   DEFAULT_SIMULATION_TIMEOUT_MS,
 } from '../../shared/defaults.js'
+
+type ChargePayload = z.output<(typeof Methods.charge)['schema']['credential']['payload']>
+type ChargeRequest = z.output<(typeof Methods.charge)['schema']['request']>
+type ChargeCredential = Credential.Credential<
+  ChargePayload,
+  Challenge.Challenge<ChargeRequest, 'charge', 'stellar'>
+>
 
 const LOG_PREFIX = '[stellar:charge]'
 const STORE_PREFIX = 'stellar:charge'
@@ -93,7 +101,7 @@ export function charge(parameters: charge.Parameters) {
     },
     async verify({ credential }) {
       // Serialize through the lock to prevent concurrent race conditions
-      const result = await new Promise<any>((resolve, reject) => {
+      const result = await new Promise<Receipt.Receipt>((resolve, reject) => {
         verifyLock = verifyLock.then(
           () => doVerify(credential).then(resolve, reject),
           () => doVerify(credential).then(resolve, reject),
@@ -103,7 +111,7 @@ export function charge(parameters: charge.Parameters) {
     },
   })
 
-  async function doVerify(credential: any) {
+  async function doVerify(credential: ChargeCredential) {
     const { challenge } = credential
     const { request: challengeRequest } = challenge
 
@@ -548,10 +556,9 @@ function verifySacInvocation(
 
   const opBody = ops[0].body()
   if (opBody.switch().value !== xdr.OperationType.invokeHostFunction().value) {
-    throw new PaymentVerificationError(
-      `${LOG_PREFIX} Operation is not invokeHostFunction.`,
-      { operationType: opBody.switch().name },
-    )
+    throw new PaymentVerificationError(`${LOG_PREFIX} Operation is not invokeHostFunction.`, {
+      operationType: opBody.switch().name,
+    })
   }
 
   const hostFn = opBody.invokeHostFunctionOp().hostFunction()
