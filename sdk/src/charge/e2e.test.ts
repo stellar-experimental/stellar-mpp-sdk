@@ -148,7 +148,7 @@ describe('charge e2e (testnet)', () => {
     // The reference should be a 64-char hex tx hash
     expect(receipt.reference).toMatch(/^[a-f0-9]{64}$/)
 
-    // Same as push-mode test
+    // Same validation as in the previous test
     const txHash = receipt.reference
     const tx = (await sorobanServer.getTransaction(txHash)) as Api.GetSuccessfulTransactionResponse
     expect(tx.txHash).toEqual(receipt.reference) // maybe unnecessary?
