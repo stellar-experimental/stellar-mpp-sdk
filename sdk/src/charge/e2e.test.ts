@@ -268,7 +268,6 @@ describe('charge e2e (testnet)', () => {
 
     const txHash = receipt.reference
     const tx = (await sorobanServer.getTransaction(txHash)) as Api.GetSuccessfulTransactionResponse
-    console.log(tx.envelopeXdr.toXDR('base64'))
     // The transaction should be successful
     expect(tx.txHash).toEqual(receipt.reference) // maybe unnecessary?
     expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
