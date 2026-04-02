@@ -29,7 +29,7 @@ format-check: ## Check formatting (CI-friendly)
 	pnpm run format:check
 
 test: ## Run tests once (vitest --run)
-	pnpm test -- --run
+	pnpm test --run
 
 test-watch: ## Run tests in watch mode
 	pnpm test
