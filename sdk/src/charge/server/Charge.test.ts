@@ -1,13 +1,15 @@
 import {
   Account,
   Address,
+  Asset,
   Contract,
   Keypair,
+  Operation,
   TransactionBuilder,
   nativeToScVal,
 } from '@stellar/stellar-sdk'
 import { Challenge, Credential, Store } from 'mppx'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ALL_ZEROS, USDC_SAC_TESTNET } from '../../constants.js'
 
 const mockGetTransaction = vi.fn()
@@ -300,7 +302,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
-    ).rejects.toThrow('matching SAC transfer invocation')
+    ).rejects.toThrow('Transfer "from" does not match')
   })
 
   it('accepts hash where the on-chain `from` matches the credential source', async () => {
@@ -466,7 +468,7 @@ describe('charge push-mode verification (NM-001 regression)', () => {
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
-    ).rejects.toThrow('matching SAC transfer invocation')
+    ).rejects.toThrow('Transfer amount does not match')
   })
 
   it('rejects hash whose on-chain tx transfers to wrong recipient (NM-001)', async () => {
@@ -493,7 +495,7 @@ describe('charge push-mode verification (NM-001 regression)', () => {
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
-    ).rejects.toThrow('matching SAC transfer invocation')
+    ).rejects.toThrow('Transfer "to" does not match')
   })
 
   it('rejects hash whose on-chain tx uses wrong currency (NM-001)', async () => {
@@ -520,7 +522,7 @@ describe('charge push-mode verification (NM-001 regression)', () => {
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
-    ).rejects.toThrow('matching SAC transfer invocation')
+    ).rejects.toThrow('Contract address does not match')
   })
 
   it('rejects hash when on-chain tx has no envelopeXdr (NM-001)', async () => {
@@ -641,7 +643,109 @@ function makeTransactionCredential(
   )
 }
 
+function makeMockTransferEvent(
+  from: string,
+  to: string,
+  amount: bigint,
+  contract: string,
+) {
+  const fromScVal = new Address(from).toScVal()
+  const toScVal = new Address(to).toScVal()
+  const amountScVal = nativeToScVal(amount, { type: 'i128' })
+
+  return {
+    event: () => ({
+      type: () => ({ value: 0 }),
+      contractId: () => Address.fromString(contract).toBuffer().subarray(0, 32),
+      body: () => ({
+        v0: () => ({
+          topics: () => [
+            { sym: () => ({ toString: () => 'transfer' }) },
+            fromScVal,
+            toScVal,
+          ],
+          data: () => amountScVal,
+        }),
+      }),
+    }),
+  }
+}
+
+function defaultMockEvent() {
+  return makeMockTransferEvent(PAYER.publicKey(), RECIPIENT, 10000000n, USDC_SAC_TESTNET)
+}
+
 describe('charge transaction verification', () => {
+  it('rejects a transaction with exactly one payment operation', async () => {
+    const tx = new TransactionBuilder(new Account(PAYER.publicKey(), '0'), {
+      fee: '100',
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(
+        Operation.payment({
+          destination: RECIPIENT,
+          asset: Asset.native(),
+          amount: '1',
+        }),
+      )
+      .setTimeout(180)
+      .build()
+    tx.sign(PAYER)
+
+    const cred = makeTransactionCredential(tx.toXDR())
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('does not contain a Soroban invocation')
+  })
+
+  it('rejects a sponsored transaction with exactly one payment operation', async () => {
+    const tx = new TransactionBuilder(new Account(ALL_ZEROS, '0'), {
+      fee: '100',
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(
+        Operation.payment({
+          destination: RECIPIENT,
+          asset: Asset.native(),
+          amount: '1',
+        }),
+      )
+      .setTimeout(180)
+      .build()
+
+    const challenge = Challenge.from({
+      id: `test-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: {
+          network: 'stellar:testnet',
+          feePayer: true,
+        },
+      },
+    })
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'transaction', transaction: tx.toXDR() } }),
+      { source: `did:pkh:stellar:testnet:${PAYER.publicKey()}` },
+    )
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      feePayer: { envelopeSigner: Keypair.random() },
+    })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('does not contain a Soroban invocation')
+  })
+
   it('rejects transaction where from address does not match credential source', async () => {
     const actualPayer = Keypair.random()
     const tx = buildTransferTx({
@@ -653,12 +757,6 @@ describe('charge transaction verification', () => {
     })
     tx.sign(actualPayer)
 
-    mockSimulateTransaction.mockResolvedValueOnce({
-      result: { retval: null },
-      events: [],
-      transactionData: 'mock',
-    })
-
     // Credential claims PAYER as source, but tx `from` is actualPayer — mismatch
     const cred = Object.assign(makeTransactionCredential(tx.toXDR()), {
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
@@ -667,7 +765,7 @@ describe('charge transaction verification', () => {
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
-    ).rejects.toThrow('matching SAC transfer invocation')
+    ).rejects.toThrow('Transfer "from" does not match')
   })
 
   it('rejects transaction with wrong recipient', async () => {
@@ -681,18 +779,12 @@ describe('charge transaction verification', () => {
     })
     tx.sign(PAYER)
 
-    mockSimulateTransaction.mockResolvedValueOnce({
-      result: { retval: null },
-      events: [],
-      transactionData: 'mock',
-    })
-
     const cred = makeTransactionCredential(tx.toXDR())
     const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
-    ).rejects.toThrow('matching SAC transfer invocation')
+    ).rejects.toThrow('Transfer "to" does not match')
   })
 
   it('rejects transaction with wrong amount', async () => {
@@ -705,18 +797,12 @@ describe('charge transaction verification', () => {
     })
     tx.sign(PAYER)
 
-    mockSimulateTransaction.mockResolvedValueOnce({
-      result: { retval: null },
-      events: [],
-      transactionData: 'mock',
-    })
-
     const cred = makeTransactionCredential(tx.toXDR())
     const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
-    ).rejects.toThrow('matching SAC transfer invocation')
+    ).rejects.toThrow('Transfer amount does not match')
   })
 
   it('rejects transaction with wrong currency', async () => {
@@ -730,18 +816,12 @@ describe('charge transaction verification', () => {
     })
     tx.sign(PAYER)
 
-    mockSimulateTransaction.mockResolvedValueOnce({
-      result: { retval: null },
-      events: [],
-      transactionData: 'mock',
-    })
-
     const cred = makeTransactionCredential(tx.toXDR())
     const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
 
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
-    ).rejects.toThrow('matching SAC transfer invocation')
+    ).rejects.toThrow('Contract address does not match')
   })
 
   it('rejects sponsored source without feePayer configured', async () => {
@@ -800,7 +880,7 @@ describe('charge transaction verification', () => {
     // Set up simulation and send to succeed
     mockSimulateTransaction.mockResolvedValue({
       result: { retval: null },
-      events: [],
+      events: [defaultMockEvent()],
       transactionData: 'mock',
     })
     mockSendTransaction.mockResolvedValue({ hash: 'test-hash-replay' })
@@ -894,7 +974,7 @@ describe('charge transaction verification', () => {
 
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
-      events: [],
+      events: [defaultMockEvent()],
       transactionData: 'mock',
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'verified-tx-hash' })
@@ -924,7 +1004,7 @@ describe('charge transaction verification', () => {
 
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
-      events: [],
+      events: [defaultMockEvent()],
       transactionData: 'mock',
     })
     mockSendTransaction.mockRejectedValueOnce(new Error('RPC down'))
@@ -949,7 +1029,7 @@ describe('charge transaction verification', () => {
 
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
-      events: [],
+      events: [defaultMockEvent()],
       transactionData: 'mock',
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'unconfirmed-hash' })
@@ -975,7 +1055,7 @@ describe('charge transaction verification', () => {
 
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
-      events: [],
+      events: [defaultMockEvent()],
       transactionData: 'mock',
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'error-hash', status: 'ERROR' })
@@ -1000,7 +1080,7 @@ describe('charge transaction verification', () => {
 
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
-      events: [],
+      events: [defaultMockEvent()],
       transactionData: 'mock',
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'dup-hash', status: 'DUPLICATE' })
@@ -1022,12 +1102,6 @@ describe('charge transaction verification', () => {
       currency: USDC_SAC_TESTNET,
     })
     tx.sign(PAYER)
-
-    mockSimulateTransaction.mockResolvedValue({
-      result: { retval: null },
-      events: [],
-      transactionData: 'mock',
-    })
 
     const store = Store.memory()
     const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store })
@@ -1058,5 +1132,333 @@ describe('charge transaction verification', () => {
     // Challenge should NOT be burned — store should not have the key
     const stored = await store.get(`stellar:charge:challenge:${challengeId}`)
     expect(stored).toBeFalsy()
+  })
+})
+
+describe('charge simulation event validation', () => {
+  beforeEach(() => {
+    mockSimulateTransaction.mockReset()
+    mockSendTransaction.mockReset()
+    mockGetTransaction.mockReset()
+  })
+
+  it('rejects when simulation returns empty events array', async () => {
+    const tx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(PAYER)
+
+    mockSimulateTransaction.mockResolvedValueOnce({
+      result: { retval: null },
+      events: [],
+      transactionData: 'mock',
+    })
+
+    const cred = makeTransactionCredential(tx.toXDR())
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('no transfer events')
+  })
+
+  it('rejects when simulation events field is undefined', async () => {
+    const tx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(PAYER)
+
+    mockSimulateTransaction.mockResolvedValueOnce({
+      result: { retval: null },
+      transactionData: 'mock',
+    })
+
+    const cred = makeTransactionCredential(tx.toXDR())
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('no transfer events')
+  })
+
+  it('rejects when simulation has only non-transfer events', async () => {
+    const tx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(PAYER)
+
+    const nonTransferEvent = {
+      event: () => ({
+        type: () => ({ value: 0 }),
+        contractId: () => null,
+        body: () => ({
+          v0: () => ({
+            topics: () => [
+              { sym: () => ({ toString: () => 'mint' }) },
+            ],
+            data: () => nativeToScVal(0n, { type: 'i128' }),
+          }),
+        }),
+      }),
+    }
+
+    mockSimulateTransaction.mockResolvedValueOnce({
+      result: { retval: null },
+      events: [nonTransferEvent],
+      transactionData: 'mock',
+    })
+
+    const cred = makeTransactionCredential(tx.toXDR())
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('no transfer events')
+  })
+})
+
+describe('charge transaction structure validation', () => {
+  it('rejects transaction with invokeHostFunction + extra payment operation', async () => {
+    const account = new Account(PAYER.publicKey(), '0')
+    const contract = new Contract(USDC_SAC_TESTNET)
+    const transferOp = contract.call(
+      'transfer',
+      new Address(PAYER.publicKey()).toScVal(),
+      new Address(RECIPIENT).toScVal(),
+      nativeToScVal(10000000n, { type: 'i128' }),
+    )
+    const tx = new TransactionBuilder(account, {
+      fee: '100',
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(transferOp)
+      .addOperation(
+        Operation.payment({
+          destination: PAYER.publicKey(),
+          asset: Asset.native(),
+          amount: '5000',
+        }),
+      )
+      .setTimeout(180)
+      .build()
+    tx.sign(PAYER)
+
+    const cred = makeTransactionCredential(tx.toXDR())
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('must contain exactly one operation')
+  })
+
+  it('rejects transaction with invokeHostFunction + setOptions operation', async () => {
+    const account = new Account(PAYER.publicKey(), '0')
+    const contract = new Contract(USDC_SAC_TESTNET)
+    const transferOp = contract.call(
+      'transfer',
+      new Address(PAYER.publicKey()).toScVal(),
+      new Address(RECIPIENT).toScVal(),
+      nativeToScVal(10000000n, { type: 'i128' }),
+    )
+    const tx = new TransactionBuilder(account, {
+      fee: '100',
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(transferOp)
+      .addOperation(Operation.setOptions({}))
+      .setTimeout(180)
+      .build()
+    tx.sign(PAYER)
+
+    const cred = makeTransactionCredential(tx.toXDR())
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('must contain exactly one operation')
+  })
+})
+
+describe('charge SAC invocation validation (fail-closed)', () => {
+  it('rejects non-transfer function name with specific error', async () => {
+    const account = new Account(PAYER.publicKey(), '0')
+    const contract = new Contract(USDC_SAC_TESTNET)
+    const approveOp = contract.call(
+      'approve',
+      new Address(PAYER.publicKey()).toScVal(),
+      new Address(RECIPIENT).toScVal(),
+      nativeToScVal(10000000n, { type: 'i128' }),
+    )
+    const tx = new TransactionBuilder(account, {
+      fee: '100',
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(approveOp)
+      .setTimeout(180)
+      .build()
+    tx.sign(PAYER)
+
+    const cred = makeTransactionCredential(tx.toXDR())
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('Function name must be "transfer"')
+  })
+})
+
+describe('charge server signing address protection', () => {
+  it('rejects unsponsored tx with source matching server signer', async () => {
+    const signerKp = Keypair.random()
+    const tx = buildTransferTx({
+      source: signerKp.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(PAYER)
+
+    const cred = Object.assign(makeTransactionCredential(tx.toXDR()), {
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      feePayer: { envelopeSigner: signerKp },
+    })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('must not be a server signing address')
+  })
+
+  it('rejects tx with source matching fee bump signer', async () => {
+    const signerKp = Keypair.random()
+    const feeBumpKp = Keypair.random()
+    const tx = buildTransferTx({
+      source: feeBumpKp.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(PAYER)
+
+    const cred = Object.assign(makeTransactionCredential(tx.toXDR()), {
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      feePayer: { envelopeSigner: signerKp, feeBumpSigner: feeBumpKp },
+    })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('must not be a server signing address')
+  })
+
+  it('allows tx when no feePayer is configured', async () => {
+    const tx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(PAYER)
+
+    mockSimulateTransaction.mockResolvedValueOnce({
+      result: { retval: null },
+      events: [defaultMockEvent()],
+      transactionData: 'mock',
+    })
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'ok-hash', status: 'PENDING' })
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
+
+    const cred = makeTransactionCredential(tx.toXDR())
+    const method = charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET })
+
+    const receipt = await method.verify({
+      credential: cred as any,
+      request: cred.challenge.request,
+    })
+    expect(receipt.status).toBe('success')
+  })
+})
+
+describe('charge sponsored path fee cap', () => {
+  it('caps the rebuilt transaction fee to maxFeeBumpStroops', async () => {
+    const signerKp = Keypair.random()
+
+    const tx = buildTransferTx({
+      source: ALL_ZEROS,
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+
+    // Inflate the fee via XDR manipulation
+    const envelope = tx.toEnvelope()
+    envelope.v1().tx().fee(2147483647)
+    const bloatedXdr = envelope.toXDR('base64')
+
+    mockGetAccount.mockResolvedValueOnce(new Account(signerKp.publicKey(), '100'))
+    mockGetLatestLedger.mockResolvedValueOnce({ sequence: 1000 })
+    mockSimulateTransaction.mockResolvedValueOnce({
+      result: { retval: null },
+      events: [defaultMockEvent()],
+      transactionData: 'mock',
+    })
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'fee-test-hash', status: 'PENDING' })
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
+
+    const challenge = Challenge.from({
+      id: `test-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: { network: 'stellar:testnet', feePayer: true },
+      },
+    })
+    const cred = Object.assign(
+      Credential.from({
+        challenge,
+        payload: { type: 'transaction', transaction: bloatedXdr },
+      }),
+      { source: `did:pkh:stellar:testnet:${PAYER.publicKey()}` },
+    )
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      feePayer: { envelopeSigner: signerKp },
+      maxFeeBumpStroops: 10_000_000,
+    })
+
+    await method.verify({ credential: cred as any, request: cred.challenge.request })
+
+    const sentTx = mockSendTransaction.mock.calls[0][0]
+    expect(Number(sentTx.fee)).toBeLessThanOrEqual(10_000_000)
   })
 })
