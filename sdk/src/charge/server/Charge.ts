@@ -111,6 +111,13 @@ export function charge(parameters: charge.Parameters) {
     },
   })
 
+  /**
+   * Verifies a charge credential (hash or transaction) and settles it on-chain.
+   *
+   * Dispatches to push mode (on-chain hash lookup) or pull mode (server-broadcast
+   * XDR) based on `payload.type`. Serialized through {@link verifyLock} to prevent
+   * concurrent race conditions on store deduplication.
+   */
   async function doVerify(credential: ChargeCredential) {
     const { challenge } = credential
     const { request: challengeRequest } = challenge
@@ -366,6 +373,13 @@ export function charge(parameters: charge.Parameters) {
 
   // ── Simulation validation ─────────────────────────────────────────────
 
+  /**
+   * Simulates the transaction via Soroban RPC and validates that exactly one
+   * CAP-46 `transfer` event is emitted matching the expected parameters.
+   *
+   * @throws {PaymentVerificationError} If simulation fails, returns no events,
+   *   or the transfer event does not match the expected currency/recipient/amount/from.
+   */
   async function simulateAndValidateTransfer(
     tx: Transaction,
     expectedAmount: bigint,
@@ -407,6 +421,15 @@ export function charge(parameters: charge.Parameters) {
 
   // ── Auth entry validation (sponsored path) ────────────────────────────
 
+  /**
+   * Validates Soroban authorization entries in the sponsored transaction.
+   *
+   * Ensures all auth entries use address credentials (not source-account),
+   * none reference the server's address, none contain sub-invocations, and
+   * expiration ledgers do not exceed the challenge's lifetime.
+   *
+   * @throws {PaymentVerificationError} If any auth entry violates these constraints.
+   */
   async function validateAuthEntries(
     tx: Transaction,
     serverPublicKey: string,
@@ -493,6 +516,11 @@ export function charge(parameters: charge.Parameters) {
 // Verification helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Asserts the transaction contains exactly one operation and that it is
+ * an `invokeHostFunction`. Rejects multi-operation transactions as a
+ * defense-in-depth measure (Soroban protocol also enforces this).
+ */
 function verifyExactlyOneInvokeOp(tx: Transaction) {
   if (tx.operations.length !== 1) {
     throw new PaymentVerificationError(
@@ -510,6 +538,13 @@ function verifyExactlyOneInvokeOp(tx: Transaction) {
   }
 }
 
+/**
+ * Rejects transactions whose source account or operation source matches
+ * any server signing address (envelope signer or fee bump signer).
+ *
+ * Prevents an attacker from setting the tx/op source to the server's key,
+ * which would authorize operations under the server's account after signing.
+ */
 function verifyNoSigningAddressInSources(
   tx: Transaction,
   signerKeypair: Keypair | undefined,
@@ -538,6 +573,13 @@ function verifyNoSigningAddressInSources(
   }
 }
 
+/**
+ * Validates that the transaction's single operation is a SAC `transfer`
+ * contract invocation matching the expected parameters.
+ *
+ * Inspects the raw XDR envelope directly. Each validation step throws a
+ * specific {@link PaymentVerificationError} on mismatch — no silent skipping.
+ */
 function verifySacInvocation(
   tx: Transaction,
   expected: { amount: bigint; currency: string; recipient: string; from: string },
@@ -620,6 +662,13 @@ function verifySacInvocation(
   }
 }
 
+/**
+ * Verifies an on-chain transaction result (push mode) contains a valid
+ * SAC `transfer` invocation matching the expected parameters.
+ *
+ * Parses the envelope XDR from the RPC response, then delegates to
+ * {@link verifyExactlyOneInvokeOp} and {@link verifySacInvocation}.
+ */
 function verifySacTransfer(
   txResult: rpc.Api.GetSuccessfulTransactionResponse,
   expected: { amount: bigint; currency: string; recipient: string; from: string },
@@ -666,6 +715,16 @@ function verifySacTransfer(
 // Simulation event validation (CAP-46 transfer events)
 // ---------------------------------------------------------------------------
 
+/**
+ * Parses CAP-46 diagnostic events from a Soroban simulation and validates
+ * that exactly one `transfer` event was emitted with the correct parameters.
+ *
+ * Also ensures the server's address is not involved as sender or recipient
+ * in any transfer event, preventing the server from paying itself.
+ *
+ * @throws {PaymentVerificationError} If no transfer events are found, more
+ *   than one is found, parameters don't match, or the server address appears.
+ */
 function validateSimulationEvents(
   events: xdr.DiagnosticEvent[],
   expectedAmount: bigint,
