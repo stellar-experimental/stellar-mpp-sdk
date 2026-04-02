@@ -1,3 +1,5 @@
+import { rpc } from '@stellar/stellar-sdk'
+
 import {
   DEFAULT_POLL_MAX_ATTEMPTS,
   DEFAULT_POLL_DELAY_MS,
@@ -29,8 +31,27 @@ export interface PollOptions {
   timeoutMs?: number
 }
 
+/**
+ * Polls Soroban RPC for a transaction result using exponential backoff with jitter.
+ *
+ * Repeatedly calls `getTransaction` until the transaction reaches a terminal state (`SUCCESS` or
+ * `FAILED`) or a timeout / max-attempts limit is hit. If the state is `FAILED`, it throws a
+ * {@link StellarMppError}.
+ *
+ * @param rpcServer - Any object exposing a Soroban-compatible `getTransaction` method.
+ * @param hash - The hex-encoded transaction hash to poll for.
+ * @param opts - Optional polling behaviour overrides.
+ * @param opts.maxAttempts - Maximum number of RPC calls before giving up.
+ * @param opts.delayMs - Base delay between attempts (before backoff).
+ * @param opts.backoffMultiplier - Multiplier applied to `delayMs` on each successive attempt.
+ * @param opts.jitterMs - Maximum random jitter added/subtracted from each delay.
+ * @param opts.timeoutMs - Hard wall-clock timeout across all attempts.
+ * @returns The successful {@link rpc.Api.GetTransactionResponse} once the transaction confirms.
+ * @throws {PollTimeoutError} If `timeoutMs` elapses before a terminal status.
+ * @throws {PollMaxAttemptsError} If `maxAttempts` is exhausted without a terminal status.
+ */
 export async function pollTransaction(
-  rpcServer: { getTransaction(hash: string): Promise<any> },
+  rpcServer: { getTransaction(hash: string): Promise<rpc.Api.GetTransactionResponse> },
   hash: string,
   opts: PollOptions = {},
 ) {

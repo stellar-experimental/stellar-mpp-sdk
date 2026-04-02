@@ -37,8 +37,8 @@ done
 
 | Script                       | Expected                                                        |
 | ---------------------------- | --------------------------------------------------------------- |
-| `examples/charge-server.ts`         | Starts Express on port 3000 (pino JSON log)                     |
-| `examples/charge-client.ts`         | Loads keypair, starts client                                    |
+| `examples/charge-server.ts`  | Starts Express on port 3000 (pino JSON log)                     |
+| `examples/charge-client.ts`  | Loads keypair, starts client                                    |
 | `examples/channel-server.ts` | Starts Express on port 3001 (pino JSON log)                     |
 | `examples/channel-client.ts` | Loads commitment key, starts client                             |
 | `examples/channel-open.ts`   | Env validation error: `OPEN_TX_XDR is required` (expected)      |
@@ -117,10 +117,10 @@ Every PR must add a line to `CHANGELOG.md` under the `## [Unreleased]` heading. 
 
 After running all checks, report:
 
-| Check                                              | Status    | Notes                             |
-| -------------------------------------------------- | --------- | --------------------------------- |
-| `make check` (full pipeline)                       | PASS/FAIL | test count, any errors            |
-| Example script validation (6 scripts)              | PASS/FAIL | which scripts failed              |
-| Charge E2E (`demo/run.sh`)                         | PASS/FAIL | final HTTP status                 |
-| Channel E2E (`demo/run-channel.sh`)                | PASS/FAIL | request count, cumulative amounts |
-| Channel E2E settlement (`demo/run-channel-e2e.sh`) | PASS/FAIL | balance after close               |
+| Check                                              | Status    | Notes                                                          |
+| -------------------------------------------------- | --------- | -------------------------------------------------------------- |
+| `make check` (full pipeline)                       | PASS/FAIL | test count, any errors                                         |
+| Example script validation (6 scripts)              | PASS/FAIL | which scripts failed                                           |
+| Charge E2E (`demo/run.sh`)                         | PASS/FAIL | final HTTP status                                              |
+| Channel E2E (`demo/run-channel.sh`)                | PASS/FAIL | request count, cumulative amounts                              |
+| Channel E2E settlement (`demo/run-channel-e2e.sh`) | PASS/FAIL | balance after close. ATTENTION: this is explained in `Check 5` |

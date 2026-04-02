@@ -114,7 +114,7 @@ export function charge(parameters: charge.Parameters) {
    * concurrent race conditions on store deduplication.
    */
   async function doVerify(credential: ChargeCredential) {
-    const { challenge } = credential
+    const { challenge, source } = credential
     const { request: challengeRequest } = challenge
 
     // Check challenge replay early, but only mark as used AFTER successful
@@ -168,8 +168,8 @@ export function charge(parameters: charge.Parameters) {
         // Extract the payer's public key from the credential DID to verify
         // the on-chain transfer's `from` address matches the credential's
         // claimed identity, preventing hash-theft attacks against clients.
-        const expectedFrom = publicKeyFromDID(credential.source)
-        verifySacTransfer(
+        const expectedFrom = publicKeyFromDID(source)
+        verifyTokenTransferFromResult(
           txResult,
           {
             amount: expectedAmount,
@@ -195,23 +195,24 @@ export function charge(parameters: charge.Parameters) {
 
       case 'transaction': {
         const txXdr = payload.transaction
-        const parsed = TransactionBuilder.fromXDR(txXdr, networkPassphrase)
+        const parsedTx = TransactionBuilder.fromXDR(txXdr, networkPassphrase)
 
         const tx =
-          parsed instanceof FeeBumpTransaction ? parsed.innerTransaction : (parsed as Transaction)
+          parsedTx instanceof FeeBumpTransaction
+            ? parsedTx.innerTransaction
+            : (parsedTx as Transaction)
 
-        verifyExactlyOneInvokeOp(tx)
-        verifyNoSigningAddressInSources(tx, envelopeKP, feeBumpKP)
+        verifyNoSigningAddressInSources(tx, envelopeKP)
 
         const expectedFrom = publicKeyFromDID(credential.source)
-        verifySacInvocation(tx, {
+        verifyTokenTransfer(tx, {
           amount: expectedAmount,
           currency: expectedCurrency,
           recipient: expectedRecipient,
           from: expectedFrom,
         })
 
-        let txToSubmit: Transaction | FeeBumpTransaction = parsed as
+        let txToSubmit: Transaction | FeeBumpTransaction = parsedTx as
           | Transaction
           | FeeBumpTransaction
 
@@ -220,7 +221,7 @@ export function charge(parameters: charge.Parameters) {
             error: 'Sponsored source without feePayer',
           })
           throw new PaymentVerificationError(
-            `${LOG_PREFIX} Transaction uses a sponsored source account but the server has no feePayer configuration.`,
+            `${LOG_PREFIX} Transaction relies on a sponsored source account but the server has no feePayer configuration.`,
             {},
           )
         }
@@ -252,14 +253,14 @@ export function charge(parameters: charge.Parameters) {
           }
           const rebuiltTx = rebuilt.setSorobanData(sorobanData).build()
 
-          await simulateAndValidateTransfer(
-            rebuiltTx,
-            expectedAmount,
-            expectedCurrency,
-            expectedRecipient,
-            envelopeKP.publicKey(),
-            expectedFrom,
-          )
+          const simResponse = await simulateTransfer(rebuiltTx)
+          validateSimulationEvents(simResponse.events!, {
+            amount: expectedAmount,
+            currency: expectedCurrency,
+            recipient: expectedRecipient,
+            from: expectedFrom,
+            serverAddress: envelopeKP.publicKey(),
+          })
 
           rebuiltTx.sign(envelopeKP)
           txToSubmit = rebuiltTx
@@ -289,14 +290,14 @@ export function charge(parameters: charge.Parameters) {
             }
           }
 
-          await simulateAndValidateTransfer(
-            tx,
-            expectedAmount,
-            expectedCurrency,
-            expectedRecipient,
-            envelopeKP?.publicKey(),
-            expectedFrom,
-          )
+          const simResponse = await simulateTransfer(tx)
+          validateSimulationEvents(simResponse.events!, {
+            amount: expectedAmount,
+            currency: expectedCurrency,
+            recipient: expectedRecipient,
+            from: expectedFrom,
+            serverAddress: envelopeKP?.publicKey(),
+          })
         }
 
         // ── Settlement ──────────────────────────────────────────────
@@ -317,7 +318,7 @@ export function charge(parameters: charge.Parameters) {
           )
         }
 
-        if (sendResult.status === 'ERROR' || sendResult.status === 'DUPLICATE') {
+        if (sendResult.status !== 'PENDING') {
           throw new SettlementError(
             `${LOG_PREFIX} Settlement failed: sendTransaction returned ${sendResult.status}.`,
             { hash: sendResult.hash, status: sendResult.status },
@@ -359,20 +360,14 @@ export function charge(parameters: charge.Parameters) {
   // ── Simulation validation ─────────────────────────────────────────────
 
   /**
-   * Simulates the transaction via Soroban RPC and validates that exactly one
-   * CAP-46 `transfer` event is emitted matching the expected parameters.
+   * Simulates the transaction via Soroban RPC and returns the successful response.
    *
-   * @throws {PaymentVerificationError} If simulation fails, returns no events,
-   *   or the transfer event does not match the expected currency/recipient/amount/from.
+   * @throws {PaymentVerificationError} If the simulation fails with a contract error.
+   * @throws {PaymentVerificationError} If the simulation returns no events.
    */
-  async function simulateAndValidateTransfer(
+  async function simulateTransfer(
     tx: Transaction,
-    expectedAmount: bigint,
-    expectedCurrency: string,
-    expectedRecipient: string,
-    serverAddress: string | undefined,
-    expectedFrom: string,
-  ) {
+  ): Promise<rpc.Api.SimulateTransactionSuccessResponse> {
     let simResponse: rpc.Api.SimulateTransactionSuccessResponse
     try {
       simResponse = await simulateCall(server, tx, { timeoutMs: simulationTimeoutMs })
@@ -394,14 +389,7 @@ export function charge(parameters: charge.Parameters) {
       )
     }
 
-    validateSimulationEvents(
-      simResponse.events,
-      expectedAmount,
-      expectedCurrency,
-      expectedRecipient,
-      serverAddress,
-      expectedFrom,
-    )
+    return simResponse
   }
 
   // ── Auth entry validation (sponsored path) ────────────────────────────
@@ -428,10 +416,14 @@ export function charge(parameters: charge.Parameters) {
     if (expiresTimestamp) {
       const nowSecs = Math.floor(Date.now() / 1000)
       const secsUntilExpiry = expiresTimestamp - nowSecs
-      if (secsUntilExpiry > 0) {
-        const latestLedger = await server.getLatestLedger()
-        maxLedger = latestLedger.sequence + Math.ceil(secsUntilExpiry / DEFAULT_LEDGER_CLOSE_TIME)
+      if (secsUntilExpiry <= 0) {
+        throw new PaymentVerificationError(`${LOG_PREFIX} Challenge has expired.`, {
+          expiresTimestamp,
+          nowSecs,
+        })
       }
+      const latestLedger = await server.getLatestLedger()
+      maxLedger = latestLedger.sequence + Math.ceil(secsUntilExpiry / DEFAULT_LEDGER_CLOSE_TIME)
     }
 
     const serverAddress = Address.fromString(serverPublicKey)
@@ -502,11 +494,11 @@ export function charge(parameters: charge.Parameters) {
 // ---------------------------------------------------------------------------
 
 /**
- * Asserts the transaction contains exactly one operation and that it is
- * an `invokeHostFunction`. Rejects multi-operation transactions as a
+ * Asserts the transaction contains exactly one operation, that it is an `invokeHostFunction`, and
+ * that the host function type is a contract invocation. Rejects multi-operation transactions as a
  * defense-in-depth measure (Soroban protocol also enforces this).
  */
-function verifyExactlyOneInvokeOp(tx: Transaction) {
+function verifyExactlyOneOpAndTypeInvokeContract(tx: Transaction) {
   if (tx.operations.length !== 1) {
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Transaction must contain exactly one operation, got ${tx.operations.length}.`,
@@ -521,27 +513,32 @@ function verifyExactlyOneInvokeOp(tx: Transaction) {
       { operationType: op.type },
     )
   }
+
+  const xdrEnvelope = tx.toXDR()
+  const envelope = xdr.TransactionEnvelope.fromXDR(xdrEnvelope, 'base64')
+  const opBody = envelope.v1().tx().operations()[0].body()
+  const hostFn = opBody.invokeHostFunctionOp().hostFunction()
+  if (hostFn.switch().value !== xdr.HostFunctionType.hostFunctionTypeInvokeContract().value) {
+    throw new PaymentVerificationError(
+      `${LOG_PREFIX} Host function is not a contract invocation.`,
+      { hostFunctionType: hostFn.switch().name },
+    )
+  }
 }
 
 /**
- * Rejects transactions whose source account or operation source matches
- * any server signing address (envelope signer or fee bump signer).
+ * Rejects transactions whose source account or operation source matches the server's envelope
+ * signing address.
  *
- * Prevents an attacker from setting the tx/op source to the server's key,
- * which would authorize operations under the server's account after signing.
+ * Prevents an attacker from setting the tx/op source to the server's key, which would authorize
+ * operations under the server's account after signing.
  */
-function verifyNoSigningAddressInSources(
-  tx: Transaction,
-  signerKeypair: Keypair | undefined,
-  feeBumpKeypair: Keypair | undefined,
-) {
-  if (!signerKeypair) return
+function verifyNoSigningAddressInSources(tx: Transaction, signerKP: Keypair | undefined) {
+  if (!signerKP) return
 
-  const signingAddresses = new Set<string>()
-  signingAddresses.add(signerKeypair.publicKey())
-  if (feeBumpKeypair) signingAddresses.add(feeBumpKeypair.publicKey())
+  const signerAddress = signerKP.publicKey()
 
-  if (signingAddresses.has(tx.source)) {
+  if (tx.source === signerAddress) {
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Transaction source must not be a server signing address.`,
       {},
@@ -549,7 +546,7 @@ function verifyNoSigningAddressInSources(
   }
 
   for (const op of tx.operations) {
-    if (op.source && signingAddresses.has(op.source)) {
+    if (op.source && op.source === signerAddress) {
       throw new PaymentVerificationError(
         `${LOG_PREFIX} Operation source must not be a server signing address.`,
         {},
@@ -559,48 +556,29 @@ function verifyNoSigningAddressInSources(
 }
 
 /**
- * Validates that the transaction's single operation is a SEP-41 `transfer`
- * contract invocation matching the expected parameters.
+ * Validates that the transaction's single operation is a SEP-41 `transfer` contract invocation
+ * matching the expected parameters.
  *
- * Inspects the raw XDR envelope directly. Each validation step throws a
- * specific {@link PaymentVerificationError} on mismatch — no silent skipping.
+ * Calls {@link verifyExactlyOneOpAndTypeInvokeContract} first to ensure the transaction contains exactly one
+ * `invokeHostFunction` operation, then inspects the raw XDR envelope to verify contract address,
+ * function name, and argument values.
+ *
+ * @throws {PaymentVerificationError} On any mismatch — no silent skipping.
  */
-function verifySacInvocation(
+function verifyTokenTransfer(
   tx: Transaction,
   expected: { amount: bigint; currency: string; recipient: string; from: string },
 ) {
+  verifyExactlyOneOpAndTypeInvokeContract(tx)
   const xdrEnvelope = tx.toXDR()
   const envelope = xdr.TransactionEnvelope.fromXDR(xdrEnvelope, 'base64')
   const txBody = envelope.v1().tx()
   const ops = txBody.operations()
 
-  if (ops.length !== 1) {
-    throw new PaymentVerificationError(
-      `${LOG_PREFIX} Expected exactly 1 operation in envelope, got ${ops.length}.`,
-      { count: ops.length },
-    )
-  }
-
   const opBody = ops[0].body()
-  if (opBody.switch().value !== xdr.OperationType.invokeHostFunction().value) {
-    throw new PaymentVerificationError(`${LOG_PREFIX} Operation is not invokeHostFunction.`, {
-      operationType: opBody.switch().name,
-    })
-  }
+  const invokeArgs = opBody.invokeHostFunctionOp().hostFunction().invokeContract()
 
-  const hostFn = opBody.invokeHostFunctionOp().hostFunction()
-  if (hostFn.switch().value !== xdr.HostFunctionType.hostFunctionTypeInvokeContract().value) {
-    throw new PaymentVerificationError(
-      `${LOG_PREFIX} Host function is not a contract invocation.`,
-      { hostFunctionType: hostFn.switch().name },
-    )
-  }
-
-  const invokeArgs = hostFn.invokeContract()
   const contractAddress = Address.fromScAddress(invokeArgs.contractAddress()).toString()
-  const functionName = invokeArgs.functionName().toString()
-  const args = invokeArgs.args()
-
   if (contractAddress !== expected.currency) {
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Contract address does not match expected currency.`,
@@ -608,6 +586,7 @@ function verifySacInvocation(
     )
   }
 
+  const functionName = invokeArgs.functionName().toString()
   if (functionName !== 'transfer') {
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Function name must be "transfer", got "${functionName}".`,
@@ -615,6 +594,7 @@ function verifySacInvocation(
     )
   }
 
+  const args = invokeArgs.args()
   if (args.length !== 3) {
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Transfer function expects 3 arguments, got ${args.length}.`,
@@ -651,10 +631,9 @@ function verifySacInvocation(
  * Verifies an on-chain transaction result (push mode) contains a valid
  * SEP-41 `transfer` invocation matching the expected parameters.
  *
- * Parses the envelope XDR from the RPC response, then delegates to
- * {@link verifyExactlyOneInvokeOp} and {@link verifySacInvocation}.
+ * Parses the envelope XDR from the RPC response, then delegates to {@link verifyTokenTransfer}.
  */
-function verifySacTransfer(
+function verifyTokenTransferFromResult(
   txResult: rpc.Api.GetSuccessfulTransactionResponse,
   expected: { amount: bigint; currency: string; recipient: string; from: string },
   networkPassphrase: string,
@@ -692,8 +671,7 @@ function verifySacTransfer(
     )
   }
 
-  verifyExactlyOneInvokeOp(innerTx)
-  verifySacInvocation(innerTx, expected)
+  verifyTokenTransfer(innerTx, expected)
 }
 
 // ---------------------------------------------------------------------------
@@ -712,18 +690,20 @@ function verifySacTransfer(
  */
 function validateSimulationEvents(
   events: xdr.DiagnosticEvent[],
-  expectedAmount: bigint,
-  expectedCurrency: string,
-  expectedRecipient: string,
-  serverAddress: string | undefined,
-  expectedFrom: string,
+  expected: {
+    amount: bigint
+    currency: string
+    recipient: string
+    from: string
+    serverAddress: string | undefined
+  },
 ) {
   const transferEvents: Array<{ from: string; to: string; amount: bigint; contract: string }> = []
 
   for (const event of events) {
     const contractEvent = event.event()
-    // Only process contract events (type 0)
-    if (contractEvent.type().value !== 0) continue
+    // Only process contract events — skip system and diagnostic events
+    if (contractEvent.type().name !== 'contract') continue
 
     const body = contractEvent.body().v0()
     const topics = body.topics()
@@ -736,11 +716,16 @@ function validateSimulationEvents(
     const from = Address.fromScVal(topics[1]).toString()
     const to = Address.fromScVal(topics[2]).toString()
     const amount = scValToBigInt(body.data())
-    const contract = contractEvent.contractId()
-      ? Address.fromScAddress(
-          xdr.ScAddress.scAddressTypeContract(contractEvent.contractId()!),
-        ).toString()
-      : ''
+    const contractId = contractEvent.contractId()
+    if (!contractId) {
+      throw new PaymentVerificationError(
+        `${LOG_PREFIX} Transfer event is missing contract ID — cannot verify source contract.`,
+        {},
+      )
+    }
+    const contract = Address.fromScAddress(
+      xdr.ScAddress.scAddressTypeContract(contractId),
+    ).toString()
 
     transferEvents.push({ from, to, amount, contract })
   }
@@ -761,35 +746,34 @@ function validateSimulationEvents(
     )
   }
 
+  // Server's signing key must not be the sender in any transfer — check before parameter
+  // matching so the error message is specific rather than a generic "does not match".
+  if (expected.serverAddress) {
+    const serverIsSender = transferEvents.some((t) => t.from === expected.serverAddress)
+    if (serverIsSender) {
+      throw new PaymentVerificationError(
+        `${LOG_PREFIX} Server signing address must not be the sender in transfer events.`,
+        { serverAddress: expected.serverAddress },
+      )
+    }
+  }
+
   const transfer = transferEvents[0]
   if (
-    transfer.to !== expectedRecipient ||
-    transfer.amount !== expectedAmount ||
-    transfer.contract !== expectedCurrency ||
-    transfer.from !== expectedFrom
+    transfer.to !== expected.recipient ||
+    transfer.amount !== expected.amount ||
+    transfer.contract !== expected.currency ||
+    transfer.from !== expected.from
   ) {
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Simulation transfer event does not match expected parameters.`,
       {
-        expectedRecipient,
-        expectedAmount: expectedAmount.toString(),
-        expectedCurrency,
-        expectedFrom,
+        expectedRecipient: expected.recipient,
+        expectedAmount: expected.amount.toString(),
+        expectedCurrency: expected.currency,
+        expectedFrom: expected.from,
       },
     )
-  }
-
-  // Server address must not be involved in transfers
-  if (serverAddress) {
-    const serverInvolved = transferEvents.some(
-      (t) => t.from === serverAddress || t.to === serverAddress,
-    )
-    if (serverInvolved) {
-      throw new PaymentVerificationError(
-        `${LOG_PREFIX} Server address must not be involved in transfer events.`,
-        { serverAddress },
-      )
-    }
   }
 }
 
