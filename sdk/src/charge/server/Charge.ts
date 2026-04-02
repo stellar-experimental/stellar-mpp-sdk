@@ -663,7 +663,8 @@ function verifyTokenTransferFromResult(
 
   let innerTx: Transaction
   try {
-    innerTx = new Transaction(envelope, networkPassphrase)
+    const parsed = TransactionBuilder.fromXDR(envelope.toXDR('base64'), networkPassphrase)
+    innerTx = parsed instanceof FeeBumpTransaction ? parsed.innerTransaction : (parsed as Transaction)
   } catch {
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Could not parse transaction envelope for verification.`,

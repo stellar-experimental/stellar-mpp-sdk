@@ -3,6 +3,7 @@ import {
   Address,
   Asset,
   Contract,
+  FeeBumpTransaction,
   Keypair,
   Operation,
   TransactionBuilder,
@@ -2057,6 +2058,92 @@ describe('charge transfer argument count validation', () => {
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
     ).rejects.toThrow('Transfer function expects 3 arguments, got 2')
+  })
+})
+
+describe('charge push-mode FeeBump envelope', () => {
+  it('verifies successfully when envelopeXdr is a FeeBump-wrapped transfer', async () => {
+    const tx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(PAYER)
+
+    const feeSource = Keypair.random()
+    const feeBumpTx = TransactionBuilder.buildFeeBumpTransaction(
+      feeSource,
+      '200',
+      tx,
+      NETWORK_PASSPHRASE,
+    )
+    feeBumpTx.sign(feeSource)
+
+    // Return the FeeBump envelope as the on-chain result (base64 string)
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: feeBumpTx.toEnvelope().toXDR('base64'),
+    })
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
+    })
+    const cred = makeHashCredential({
+      hash: 'feebump-hash',
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
+
+    const receipt = await method.verify({
+      credential: cred as any,
+      request: cred.challenge.request,
+    })
+    expect(receipt.status).toBe('success')
+  })
+
+  it('verifies successfully when envelopeXdr is a FeeBump xdr.TransactionEnvelope object', async () => {
+    const tx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(PAYER)
+
+    const feeSource = Keypair.random()
+    const feeBumpTx = TransactionBuilder.buildFeeBumpTransaction(
+      feeSource,
+      '200',
+      tx,
+      NETWORK_PASSPHRASE,
+    )
+    feeBumpTx.sign(feeSource)
+
+    // Return the FeeBump envelope as an XDR object directly
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: feeBumpTx.toEnvelope(),
+    })
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
+    })
+    const cred = makeHashCredential({
+      hash: 'feebump-xdr-obj-hash',
+      source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
+    })
+
+    const receipt = await method.verify({
+      credential: cred as any,
+      request: cred.challenge.request,
+    })
+    expect(receipt.status).toBe('success')
   })
 })
 
