@@ -23,11 +23,12 @@ function getSet(store: Store.Store): Set<string> {
 
 /**
  * Synchronously claims a key. Throws `error` if already claimed
- * (by this process) or present in the store.
+ * by this process.
  *
- * After calling this, write to the store immediately, then call
- * {@link releaseClaim} to free the in-memory slot (the store
- * entry becomes authoritative for cross-process protection).
+ * After calling this, check the backing store and write to it
+ * immediately, then call {@link releaseClaim} to free the
+ * in-memory slot (the store entry becomes authoritative for
+ * cross-process protection).
  */
 export function claimOrThrow(store: Store.Store, key: string, error: Error): void {
   const set = getSet(store)

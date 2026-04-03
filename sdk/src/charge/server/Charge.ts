@@ -281,7 +281,7 @@ export function charge(parameters: charge.Parameters) {
           // Rebuild the tx with the signer's account as source
           logger.debug(`${LOG_PREFIX} Rebuilding sponsored tx...`)
           const serverAccount = await rpcServer.getAccount(envelopeKP.publicKey())
-          const originalSeq = serverAccount.sequenceNumber() // neded because Transaction.build sets sequence to account's current + 1 in place.
+          const originalSeq = serverAccount.sequenceNumber() // needed because Transaction.build sets sequence to account's current + 1 in place.
           const envelopeTx = tx.toEnvelope().v1().tx()
           const rawOp = envelopeTx.operations()[0]
 
@@ -723,8 +723,8 @@ function verifyTokenTransferFromResult(
  * Parses CAP-46 diagnostic events from a Soroban simulation and validates
  * that exactly one `transfer` event was emitted with the correct parameters.
  *
- * Also ensures the server's address is not involved as sender or recipient
- * in any transfer event, preventing the server from paying itself.
+ * Also ensures the server's address is not the sender in any transfer event,
+ * preventing the server from paying itself.
  *
  * @throws {PaymentVerificationError} If no transfer events are found, more
  *   than one is found, parameters don't match, or the server address appears.

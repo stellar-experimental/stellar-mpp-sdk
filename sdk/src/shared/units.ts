@@ -24,7 +24,7 @@ export function toBaseUnits(amount: string, decimals: number): string {
   }
   const paddedFrac = frac.padEnd(decimals, '0')
   const result = (BigInt(whole) * 10n ** BigInt(decimals) + BigInt(paddedFrac)).toString()
-  if (result === '0' && amount !== '0' && amount !== '0.0') {
+  if (result === '0' && !/^0(\.0*)?$/.test(amount)) {
     throw new Error(
       `Precision loss: "${amount}" converts to zero base units with ${decimals} decimals`,
     )
