@@ -255,19 +255,22 @@ export function charge(parameters: charge.Parameters) {
           logger.debug(`${LOG_PREFIX} Rebuilding sponsored tx...`)
           const serverAccount = await server.getAccount(envelopeKP.publicKey())
           const envelopeTx = tx.toEnvelope().v1().tx()
-          const sorobanData = envelopeTx.ext().sorobanData()
-          const rebuilt = new TransactionBuilder(serverAccount, {
+          const rawOp = envelopeTx.operations()[0]
+
+          // Build without sorobanData so simulation determines resources
+          const simBuilder = new TransactionBuilder(serverAccount, {
             fee: Math.min(Number(tx.fee), maxFeeBumpStroops).toString(),
             networkPassphrase,
             ...(tx.timeBounds ? { timebounds: tx.timeBounds } : {}),
           })
-          // Only copy the single validated raw XDR operation
-          rebuilt.addOperation(envelopeTx.operations()[0])
+          simBuilder.addOperation(rawOp)
           if (!tx.timeBounds) {
-            rebuilt.setTimeout(DEFAULT_TIMEOUT)
+            simBuilder.setTimeout(DEFAULT_TIMEOUT)
           }
-          const rebuiltTx = rebuilt.setSorobanData(sorobanData).build()
+          const rebuiltTx = simBuilder.build()
 
+          // Simulate to validate transfer events and obtain accurate
+          // resource data — never trust the client-supplied sorobanData.
           const simResponse = await simulateTransfer(rebuiltTx)
           validateSimulationEvents(simResponse.events!, {
             amount: expectedAmount,
@@ -277,8 +280,21 @@ export function charge(parameters: charge.Parameters) {
             serverAddress: envelopeKP.publicKey(),
           })
 
-          rebuiltTx.sign(envelopeKP)
-          txToSubmit = rebuiltTx
+          // Rebuild with server-determined resources from simulation
+          const prepBuilder = new TransactionBuilder(serverAccount, {
+            fee: Math.min(Number(tx.fee), maxFeeBumpStroops).toString(),
+            networkPassphrase,
+            ...(tx.timeBounds ? { timebounds: tx.timeBounds } : {}),
+          })
+          prepBuilder.addOperation(rawOp)
+          if (!tx.timeBounds) {
+            prepBuilder.setTimeout(DEFAULT_TIMEOUT)
+          }
+          const preparedTx = prepBuilder
+            .setSorobanData(simResponse.transactionData.build())
+            .build() as Transaction
+          preparedTx.sign(envelopeKP)
+          txToSubmit = preparedTx
 
           // Fee bump wrapping (sponsored path only — spec requires
           // unsponsored transactions to be submitted without modification)

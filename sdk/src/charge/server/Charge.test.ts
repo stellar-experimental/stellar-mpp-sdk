@@ -6,6 +6,7 @@ import {
   FeeBumpTransaction,
   Keypair,
   Operation,
+  SorobanDataBuilder,
   TransactionBuilder,
   nativeToScVal,
   xdr,
@@ -964,7 +965,7 @@ describe('charge transaction verification', () => {
     mockSimulateTransaction.mockResolvedValue({
       result: { retval: null },
       events: [defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
     mockSendTransaction.mockResolvedValue({ hash: 'test-hash-replay', status: 'PENDING' })
     mockGetTransaction.mockResolvedValue({ status: 'SUCCESS' })
@@ -1062,7 +1063,7 @@ describe('charge transaction verification', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'verified-tx-hash', status: 'PENDING' })
     mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
@@ -1105,7 +1106,7 @@ describe('charge transaction verification', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'feebump-pull-hash', status: 'PENDING' })
     mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
@@ -1144,7 +1145,7 @@ describe('charge transaction verification', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
     mockSendTransaction.mockRejectedValueOnce(new Error('RPC down'))
 
@@ -1173,7 +1174,7 @@ describe('charge transaction verification', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'unconfirmed-hash', status: 'PENDING' })
     mockGetTransaction.mockResolvedValue({ status: 'FAILED', resultXdr: 'tx_failed' })
@@ -1203,7 +1204,7 @@ describe('charge transaction verification', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'error-hash', status: 'ERROR' })
 
@@ -1232,7 +1233,7 @@ describe('charge transaction verification', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'dup-hash', status: 'DUPLICATE' })
 
@@ -1261,7 +1262,7 @@ describe('charge transaction verification', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'retry-hash', status: 'TRY_AGAIN_LATER' })
 
@@ -1339,7 +1340,7 @@ describe('charge simulation event validation', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
 
     const cred = makeTransactionCredential(tx.toXDR())
@@ -1366,7 +1367,7 @@ describe('charge simulation event validation', () => {
 
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
 
     const cred = makeTransactionCredential(tx.toXDR())
@@ -1407,7 +1408,7 @@ describe('charge simulation event validation', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [nonTransferEvent],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
 
     const cred = makeTransactionCredential(tx.toXDR())
@@ -1452,7 +1453,7 @@ describe('charge simulation event validation', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [eventWithNoContractId],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
 
     const cred = makeTransactionCredential(tx.toXDR())
@@ -1484,7 +1485,7 @@ describe('charge simulation event validation', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [makeMockTransferEvent(signerKp.publicKey(), RECIPIENT, 10000000n, USDC_SAC_TESTNET)],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
 
     const cred = makeTransactionCredential(tx.toXDR())
@@ -1671,7 +1672,7 @@ describe('charge server signing address protection', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'ok-hash', status: 'PENDING' })
     mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
@@ -1713,7 +1714,7 @@ describe('charge sponsored path fee cap', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'fee-test-hash', status: 'PENDING' })
     mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
@@ -1966,7 +1967,7 @@ describe('charge validateAuthEntries (sponsored path)', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'valid-auth-hash', status: 'PENDING' })
     mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
@@ -2071,7 +2072,7 @@ describe('charge simulation multiple-event rejection', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [defaultMockEvent(), defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
 
     const cred = makeTransactionCredential(tx.toXDR())
@@ -2256,7 +2257,7 @@ describe('charge receipt externalId', () => {
     mockSimulateTransaction.mockResolvedValueOnce({
       result: { retval: null },
       events: [defaultMockEvent()],
-      transactionData: 'mock',
+      transactionData: new SorobanDataBuilder(),
     })
     mockSendTransaction.mockResolvedValueOnce({ hash: 'extid-hash', status: 'PENDING' })
     mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
