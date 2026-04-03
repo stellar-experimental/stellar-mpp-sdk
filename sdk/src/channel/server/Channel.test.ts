@@ -847,6 +847,106 @@ describe('stellar server channel dispute detection', () => {
     ).rejects.toThrow('Channel has been closed')
   })
 
+  it('wraps non-Error thrown by getChannelState in ChannelVerificationError', async () => {
+    mockGetChannelState.mockRejectedValueOnce('raw string failure')
+
+    const credential = makeCredential({
+      amount: '1000000',
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      checkOnChainState: true,
+      sourceAccount: MOCK_SOURCE_KEY.publicKey(),
+      store: Store.memory(),
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('On-chain state check failed')
+  })
+
+  it('does not call onDisputeDetected when closeEffectiveAtLedger is null', async () => {
+    mockGetChannelState.mockResolvedValueOnce({
+      balance: 5000000n,
+      refundWaitingPeriod: 1000,
+      token: 'CTOKEN...',
+      from: 'GFROM...',
+      to: 'GTO...',
+      closeEffectiveAtLedger: null,
+      currentLedger: 4000,
+    })
+
+    const commitmentBytes = Buffer.from('no-dispute-bytes')
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+
+    const onDisputeDetected = vi.fn()
+
+    const credential = makeSignedCredential({
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      checkOnChainState: true,
+      sourceAccount: MOCK_SOURCE_KEY.publicKey(),
+      onDisputeDetected,
+      store: Store.memory(),
+    })
+
+    const receipt = await method.verify({
+      credential: credential as any,
+      request: credential.challenge.request,
+    })
+
+    expect(receipt.status).toBe('success')
+    expect(onDisputeDetected).not.toHaveBeenCalled()
+  })
+
+  it('passes through when commitment is within balance and channel is not closing', async () => {
+    mockGetChannelState.mockResolvedValueOnce({
+      balance: 5000000n,
+      refundWaitingPeriod: 1000,
+      token: 'CTOKEN...',
+      from: 'GFROM...',
+      to: 'GTO...',
+      closeEffectiveAtLedger: null,
+      currentLedger: 4000,
+    })
+
+    const commitmentBytes = Buffer.from('within-balance-bytes')
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+
+    const credential = makeSignedCredential({
+      commitmentBytes,
+      cumulativeAmount: 5000000n, // exactly at balance
+      challengeAmount: '5000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      checkOnChainState: true,
+      sourceAccount: MOCK_SOURCE_KEY.publicKey(),
+      store: Store.memory(),
+    })
+
+    const receipt = await method.verify({
+      credential: credential as any,
+      request: credential.challenge.request,
+    })
+
+    expect(receipt.status).toBe('success')
+  })
+
   it('rejects commitment that exceeds on-chain balance (NM-003)', async () => {
     mockGetChannelState.mockResolvedValueOnce({
       balance: 500000n, // less than commitment
@@ -951,7 +1051,7 @@ describe('stellar server channel open action', () => {
     const commitmentBytes = Buffer.from('open-valid-commitment')
     mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
     mockFromXDR.mockReturnValueOnce(mockOpenTx())
-    mockSendTransaction.mockResolvedValueOnce({ hash: 'open-tx-hash-123' })
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'open-tx-hash-123', status: 'PENDING' })
     mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
 
     const store = Store.memory()
@@ -1073,7 +1173,7 @@ describe('stellar server channel open action', () => {
     const commitmentBytes = Buffer.from('open-fail-broadcast')
     mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
     mockFromXDR.mockReturnValueOnce(mockOpenTx())
-    mockSendTransaction.mockResolvedValueOnce({ hash: 'fail-hash' })
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'fail-hash', status: 'PENDING' })
     mockGetTransaction.mockResolvedValueOnce({ status: 'FAILED' })
 
     const credential = makeSignedOpenCredential({
@@ -1095,6 +1195,36 @@ describe('stellar server channel open action', () => {
         request: credential.challenge.request,
       }),
     ).rejects.toThrow('failed')
+  })
+
+  it('rejects open when sendTransaction returns TRY_AGAIN_LATER', async () => {
+    const commitmentBytes = Buffer.from('open-try-again')
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+    mockFromXDR.mockReturnValueOnce(mockOpenTx())
+    mockSendTransaction.mockResolvedValueOnce({
+      hash: 'try-again-hash',
+      status: 'TRY_AGAIN_LATER',
+    })
+
+    const credential = makeSignedOpenCredential({
+      transaction: 'AAAA...base64xdr...',
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('sendTransaction returned TRY_AGAIN_LATER')
   })
 })
 
@@ -1167,6 +1297,28 @@ describe('close()', () => {
         network: 'stellar:testnet',
       }),
     ).rejects.toThrow('sendTransaction returned DUPLICATE')
+  })
+
+  it('throws ChannelVerificationError when sendTransaction returns TRY_AGAIN_LATER', async () => {
+    const signer = Keypair.random()
+    const signature = new Uint8Array(64).fill(9)
+
+    mockGetAccount.mockResolvedValueOnce(new Account(signer.publicKey(), '110'))
+    mockPrepareTransaction.mockImplementationOnce((tx: any) => tx)
+    mockSendTransaction.mockResolvedValueOnce({
+      hash: 'try-again-hash',
+      status: 'TRY_AGAIN_LATER',
+    })
+
+    await expect(
+      closeFn({
+        channel: CHANNEL_ADDRESS,
+        amount: 5000000n,
+        signature,
+        feePayer: { envelopeSigner: signer },
+        network: 'stellar:testnet',
+      }),
+    ).rejects.toThrow('sendTransaction returned TRY_AGAIN_LATER')
   })
 
   it('throws when poll returns non-SUCCESS status', async () => {

@@ -196,103 +196,18 @@ export function channel(parameters: channel.Parameters) {
       return doVerifyOpen(credential as OpenCredential, challengeStoreKey)
     }
 
-    // NM-001 (voucher/close): closed and replay checks are now applied
-    // earlier in doVerify() for all actions including 'open'.
-
     validateAmount(payload.amount)
     const commitmentAmount = BigInt(payload.amount)
     const signatureHex = payload.signature
 
-    // Lazy on-chain dispute detection: if enabled, check whether
-    // close_start has been called on-chain. This mirrors Tempo's
-    // close_requested_at guard — each incoming voucher refreshes
-    // our view of the channel without requiring a background poller.
     if (checkOnChainState) {
-      if (!sourceAccount) {
-        throw new ChannelVerificationError(
-          'checkOnChainState requires sourceAccount to be set. ' +
-            'Provide a funded Stellar account address (G...) to use for on-chain simulations.',
-          { channel: channelAddress },
-        )
-      }
-      try {
-        const state = await getChannelState({
-          channel: channelAddress,
-          network,
-          rpcUrl,
-          sourceAccount,
-        })
-
-        logger.debug(`${LOG_PREFIX} On-chain state check`, {
-          balance: state.balance.toString(),
-          closeAt: state.closeEffectiveAtLedger,
-        })
-
-        // Cache the on-chain state for the caller
-        if (store) {
-          await store.put(`${STORE_PREFIX}:state:${channelAddress}`, {
-            balance: state.balance.toString(),
-            closeEffectiveAtLedger: state.closeEffectiveAtLedger,
-            currentLedger: state.currentLedger,
-            queriedAt: new Date().toISOString(),
-          })
-        }
-
-        if (state.closeEffectiveAtLedger != null) {
-          onDisputeDetected?.(state)
-
-          if (state.currentLedger >= state.closeEffectiveAtLedger) {
-            logger.warn(`${LOG_PREFIX} Channel is closed — effective ledger reached`, {
-              closeEffectiveAtLedger: state.closeEffectiveAtLedger,
-              currentLedger: state.currentLedger,
-            })
-            throw new ChannelVerificationError(
-              `${LOG_PREFIX} Channel is closed: close effective ledger has been reached.`,
-              {
-                closeEffectiveAtLedger: String(state.closeEffectiveAtLedger),
-                currentLedger: String(state.currentLedger),
-              },
-            )
-          }
-        }
-
-        // NM-003: Reject commitments that exceed the channel's on-chain balance.
-        if (commitmentAmount > state.balance) {
-          logger.warn(`${LOG_PREFIX} Commitment exceeds channel balance`, {
-            commitmentAmount: commitmentAmount.toString(),
-            balance: state.balance.toString(),
-          })
-          throw new ChannelVerificationError(
-            `${LOG_PREFIX} Commitment ${commitmentAmount} exceeds channel balance ${state.balance}.`,
-            {
-              commitmentAmount: commitmentAmount.toString(),
-              balance: state.balance.toString(),
-            },
-          )
-        }
-      } catch (error) {
-        // Re-throw ChannelVerificationError (channel closed / over-balance)
-        if (error instanceof ChannelVerificationError) throw error
-        // NM-005: Fail closed — reject the voucher when the on-chain
-        // check cannot be completed rather than silently skipping it.
-        logger.warn(`${LOG_PREFIX} On-chain state check failed`, {
-          error: error instanceof Error ? error.message : String(error),
-        })
-        throw new ChannelVerificationError(
-          `${LOG_PREFIX} On-chain state check failed. Cannot verify channel status.`,
-          { error: error instanceof Error ? error.message : String(error) },
-        )
-      }
+      await verifyOnChainState(commitmentAmount)
     }
 
     // Validate hex signature format
     try {
       validateHexSignature(signatureHex)
     } catch (err) {
-      logger.warn(`${LOG_PREFIX} Invalid signature format`, {
-        signature: signatureHex,
-        length: signatureHex?.length,
-      })
       throw new ChannelVerificationError(
         `${LOG_PREFIX} ${err instanceof Error ? err.message : 'Invalid signature'}`,
         { signature: signatureHex, length: String(signatureHex?.length ?? 0) },
@@ -311,9 +226,6 @@ export function channel(parameters: channel.Parameters) {
     validateAmount(challengeRequest.amount)
     const requestedAmount = BigInt(challengeRequest.amount)
     if (requestedAmount <= 0n) {
-      logger.warn(`${LOG_PREFIX} Non-positive requested amount`, {
-        requestedAmount: requestedAmount.toString(),
-      })
       throw new ChannelVerificationError(`${LOG_PREFIX} Requested amount must be positive.`, {
         requestedAmount: requestedAmount.toString(),
       })
@@ -321,10 +233,6 @@ export function channel(parameters: channel.Parameters) {
 
     // The new cumulative must be strictly greater than previous cumulative
     if (commitmentAmount <= previousCumulative) {
-      logger.warn(`${LOG_PREFIX} Commitment not greater than previous cumulative`, {
-        commitmentAmount: commitmentAmount.toString(),
-        previousCumulative: previousCumulative.toString(),
-      })
       throw new ChannelVerificationError(
         `${LOG_PREFIX} Commitment amount ${commitmentAmount} must be greater than previous cumulative ${previousCumulative}.`,
         {
@@ -336,11 +244,6 @@ export function channel(parameters: channel.Parameters) {
 
     // The commitment must cover the requested amount
     if (commitmentAmount < previousCumulative + requestedAmount) {
-      logger.warn(`${LOG_PREFIX} Commitment does not cover requested amount`, {
-        commitmentAmount: commitmentAmount.toString(),
-        requestedAmount: requestedAmount.toString(),
-        previousCumulative: previousCumulative.toString(),
-      })
       throw new ChannelVerificationError(
         `${LOG_PREFIX} Commitment amount ${commitmentAmount} does not cover the requested amount ${requestedAmount} (previous cumulative: ${previousCumulative}).`,
         {
@@ -351,9 +254,8 @@ export function channel(parameters: channel.Parameters) {
       )
     }
 
-    // Verify: call prepare_commitment on the channel contract to
-    // reconstruct the expected commitment bytes, then verify the
-    // ed25519 signature.
+    // Verify: call prepare_commitment on the channel contract to reconstruct the expected commitment
+    // bytes, then verify the ed25519 signature.
     logger.debug(`${LOG_PREFIX} Verifying commitment signature...`)
     const contract = new Contract(channelAddress)
     const call = contract.call(
@@ -378,15 +280,9 @@ export function channel(parameters: channel.Parameters) {
     }
 
     const commitmentBytes = returnValue.bytes()
-
-    // Verify the ed25519 signature
     const valid = commitmentKP.verify(Buffer.from(commitmentBytes), signatureBytes)
 
     if (!valid) {
-      logger.warn(`${LOG_PREFIX} Commitment signature verification failed`, {
-        amount: commitmentAmount.toString(),
-        channel: channelAddress,
-      })
       throw new ChannelVerificationError(
         `${LOG_PREFIX} Commitment signature verification failed.`,
         {
@@ -440,7 +336,7 @@ export function channel(parameters: channel.Parameters) {
       logger.debug(`${LOG_PREFIX} Broadcasting close tx...`)
       const sendResult = await rpcServer.sendTransaction(txToSubmit)
 
-      if (sendResult.status === 'ERROR' || sendResult.status === 'DUPLICATE') {
+      if (sendResult.status !== 'PENDING') {
         throw new ChannelVerificationError(
           `${LOG_PREFIX} Close broadcast failed: sendTransaction returned ${sendResult.status}.`,
           { hash: sendResult.hash, status: sendResult.status },
@@ -656,7 +552,7 @@ export function channel(parameters: channel.Parameters) {
 
     // Step 6: Broadcast the transaction and poll for confirmation
     const sendResult = await rpcServer.sendTransaction(txToSubmit)
-    if (sendResult.status === 'ERROR' || sendResult.status === 'DUPLICATE') {
+    if (sendResult.status !== 'PENDING') {
       throw new ChannelVerificationError(
         `${LOG_PREFIX} Open broadcast failed: sendTransaction returned ${sendResult.status}.`,
         { hash: sendResult.hash, status: sendResult.status },
@@ -694,6 +590,86 @@ export function channel(parameters: channel.Parameters) {
       timestamp: new Date().toISOString(),
       ...(externalId ? { externalId } : {}),
     })
+  }
+
+  /**
+   * Lazily checks on-chain channel state to detect disputes and enforce
+   * balance limits. Called once per voucher/close verify when
+   * `checkOnChainState` is enabled.
+   *
+   * @param commitmentAmount - The cumulative commitment to validate against the on-chain balance.
+   * @throws {ChannelVerificationError} If `sourceAccount` is missing, the channel
+   *   is closed on-chain, the commitment exceeds the balance, or the RPC call fails.
+   */
+  async function verifyOnChainState(commitmentAmount: bigint): Promise<void> {
+    if (!sourceAccount) {
+      throw new ChannelVerificationError(
+        'checkOnChainState requires sourceAccount to be set. ' +
+          'Provide a funded Stellar account address (G...) to use for on-chain simulations.',
+        { channel: channelAddress },
+      )
+    }
+
+    let state: ChannelState
+    try {
+      state = await getChannelState({
+        channel: channelAddress,
+        network,
+        rpcUrl,
+        sourceAccount,
+      })
+    } catch (error) {
+      // NM-005: Fail closed — reject the voucher when the on-chain
+      // check cannot be completed rather than silently skipping it.
+      throw new ChannelVerificationError(
+        `${LOG_PREFIX} On-chain state check failed. Cannot verify channel status.`,
+        { error: error instanceof Error ? error.message : String(error) },
+      )
+    }
+
+    logger.debug(`${LOG_PREFIX} On-chain state check`, {
+      balance: state.balance.toString(),
+      closeAt: state.closeEffectiveAtLedger,
+    })
+
+    await store.put(`${STORE_PREFIX}:state:${channelAddress}`, {
+      balance: state.balance.toString(),
+      closeEffectiveAtLedger: state.closeEffectiveAtLedger,
+      currentLedger: state.currentLedger,
+      queriedAt: new Date().toISOString(),
+    })
+
+    if (state.closeEffectiveAtLedger != null) {
+      onDisputeDetected?.(state)
+
+      if (state.currentLedger >= state.closeEffectiveAtLedger) {
+        logger.warn(`${LOG_PREFIX} Channel is closed — effective ledger reached`, {
+          closeEffectiveAtLedger: state.closeEffectiveAtLedger,
+          currentLedger: state.currentLedger,
+        })
+        throw new ChannelVerificationError(
+          `${LOG_PREFIX} Channel is closed: close effective ledger has been reached.`,
+          {
+            closeEffectiveAtLedger: String(state.closeEffectiveAtLedger),
+            currentLedger: String(state.currentLedger),
+          },
+        )
+      }
+    }
+
+    if (commitmentAmount > state.balance) {
+      logger.warn(`${LOG_PREFIX} Commitment exceeds channel balance`, {
+        commitmentAmount: commitmentAmount.toString(),
+        balance: state.balance.toString(),
+      })
+      throw new ChannelVerificationError(
+        `${LOG_PREFIX} Commitment ${commitmentAmount} exceeds channel balance ${state.balance}.`,
+        {
+          commitmentAmount: commitmentAmount.toString(),
+          balance: state.balance.toString(),
+        },
+      )
+    }
   }
 }
 
@@ -788,7 +764,7 @@ export async function close(parameters: {
   log.debug(`${LOG_PREFIX} Broadcasting close tx...`)
   const result = await server.sendTransaction(txToSubmit)
 
-  if (result.status === 'ERROR' || result.status === 'DUPLICATE') {
+  if (result.status !== 'PENDING') {
     throw new ChannelVerificationError(
       `${LOG_PREFIX} Close broadcast failed: sendTransaction returned ${result.status}.`,
       { hash: result.hash, status: result.status },
