@@ -62,6 +62,13 @@ STELLAR_SECRET=$(npx tsx -e "import{Keypair}from'@stellar/stellar-sdk';console.l
   npx tsx examples/charge-client.ts
 # → "Using Stellar account: G..." then ECONNREFUSED (expected)
 
+# Charge fee-bump client — should load keys, fail on network (no server running)
+STELLAR_SECRET=$(npx tsx -e "import{Keypair}from'@stellar/stellar-sdk';console.log(Keypair.random().secret())" 2>/dev/null) \
+  FEE_BUMP_SECRET=$(npx tsx -e "import{Keypair}from'@stellar/stellar-sdk';console.log(Keypair.random().secret())" 2>/dev/null) \
+  SERVER_URL=http://localhost:9999 \
+  npx tsx examples/charge-client-fee-bump.ts
+# → "Using Stellar account: G..." then ECONNREFUSED (expected)
+
 # Channel client — should load, create commitment key, fail on network
 COMMITMENT_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
   SOURCE_ACCOUNT=GBHEGW3KWOY2OFH767EDALFGCUTBOEVBDQMCKUVJ3LKEWI4ZNVPP5EFC \

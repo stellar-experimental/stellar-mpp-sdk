@@ -21,7 +21,7 @@ Mppx.create({
   methods: [
     stellar.charge({
       keypair,
-      mode: 'pull', // server broadcasts the signed tx
+      mode: Env.chargeClientMode,
       onProgress(event) {
         const ts = new Date().toISOString().slice(11, 23)
         switch (event.type) {

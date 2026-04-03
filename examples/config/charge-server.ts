@@ -28,4 +28,12 @@ export class Env {
   static get logLevel(): string {
     return parseOptional('LOG_LEVEL', 'info')!
   }
+
+  static get envelopeSignerSecret(): string | undefined {
+    return parseOptional('ENVELOPE_SIGNER_SECRET')
+  }
+
+  static get feeBumpSignerSecret(): string | undefined {
+    return parseOptional('FEE_BUMP_SIGNER_SECRET')
+  }
 }

@@ -36,6 +36,15 @@ app.use(rateLimit({ windowMs: Env.rateLimitWindowMs, max: Env.rateLimitMax }))
 app.use(pinoHttp({ logger }))
 app.use(express.json())
 
+const feePayer = Env.envelopeSignerSecret
+  ? {
+      envelopeSigner: Keypair.fromSecret(Env.envelopeSignerSecret),
+      ...(Env.feeBumpSignerSecret
+        ? { feeBumpSigner: Keypair.fromSecret(Env.feeBumpSignerSecret) }
+        : {}),
+    }
+  : undefined
+
 const mppx = Mppx.create({
   secretKey: Env.mppSecretKey,
   methods: [
@@ -44,6 +53,7 @@ const mppx = Mppx.create({
       currency: USDC_SAC_TESTNET,
       network: 'stellar:testnet',
       store: Store.memory(),
+      ...(feePayer ? { feePayer } : {}),
       logger,
     }),
   ],
