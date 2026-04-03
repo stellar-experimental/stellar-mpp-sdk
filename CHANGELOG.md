@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Harden verification, replay protection, and fix sponsored charge path ([#42](https://github.com/stellar/stellar-mpp-sdk/pull/42))
+
 ## [0.4.0] - 2026-04-01
 
 ### Changed
