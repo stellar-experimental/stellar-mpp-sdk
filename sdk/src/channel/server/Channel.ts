@@ -32,6 +32,7 @@ import { pollTransaction } from '../../shared/poll.js'
 import { toBaseUnits } from '../../shared/units.js'
 import { simulateCall } from '../../shared/simulate.js'
 import { validateAmount, validateHexSignature } from '../../shared/validation.js'
+import { verifyInvokeContractOp } from '../../shared/verify-invoke.js'
 import { channel as ChannelMethod } from '../Methods.js'
 import { getChannelState, type ChannelState } from './State.js'
 
@@ -495,15 +496,27 @@ export function channel(parameters: channel.Parameters) {
   }
 
   /**
-   * Verify an "open" credential: the client sends a signed channel-open
-   * transaction XDR along with an initial commitment signature. The server
-   * broadcasts the transaction, waits for confirmation, then initialises
-   * the cumulative amount in the store.
+   * Verifies and broadcasts an "open" credential that deploys the channel on-chain.
+   *
+   * Steps:
+   * 1. Enforces amount invariants (positive, covers requested amount).
+   * 2. Rejects replay opens when the channel is already initialised in the store.
+   * 3. Validates the initial commitment signature via `prepare_commitment` simulation.
+   * 4. Parses the client-signed deploy transaction XDR and verifies it targets
+   *    the expected channel contract address.
+   * 5. Optionally wraps in a {@link FeeBumpTransaction} if `feeBumpKP` is configured.
+   * 6. Broadcasts, polls for confirmation, and initialises the cumulative amount in the store.
+   *
+   * @param credential - The open credential containing the signed deploy tx XDR,
+   *   initial commitment amount, and ed25519 signature.
+   * @param challengeStoreKey - Store key used to mark the challenge as consumed
+   *   after successful settlement.
+   * @throws {ChannelVerificationError} On invalid signature, amount invariant
+   *   violation, replay, malformed XDR, contract mismatch, or broadcast failure.
    */
   async function doVerifyOpen(credential: OpenCredential, challengeStoreKey: string) {
-    const { challenge } = credential
+    const { challenge, payload } = credential
     const { externalId } = challenge.request
-    const payload = credential.payload
     const { transaction: txXdr, amount, signature: signatureHex } = payload
 
     if (!txXdr || typeof txXdr !== 'string') {
@@ -517,9 +530,6 @@ export function channel(parameters: channel.Parameters) {
     try {
       validateHexSignature(signatureHex)
     } catch {
-      logger.warn(`${LOG_PREFIX} Invalid commitment signature for open action`, {
-        length: signatureHex?.length,
-      })
       throw new ChannelVerificationError(
         `${LOG_PREFIX} Invalid commitment signature for open action.`,
         {
@@ -527,13 +537,9 @@ export function channel(parameters: channel.Parameters) {
         },
       )
     }
-
-    validateAmount(amount)
-    const commitmentAmount = BigInt(amount)
     const signatureBytes = Buffer.from(signatureHex, 'hex')
 
-    // Enforce amount invariants: both the commitment and the requested amount
-    // must be positive, and the commitment must cover the requested amount.
+    // Step 1: Validate amounts
     validateAmount(challenge.request.amount)
     const requestedAmount = BigInt(challenge.request.amount)
     if (requestedAmount <= 0n) {
@@ -544,6 +550,9 @@ export function channel(parameters: channel.Parameters) {
         },
       )
     }
+
+    validateAmount(amount)
+    const commitmentAmount = BigInt(amount)
     if (commitmentAmount <= 0n) {
       throw new ChannelVerificationError(
         `${LOG_PREFIX} Open action requires a positive commitment amount.`,
@@ -552,6 +561,7 @@ export function channel(parameters: channel.Parameters) {
         },
       )
     }
+
     if (commitmentAmount < requestedAmount) {
       throw new ChannelVerificationError(
         `${LOG_PREFIX} Commitment amount does not cover requested amount for open action.`,
@@ -562,7 +572,7 @@ export function channel(parameters: channel.Parameters) {
       )
     }
 
-    // Reject if the channel is already opened (cumulativeKey already set).
+    // Step 2: Reject if the channel is already opened (cumulativeKey already set).
     const existingChannel = await store.get(cumulativeKey)
     if (existingChannel) {
       throw new ChannelVerificationError(
@@ -571,7 +581,7 @@ export function channel(parameters: channel.Parameters) {
       )
     }
 
-    // Verify the initial commitment signature via prepare_commitment simulation
+    // Step 3: Verify the initial commitment signature via prepare_commitment simulation
     logger.debug(`${LOG_PREFIX} Verifying commitment signature...`)
     const contract = new Contract(channelAddress)
     const call = contract.call(
@@ -599,14 +609,9 @@ export function channel(parameters: channel.Parameters) {
     }
 
     const commitmentBytes = returnValue.bytes()
-
     const valid = commitmentKP.verify(Buffer.from(commitmentBytes), signatureBytes)
 
     if (!valid) {
-      logger.warn(`${LOG_PREFIX} Initial commitment signature verification failed`, {
-        amount: commitmentAmount.toString(),
-        channel: channelAddress,
-      })
       throw new ChannelVerificationError(
         `${LOG_PREFIX} Initial commitment signature verification failed.`,
         {
@@ -616,7 +621,8 @@ export function channel(parameters: channel.Parameters) {
       )
     }
 
-    // Parse and broadcast the open transaction
+    // Step 4: Parse and validate the open transaction to ensure it targets the correct channel contract
+    // before broadcasting it.
     let openTx: ReturnType<typeof TransactionBuilder.fromXDR>
     try {
       openTx = TransactionBuilder.fromXDR(txXdr, networkPassphrase)
@@ -626,17 +632,30 @@ export function channel(parameters: channel.Parameters) {
       })
     }
 
+    const innerTx =
+      openTx instanceof FeeBumpTransaction ? openTx.innerTransaction : (openTx as Transaction)
+
+    // Ensure the tx structure is correct:
+    const { contractAddress: targetContract } = verifyInvokeContractOp(innerTx, LOG_PREFIX)
+
+    if (targetContract !== channelAddress) {
+      throw new ChannelVerificationError(
+        `${LOG_PREFIX} Open transaction targets contract ${targetContract}, expected ${channelAddress}.`,
+        { targetContract, expectedContract: channelAddress },
+      )
+    }
+
+    // Step 5: Optionally wrap in a FeeBumpTransaction if feeBumpKP is configured.
     let txToSubmit = openTx
     if (feeBumpKP) {
-      const innerTx =
-        openTx instanceof FeeBumpTransaction ? openTx.innerTransaction : (openTx as Transaction)
       txToSubmit = wrapFeeBump(innerTx, feeBumpKP, {
         networkPassphrase,
         maxFeeStroops: maxFeeBumpStroops,
       })
     }
-    const sendResult = await rpcServer.sendTransaction(txToSubmit)
 
+    // Step 6: Broadcast the transaction and poll for confirmation
+    const sendResult = await rpcServer.sendTransaction(txToSubmit)
     if (sendResult.status === 'ERROR' || sendResult.status === 'DUPLICATE') {
       throw new ChannelVerificationError(
         `${LOG_PREFIX} Open broadcast failed: sendTransaction returned ${sendResult.status}.`,

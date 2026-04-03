@@ -28,6 +28,7 @@ import { wrapFeeBump } from '../../shared/fee-bump.js'
 import { PaymentVerificationError, SettlementError } from '../../shared/errors.js'
 import { noopLogger, type Logger } from '../../shared/logger.js'
 import { SimulationContractError, simulateCall } from '../../shared/simulate.js'
+import { verifyInvokeContractOp } from '../../shared/verify-invoke.js'
 import {
   DEFAULT_MAX_FEE_BUMP_STROOPS,
   DEFAULT_POLL_MAX_ATTEMPTS,
@@ -543,34 +544,6 @@ export function charge(parameters: charge.Parameters) {
  * that the host function type is a contract invocation. Rejects multi-operation transactions as a
  * defense-in-depth measure (Soroban protocol also enforces this).
  */
-function verifyExactlyOneOpAndTypeInvokeContract(tx: Transaction) {
-  if (tx.operations.length !== 1) {
-    throw new PaymentVerificationError(
-      `${LOG_PREFIX} Transaction must contain exactly one operation, got ${tx.operations.length}.`,
-      { operationCount: tx.operations.length },
-    )
-  }
-
-  const op = tx.operations[0]
-  if (op.type !== 'invokeHostFunction') {
-    throw new PaymentVerificationError(
-      `${LOG_PREFIX} Transaction does not contain a Soroban invocation.`,
-      { operationType: op.type },
-    )
-  }
-
-  const xdrEnvelope = tx.toXDR()
-  const envelope = xdr.TransactionEnvelope.fromXDR(xdrEnvelope, 'base64')
-  const opBody = envelope.v1().tx().operations()[0].body()
-  const hostFn = opBody.invokeHostFunctionOp().hostFunction()
-  if (hostFn.switch().value !== xdr.HostFunctionType.hostFunctionTypeInvokeContract().value) {
-    throw new PaymentVerificationError(
-      `${LOG_PREFIX} Host function is not a contract invocation.`,
-      { hostFunctionType: hostFn.switch().name },
-    )
-  }
-}
-
 /**
  * Rejects transactions whose source account or operation source matches the server's envelope
  * signing address.
@@ -604,9 +577,8 @@ function verifyNoSigningAddressInSources(tx: Transaction, signerKP: Keypair | un
  * Validates that the transaction's single operation is a SEP-41 `transfer` contract invocation
  * matching the expected parameters.
  *
- * Calls {@link verifyExactlyOneOpAndTypeInvokeContract} first to ensure the transaction contains exactly one
- * `invokeHostFunction` operation, then inspects the raw XDR envelope to verify contract address,
- * function name, and argument values.
+ * Calls {@link verifyInvokeContractOp} first to ensure the transaction contains exactly one
+ * `invokeHostFunction` operation, then verifies contract address, function name, and argument values.
  *
  * @throws {PaymentVerificationError} On any mismatch — no silent skipping.
  */
@@ -614,16 +586,8 @@ function verifyTokenTransfer(
   tx: Transaction,
   expected: { amount: bigint; currency: string; recipient: string; from: string },
 ) {
-  verifyExactlyOneOpAndTypeInvokeContract(tx)
-  const xdrEnvelope = tx.toXDR()
-  const envelope = xdr.TransactionEnvelope.fromXDR(xdrEnvelope, 'base64')
-  const txBody = envelope.v1().tx()
-  const ops = txBody.operations()
+  const { contractAddress, invokeArgs } = verifyInvokeContractOp(tx, LOG_PREFIX)
 
-  const opBody = ops[0].body()
-  const invokeArgs = opBody.invokeHostFunctionOp().hostFunction().invokeContract()
-
-  const contractAddress = Address.fromScAddress(invokeArgs.contractAddress()).toString()
   if (contractAddress !== expected.currency) {
     throw new PaymentVerificationError(
       `${LOG_PREFIX} Contract address does not match expected currency.`,

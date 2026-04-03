@@ -1,4 +1,4 @@
-import { Account, Keypair } from '@stellar/stellar-sdk'
+import { Account, Address, Keypair, xdr } from '@stellar/stellar-sdk'
 import { Challenge, Credential, Store } from 'mppx'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -61,6 +61,35 @@ mockGetAccount.mockResolvedValue({
 
 const COMMITMENT_KEY = Keypair.random()
 const CHANNEL_ADDRESS = 'CAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQC526'
+
+/** Build a mock Transaction that passes open-XDR validation. */
+function mockOpenTx(contractAddress: string = CHANNEL_ADDRESS) {
+  const scAddress = Address.fromString(contractAddress).toScAddress()
+  const invokeContractSwitch = xdr.HostFunctionType.hostFunctionTypeInvokeContract()
+  return {
+    operations: [{ type: 'invokeHostFunction' }],
+    toEnvelope: () => ({
+      v1: () => ({
+        tx: () => ({
+          operations: () => [
+            {
+              body: () => ({
+                invokeHostFunctionOp: () => ({
+                  hostFunction: () => ({
+                    switch: () => invokeContractSwitch,
+                    invokeContract: () => ({
+                      contractAddress: () => scAddress,
+                    }),
+                  }),
+                }),
+              }),
+            },
+          ],
+        }),
+      }),
+    }),
+  }
+}
 
 /**
  * Build a fake credential for testing verify().
@@ -921,7 +950,7 @@ describe('stellar server channel open action', () => {
   it('accepts valid open credential, broadcasts tx, and initialises store', async () => {
     const commitmentBytes = Buffer.from('open-valid-commitment')
     mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
-    mockFromXDR.mockReturnValueOnce({ toXDR: () => 'mock-xdr' })
+    mockFromXDR.mockReturnValueOnce(mockOpenTx())
     mockSendTransaction.mockResolvedValueOnce({ hash: 'open-tx-hash-123' })
     mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
 
@@ -955,10 +984,95 @@ describe('stellar server channel open action', () => {
     expect(stored.amount).toBe('1000000')
   })
 
+  it('rejects open when transaction targets a different contract', async () => {
+    const commitmentBytes = Buffer.from('wrong-contract')
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+    const wrongContract = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC'
+    mockFromXDR.mockReturnValueOnce(mockOpenTx(wrongContract))
+
+    const credential = makeSignedOpenCredential({
+      transaction: 'AAAA...base64xdr...',
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('expected')
+  })
+
+  it('rejects open when transaction has multiple operations', async () => {
+    const commitmentBytes = Buffer.from('multi-op')
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+    const multiOpTx = {
+      operations: [{ type: 'invokeHostFunction' }, { type: 'invokeHostFunction' }],
+    }
+    mockFromXDR.mockReturnValueOnce(multiOpTx)
+
+    const credential = makeSignedOpenCredential({
+      transaction: 'AAAA...base64xdr...',
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('exactly one operation')
+  })
+
+  it('rejects open when transaction is not an invokeHostFunction', async () => {
+    const commitmentBytes = Buffer.from('wrong-op-type')
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+    const wrongOpTx = {
+      operations: [{ type: 'payment' }],
+    }
+    mockFromXDR.mockReturnValueOnce(wrongOpTx)
+
+    const credential = makeSignedOpenCredential({
+      transaction: 'AAAA...base64xdr...',
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
+    })
+
+    await expect(
+      method.verify({
+        credential: credential as any,
+        request: credential.challenge.request,
+      }),
+    ).rejects.toThrow('Soroban invocation')
+  })
+
   it('rejects open when transaction broadcast fails', async () => {
     const commitmentBytes = Buffer.from('open-fail-broadcast')
     mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
-    mockFromXDR.mockReturnValueOnce({ toXDR: () => 'mock-xdr' })
+    mockFromXDR.mockReturnValueOnce(mockOpenTx())
     mockSendTransaction.mockResolvedValueOnce({ hash: 'fail-hash' })
     mockGetTransaction.mockResolvedValueOnce({ status: 'FAILED' })
 
