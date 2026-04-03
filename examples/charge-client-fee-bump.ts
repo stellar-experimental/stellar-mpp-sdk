@@ -96,7 +96,7 @@ Mppx.create({
           // Client broadcasts the fee-bumped tx; server verifies the on-chain hash
           console.log(`[${ts()}] 📡 Broadcasting fee-bumped tx...`)
           const result = await server.sendTransaction(feeBumpTx)
-          if (result.status === 'ERROR' || result.status === 'DUPLICATE') {
+          if (result.status !== 'PENDING') {
             throw new Error(`Broadcast failed: sendTransaction returned ${result.status}`)
           }
           console.log(`[${ts()}] ⏳ Confirming ${result.hash.slice(0, 12)}...`)
