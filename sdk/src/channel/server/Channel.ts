@@ -1,4 +1,5 @@
 import {
+  Account,
   Contract,
   FeeBumpTransaction,
   Keypair,
@@ -9,6 +10,7 @@ import {
 } from '@stellar/stellar-sdk'
 import { Credential, Method, Receipt, Store } from 'mppx'
 import {
+  ALL_ZEROS,
   DEFAULT_DECIMALS,
   DEFAULT_FEE,
   DEFAULT_TIMEOUT,
@@ -89,7 +91,6 @@ export function channel(parameters: channel.Parameters) {
     pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
     rpcUrl,
     simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
-    sourceAccount,
     store,
     logger = noopLogger,
   } = parameters
@@ -263,7 +264,7 @@ export function channel(parameters: channel.Parameters) {
       nativeToScVal(commitmentAmount, { type: 'i128' }),
     )
 
-    const account = await rpcServer.getAccount(sourceAccount ?? commitmentKP.publicKey())
+    const account = new Account(ALL_ZEROS, '0')
     const simTx = new TransactionBuilder(account, {
       fee: DEFAULT_FEE,
       networkPassphrase,
@@ -299,83 +300,12 @@ export function channel(parameters: channel.Parameters) {
 
     // Dispatch on action
     if (action === 'close') {
-      if (!envelopeKP) {
-        throw new ChannelVerificationError(
-          `${LOG_PREFIX} Close action requires a feePayer.envelopeSigner (transaction source and envelope signer) to be configured.`,
-          {},
-        )
-      }
-
-      // Submit the close transaction on-chain
-      const closeOp = contract.call(
-        'close',
-        nativeToScVal(commitmentAmount, { type: 'i128' }),
-        nativeToScVal(Buffer.from(signatureBytes), { type: 'bytes' }),
-      )
-
-      const closeAccount = await rpcServer.getAccount(envelopeKP.publicKey())
-      const closeTx = new TransactionBuilder(closeAccount, {
-        fee: DEFAULT_FEE,
-        networkPassphrase,
-      })
-        .addOperation(closeOp)
-        .setTimeout(DEFAULT_TIMEOUT)
-        .build()
-
-      const prepared = await rpcServer.prepareTransaction(closeTx)
-      prepared.sign(envelopeKP)
-
-      let txToSubmit: Transaction | FeeBumpTransaction = prepared
-      if (feeBumpKP) {
-        txToSubmit = wrapFeeBump(prepared, feeBumpKP, {
-          networkPassphrase,
-          maxFeeStroops: maxFeeBumpStroops,
-        })
-      }
-
-      logger.debug(`${LOG_PREFIX} Broadcasting close tx...`)
-      const sendResult = await rpcServer.sendTransaction(txToSubmit)
-
-      if (sendResult.status !== 'PENDING') {
-        throw new ChannelVerificationError(
-          `${LOG_PREFIX} Close broadcast failed: sendTransaction returned ${sendResult.status}.`,
-          { hash: sendResult.hash, status: sendResult.status },
-        )
-      }
-
-      const txResult = await pollTransaction(rpcServer, sendResult.hash, {
-        maxAttempts: pollMaxAttempts,
-        delayMs: pollDelayMs,
-        timeoutMs: pollTimeoutMs,
-      })
-
-      if (txResult.status !== 'SUCCESS') {
-        throw new ChannelVerificationError(
-          `${LOG_PREFIX} Close transaction failed: ${txResult.status}`,
-          {
-            hash: sendResult.hash,
-            status: txResult.status,
-          },
-        )
-      }
-
-      // Mark channel as closed in store
-      logger.debug(`${LOG_PREFIX} Channel closed, marking in store`)
-      await store.put(`${STORE_PREFIX}:closed:${channelAddress}`, {
-        closedAt: new Date().toISOString(),
-        txHash: sendResult.hash,
-        amount: commitmentAmount.toString(),
-      })
-
-      // Mark challenge as used only after successful close settlement
-      await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
-
-      return Receipt.from({
-        method: 'stellar',
-        reference: sendResult.hash,
-        status: 'success',
-        timestamp: new Date().toISOString(),
-        ...(externalId ? { externalId } : {}),
+      return doVerifyClose({
+        contract,
+        commitmentAmount,
+        signatureBytes,
+        challengeStoreKey,
+        externalId,
       })
     }
 
@@ -385,6 +315,96 @@ export function channel(parameters: channel.Parameters) {
     return Receipt.from({
       method: 'stellar',
       reference: challengeRequest.methodDetails?.reference ?? challenge.id,
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      ...(externalId ? { externalId } : {}),
+    })
+  }
+
+  /**
+   * Builds, signs, broadcasts, and polls a close transaction on-chain,
+   * then marks the channel and challenge in the store.
+   */
+  async function doVerifyClose(params: {
+    contract: Contract
+    commitmentAmount: bigint
+    signatureBytes: Buffer
+    challengeStoreKey: string
+    externalId?: string
+  }) {
+    const { contract, commitmentAmount, signatureBytes, challengeStoreKey, externalId } = params
+
+    if (!envelopeKP) {
+      throw new ChannelVerificationError(
+        `${LOG_PREFIX} Close action requires a feePayer.envelopeSigner (transaction source and envelope signer) to be configured.`,
+        {},
+      )
+    }
+
+    const closeOp = contract.call(
+      'close',
+      nativeToScVal(commitmentAmount, { type: 'i128' }),
+      nativeToScVal(Buffer.from(signatureBytes), { type: 'bytes' }),
+    )
+
+    const closeAccount = await rpcServer.getAccount(envelopeKP.publicKey())
+    const closeTx = new TransactionBuilder(closeAccount, {
+      fee: DEFAULT_FEE,
+      networkPassphrase,
+    })
+      .addOperation(closeOp)
+      .setTimeout(DEFAULT_TIMEOUT)
+      .build()
+
+    const prepared = await rpcServer.prepareTransaction(closeTx)
+    prepared.sign(envelopeKP)
+
+    let txToSubmit: Transaction | FeeBumpTransaction = prepared
+    if (feeBumpKP) {
+      txToSubmit = wrapFeeBump(prepared, feeBumpKP, {
+        networkPassphrase,
+        maxFeeStroops: maxFeeBumpStroops,
+      })
+    }
+
+    logger.debug(`${LOG_PREFIX} Broadcasting close tx...`)
+    const sendResult = await rpcServer.sendTransaction(txToSubmit)
+
+    if (sendResult.status !== 'PENDING') {
+      throw new ChannelVerificationError(
+        `${LOG_PREFIX} Close broadcast failed: sendTransaction returned ${sendResult.status}.`,
+        { hash: sendResult.hash, status: sendResult.status },
+      )
+    }
+
+    const txResult = await pollTransaction(rpcServer, sendResult.hash, {
+      maxAttempts: pollMaxAttempts,
+      delayMs: pollDelayMs,
+      timeoutMs: pollTimeoutMs,
+    })
+
+    if (txResult.status !== 'SUCCESS') {
+      throw new ChannelVerificationError(
+        `${LOG_PREFIX} Close transaction failed: ${txResult.status}`,
+        {
+          hash: sendResult.hash,
+          status: txResult.status,
+        },
+      )
+    }
+
+    logger.debug(`${LOG_PREFIX} Channel closed, marking in store`)
+    await store.put(`${STORE_PREFIX}:closed:${channelAddress}`, {
+      closedAt: new Date().toISOString(),
+      txHash: sendResult.hash,
+      amount: commitmentAmount.toString(),
+    })
+
+    await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
+
+    return Receipt.from({
+      method: 'stellar',
+      reference: sendResult.hash,
       status: 'success',
       timestamp: new Date().toISOString(),
       ...(externalId ? { externalId } : {}),
@@ -485,7 +505,7 @@ export function channel(parameters: channel.Parameters) {
       nativeToScVal(commitmentAmount, { type: 'i128' }),
     )
 
-    const account = await rpcServer.getAccount(sourceAccount ?? commitmentKP.publicKey())
+    const account = new Account(ALL_ZEROS, '0')
     const simTx = new TransactionBuilder(account, {
       fee: DEFAULT_FEE,
       networkPassphrase,
@@ -598,25 +618,16 @@ export function channel(parameters: channel.Parameters) {
    * `checkOnChainState` is enabled.
    *
    * @param commitmentAmount - The cumulative commitment to validate against the on-chain balance.
-   * @throws {ChannelVerificationError} If `sourceAccount` is missing, the channel
-   *   is closed on-chain, the commitment exceeds the balance, or the RPC call fails.
+   * @throws {ChannelVerificationError} If the channel is closed on-chain, the
+   *   commitment exceeds the balance, or the RPC call fails.
    */
   async function verifyOnChainState(commitmentAmount: bigint): Promise<void> {
-    if (!sourceAccount) {
-      throw new ChannelVerificationError(
-        'checkOnChainState requires sourceAccount to be set. ' +
-          'Provide a funded Stellar account address (G...) to use for on-chain simulations.',
-        { channel: channelAddress },
-      )
-    }
-
     let state: ChannelState
     try {
       state = await getChannelState({
         channel: channelAddress,
         network,
         rpcUrl,
-        sourceAccount,
       })
     } catch (error) {
       // NM-005: Fail closed — reject the voucher when the on-chain
@@ -800,9 +811,7 @@ export declare namespace channel {
     channel: string
     /**
      * When true, each verify call lazily reads on-chain state to detect
-     * if `close_start` has been called (dispute detection). Requires
-     * `sourceAccount` to be set — a configuration error is thrown if
-     * `sourceAccount` is missing when this is enabled. @default false
+     * if `close_start` has been called (dispute detection). @default false
      */
     checkOnChainState?: boolean
     /**
@@ -852,12 +861,6 @@ export declare namespace channel {
     rpcUrl?: string
     /** Simulation timeout in milliseconds. @default 10_000 */
     simulationTimeoutMs?: number
-    /**
-     * Funded Stellar account address (G...) used as the source for
-     * read-only transaction simulations. If omitted, the commitment
-     * key's public key is used, which requires it to be a funded account.
-     */
-    sourceAccount?: string
     /**
      * Persistent store for replay protection, cumulative amount tracking,
      * and channel lifecycle state (open/closed).
