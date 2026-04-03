@@ -26,7 +26,7 @@ Runs: install -> format-check -> lint -> typecheck -> test -> build.
 Verify all 6 example scripts start correctly (imports resolve, env parsing works):
 
 ```bash
-for f in examples/charge-server.ts examples/charge-client.ts examples/channel-server.ts examples/channel-client.ts examples/channel-open.ts examples/channel-close.ts; do
+for f in examples/charge-server.ts examples/charge-client.ts examples/charge-client-fee-bump.ts examples/channel-server.ts examples/channel-client.ts examples/channel-open.ts examples/channel-close.ts; do
   echo "--- $f ---"
   timeout 3 npx tsx "$f" 2>&1 | head -3
   echo ""
@@ -38,13 +38,66 @@ done
 | Script                       | Expected                                                        |
 | ---------------------------- | --------------------------------------------------------------- |
 | `examples/charge-server.ts`  | Starts Express on port 3000 (pino JSON log)                     |
-| `examples/charge-client.ts`  | Loads keypair, starts client                                    |
+| `examples/charge-client.ts`          | Loads keypair, starts client                                                   |
+| `examples/charge-client-fee-bump.ts` | Loads keypair+fee-bump-key, prints account keys, ECONNREFUSED |
 | `examples/channel-server.ts` | Starts Express on port 3001 (pino JSON log)                     |
 | `examples/channel-client.ts` | Loads commitment key, starts client                             |
 | `examples/channel-open.ts`   | Env validation error: `OPEN_TX_XDR is required` (expected)      |
 | `examples/channel-close.ts`  | Env validation error: `CHANNEL_CONTRACT is required` (expected) |
 
 **Fail:** Any import error, syntax error, or module-not-found error.
+
+## Check 2b: Charge Flow Variations
+
+Six flows are available by combining client and server env vars. Each requires a running
+charge server (Terminal 1) and charge client (Terminal 2).
+
+### Server configurations
+
+```bash
+# Unsponsored (flows 1-4): no feePayer env vars needed
+PORT=3099 STELLAR_RECIPIENT=G... npx tsx examples/charge-server.ts
+
+# Sponsored, no fee bump (flow 5): set ENVELOPE_SIGNER_SECRET
+PORT=3099 STELLAR_RECIPIENT=G... ENVELOPE_SIGNER_SECRET=S... \
+  npx tsx examples/charge-server.ts
+
+# Sponsored + FeeBump (flow 6): set both signer secrets
+PORT=3099 STELLAR_RECIPIENT=G... ENVELOPE_SIGNER_SECRET=S... FEE_BUMP_SIGNER_SECRET=S... \
+  npx tsx examples/charge-server.ts
+```
+
+### Client invocations (Terminal 2, replace S... with real key)
+
+```bash
+# Flow 1: push (no FeeBump)
+STELLAR_SECRET=S... SERVER_URL=http://localhost:3099 CHARGE_CLIENT_MODE=push \
+  npx tsx examples/charge-client.ts
+
+# Flow 2: push + FeeBump
+STELLAR_SECRET=S... FEE_BUMP_SECRET=S... SERVER_URL=http://localhost:3099 CHARGE_CLIENT_MODE=push \
+  npx tsx examples/charge-client-fee-bump.ts
+
+# Flow 3: pull non-sponsored (no FeeBump)  [default CHARGE_CLIENT_MODE]
+STELLAR_SECRET=S... SERVER_URL=http://localhost:3099 \
+  npx tsx examples/charge-client.ts
+
+# Flow 4: pull non-sponsored + FeeBump
+STELLAR_SECRET=S... FEE_BUMP_SECRET=S... SERVER_URL=http://localhost:3099 \
+  npx tsx examples/charge-client-fee-bump.ts
+
+# Flow 5: pull sponsored (no FeeBump) — server must have ENVELOPE_SIGNER_SECRET set
+STELLAR_SECRET=S... SERVER_URL=http://localhost:3099 \
+  npx tsx examples/charge-client.ts
+
+# Flow 6: pull sponsored + FeeBump
+# NOTE: client invocation is identical to Flow 5 — the difference is ONLY the server config.
+# The server's feeBumpSigner wraps the rebuilt tx in FeeBump; no client-side change needed.
+STELLAR_SECRET=S... SERVER_URL=http://localhost:3099 \
+  npx tsx examples/charge-client.ts
+```
+
+**Pass:** Each client prints `--- Response (200) ---` with paid content JSON.
 
 ## Check 3: Charge E2E Demo
 
