@@ -356,6 +356,14 @@ export function charge(parameters: charge.Parameters) {
           )
         }
 
+        // Lock the challenge immediately after the network accepts the tx.
+        // This prevents replay if polling fails but the tx still settles.
+        await store.put(challengeStoreKey, {
+          state: 'pending',
+          hash: sendResult.hash,
+          createdAt: new Date().toISOString(),
+        })
+
         try {
           await pollTransaction(server, sendResult.hash, {
             maxAttempts: pollMaxAttempts,
@@ -363,14 +371,20 @@ export function charge(parameters: charge.Parameters) {
             timeoutMs: pollTimeoutMs,
           })
         } catch (error) {
-          throw new SettlementError(`${LOG_PREFIX} Settlement failed: transaction not confirmed.`, {
-            hash: sendResult.hash,
-            details: error instanceof Error ? error.message : String(error),
-          })
+          throw new SettlementError(
+            `${LOG_PREFIX} Settlement status is ambiguous — challenge locked pending reconciliation.`,
+            {
+              hash: sendResult.hash,
+              details: error instanceof Error ? error.message : String(error),
+            },
+          )
         }
 
-        // Mark challenge as used only after successful settlement
-        await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
+        await store.put(challengeStoreKey, {
+          state: 'settled',
+          hash: sendResult.hash,
+          settledAt: new Date().toISOString(),
+        })
 
         return Receipt.from({
           method: 'stellar',
