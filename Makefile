@@ -34,7 +34,10 @@ test: ## Run tests once (vitest --run)
 test-watch: ## Run tests in watch mode
 	pnpm test
 
-check: install format-check lint typecheck test build ## Run full quality pipeline (mirrors CI)
+audit: ## Run security audit (high+ severity)
+	pnpm audit --audit-level high
+
+check: install format-check lint typecheck test build audit ## Run full quality pipeline (mirrors CI)
 
 demo-server: ## Run charge server example
 	pnpm run demo:server

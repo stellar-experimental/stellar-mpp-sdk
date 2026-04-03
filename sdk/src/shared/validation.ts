@@ -9,7 +9,7 @@ import { StellarMppError } from './errors.js'
  * @throws {StellarMppError} If the string is not valid hex or has the wrong length.
  */
 export function validateHexSignature(hex: string, expectedLength: number = 128): void {
-  if (!/^[0-9a-f]+$/i.test(hex) || hex.length % 2 !== 0 || hex.length !== expectedLength) {
+  if (!/^[0-9a-f]+$/i.test(hex) || hex.length !== expectedLength) {
     throw new StellarMppError(
       `Invalid signature: expected ${expectedLength} hex characters, got ${hex.length}`,
     )

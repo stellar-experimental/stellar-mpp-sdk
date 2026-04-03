@@ -239,14 +239,8 @@ export function channel(parameters: channel.Parameters) {
       previousCumulative = BigInt((storedCumulative as { amount: string }).amount)
     }
 
-    // Reject zero or negative requested amounts
     validateAmount(challengeRequest.amount)
     const requestedAmount = BigInt(challengeRequest.amount)
-    if (requestedAmount <= 0n) {
-      throw new ChannelVerificationError(`${LOG_PREFIX} Requested amount must be positive.`, {
-        requestedAmount: requestedAmount.toString(),
-      })
-    }
 
     // The new cumulative must be strictly greater than previous cumulative
     if (commitmentAmount <= previousCumulative) {
@@ -429,25 +423,9 @@ export function channel(parameters: channel.Parameters) {
     // Step 1: Validate amounts
     validateAmount(challenge.request.amount)
     const requestedAmount = BigInt(challenge.request.amount)
-    if (requestedAmount <= 0n) {
-      throw new ChannelVerificationError(
-        `${LOG_PREFIX} Open action requires a positive requested amount.`,
-        {
-          requestedAmount: requestedAmount.toString(),
-        },
-      )
-    }
 
     validateAmount(amount)
     const commitmentAmount = BigInt(amount)
-    if (commitmentAmount <= 0n) {
-      throw new ChannelVerificationError(
-        `${LOG_PREFIX} Open action requires a positive commitment amount.`,
-        {
-          commitmentAmount: commitmentAmount.toString(),
-        },
-      )
-    }
 
     if (commitmentAmount < requestedAmount) {
       throw new ChannelVerificationError(
@@ -473,7 +451,7 @@ export function channel(parameters: channel.Parameters) {
 
     // Step 4: Parse and validate the open transaction to ensure it targets the correct channel contract
     // before broadcasting it.
-    let openTx: ReturnType<typeof TransactionBuilder.fromXDR>
+    let openTx: Transaction | FeeBumpTransaction
     try {
       openTx = TransactionBuilder.fromXDR(txXdr, networkPassphrase)
     } catch (err) {
@@ -582,11 +560,11 @@ export function channel(parameters: channel.Parameters) {
    *   status or the polled result is not SUCCESS.
    */
   async function broadcastAndPoll(
-    tx: Transaction | FeeBumpTransaction | ReturnType<typeof TransactionBuilder.fromXDR>,
+    tx: Transaction | FeeBumpTransaction,
     label: string,
   ): Promise<string> {
     logger.debug(`${LOG_PREFIX} Broadcasting ${label.toLowerCase()} tx...`)
-    const sendResult = await rpcServer.sendTransaction(tx as Transaction | FeeBumpTransaction)
+    const sendResult = await rpcServer.sendTransaction(tx)
 
     if (sendResult.status !== 'PENDING') {
       throw new ChannelVerificationError(
