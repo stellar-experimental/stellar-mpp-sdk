@@ -370,11 +370,50 @@ describe('client-side cumulative tracking (store)', () => {
     expect(stored.amount).toBe('3500000')
   })
 
-  it('behaves identically to no-store when store is omitted', async () => {
+  it('default in-memory store prevents cumulative reset across calls', async () => {
+    const commitmentBytes = Buffer.from('default-store-reset-test')
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+
+    const method = channel({ commitmentKey: TEST_KEYPAIR }) // no explicit store
+
+    // First call: server reports cumulative 0, amount 1000000 → signs 1000000
+    const challenge1 = mockChallenge({
+      amount: '1000000',
+      methodDetails: {
+        reference: crypto.randomUUID(),
+        network: 'stellar:testnet',
+        cumulativeAmount: '0',
+      },
+    })
+    await method.createCredential({ challenge: challenge1 as any, context: {} as any })
+
+    // Second call: server tries to reset cumulative to 0 (attack)
+    const challenge2 = mockChallenge({
+      amount: '500000',
+      methodDetails: {
+        reference: crypto.randomUUID(),
+        network: 'stellar:testnet',
+        cumulativeAmount: '0', // reset attack
+      },
+    })
+    const credential2 = await method.createCredential({
+      challenge: challenge2 as any,
+      context: {} as any,
+    })
+
+    const token = credential2.replace(/^Payment\s+/, '')
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'))
+    // Default in-memory store tracked 1000000 from first call,
+    // so it uses max(1000000, 0) + 500000 = 1500000 instead of 0 + 500000
+    expect(decoded.payload.amount).toBe('1500000')
+  })
+
+  it('defaults to in-memory store when store is omitted', async () => {
     const commitmentBytes = Buffer.from('no-store-compat-test')
     mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
 
-    const method = channel({ commitmentKey: TEST_KEYPAIR }) // no store
+    const method = channel({ commitmentKey: TEST_KEYPAIR }) // defaults to Store.memory()
     const challenge = mockChallenge({
       amount: '500000',
       methodDetails: {
@@ -391,7 +430,7 @@ describe('client-side cumulative tracking (store)', () => {
 
     const token = credential.replace(/^Payment\s+/, '')
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'))
-    // Without store: trusts server-reported 2000000 + 500000 = 2500000
+    // In-memory store has no prior state: uses server-reported 2000000 + 500000 = 2500000
     expect(decoded.payload.amount).toBe('2500000')
   })
 })

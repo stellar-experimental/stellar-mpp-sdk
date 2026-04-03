@@ -1,3 +1,7 @@
+# Terminology
+
+This project works with **SEP-41 token transfers** — the Stellar standard interface for fungible tokens. SAC (Stellar Asset Contract) is one implementation of SEP-41, but the SDK supports any SEP-41-compliant token contract. Use "SEP-41 token transfer" or "token transfer" in code, comments, and documentation — not "SAC transfer."
+
 # Completion Checklist
 
 Before committing or telling the user a task is complete:

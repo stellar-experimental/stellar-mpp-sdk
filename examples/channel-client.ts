@@ -12,6 +12,7 @@ import { Keypair } from '@stellar/stellar-sdk'
 import { Mppx } from 'mppx/client'
 import { stellar } from '../sdk/src/channel/client/index.js'
 import { Env } from './config/channel-client.js'
+import { truncate } from './log-utils.js'
 
 // Convert the raw ed25519 secret key (hex) to a Stellar Keypair for signing
 const commitmentKey = Keypair.fromRawEd25519Seed(Buffer.from(Env.commitmentSecret, 'hex'))
@@ -27,16 +28,18 @@ Mppx.create({
         switch (event.type) {
           case 'challenge':
             console.log(
-              `[${ts}] 💳 Challenge received — ${event.amount} stroops via channel ${event.channel.slice(0, 12)}...`,
+              `[${ts}] 💳 Challenge received — ${truncate(event.amount)} stroops via channel ${truncate(event.channel)}`,
             )
-            console.log(`[${ts}]    Cumulative amount will be: ${event.cumulativeAmount} stroops`)
+            console.log(
+              `[${ts}]    Cumulative amount will be: ${truncate(event.cumulativeAmount)} stroops`,
+            )
             break
           case 'signing':
             console.log(`[${ts}] ✍️  Signing commitment...`)
             break
           case 'signed':
             console.log(
-              `[${ts}] ✅ Commitment signed (cumulative: ${event.cumulativeAmount} stroops)`,
+              `[${ts}] ✅ Commitment signed (cumulative: ${truncate(event.cumulativeAmount)} stroops)`,
             )
             break
         }

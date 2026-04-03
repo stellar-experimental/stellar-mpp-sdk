@@ -97,12 +97,24 @@ describe('parseStellarPublicKey', () => {
 
   it('throws on invalid format', () => {
     vi.stubEnv('RECIPIENT', 'SNOTAPUBLICKEY')
-    expect(() => parseStellarPublicKey('RECIPIENT')).toThrow('must be a Stellar public key (G...)')
+    expect(() => parseStellarPublicKey('RECIPIENT')).toThrow(
+      'must be a valid Stellar public key (G...)',
+    )
   })
 
   it('throws on wrong length', () => {
     vi.stubEnv('RECIPIENT', 'GSHORT')
-    expect(() => parseStellarPublicKey('RECIPIENT')).toThrow('must be a Stellar public key (G...)')
+    expect(() => parseStellarPublicKey('RECIPIENT')).toThrow(
+      'must be a valid Stellar public key (G...)',
+    )
+  })
+
+  it('throws on invalid checksum', () => {
+    // Valid prefix and length but corrupted checksum (last char changed)
+    vi.stubEnv('RECIPIENT', 'GATLN2B5WYM6PV64X532ZNQ6Q22HVNFNOTH27VLYEHYLRLM5KNBWV2PA')
+    expect(() => parseStellarPublicKey('RECIPIENT')).toThrow(
+      'must be a valid Stellar public key (G...)',
+    )
   })
 })
 
@@ -119,7 +131,16 @@ describe('parseStellarSecretKey', () => {
 
   it('throws on invalid format', () => {
     vi.stubEnv('SECRET', 'GNOTASECRETKEY')
-    expect(() => parseStellarSecretKey('SECRET')).toThrow('must be a Stellar secret key (S...)')
+    expect(() => parseStellarSecretKey('SECRET')).toThrow(
+      'must be a valid Stellar secret key (S...)',
+    )
+  })
+
+  it('throws on invalid checksum', () => {
+    vi.stubEnv('SECRET', 'SA5KKLVMJWQNZU4I2PIT2DYLPR6VBB552EQGRZB2EKMPCYICGWH56YXA')
+    expect(() => parseStellarSecretKey('SECRET')).toThrow(
+      'must be a valid Stellar secret key (S...)',
+    )
   })
 })
 
@@ -136,7 +157,16 @@ describe('parseContractAddress', () => {
 
   it('throws on invalid format', () => {
     vi.stubEnv('CONTRACT', 'GNOTACONTRACT')
-    expect(() => parseContractAddress('CONTRACT')).toThrow('must be a contract address (C...)')
+    expect(() => parseContractAddress('CONTRACT')).toThrow(
+      'must be a valid contract address (C...)',
+    )
+  })
+
+  it('throws on invalid checksum', () => {
+    vi.stubEnv('CONTRACT', 'CBU3P5BAU6CYGPAVY7TGGGNEPCS7H73IA3L677Z3CFZSGFYB7UFK4IMA')
+    expect(() => parseContractAddress('CONTRACT')).toThrow(
+      'must be a valid contract address (C...)',
+    )
   })
 })
 

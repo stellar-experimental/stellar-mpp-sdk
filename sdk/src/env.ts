@@ -1,3 +1,5 @@
+import { StrKey } from '@stellar/stellar-sdk'
+
 export function parseRequired(name: string): string {
   const value = process.env[name]
   if (value === undefined || value === '') {
@@ -27,24 +29,24 @@ export function parsePort(name: string = 'PORT', fallback?: number): number {
 
 export function parseStellarPublicKey(name: string): string {
   const value = parseRequired(name)
-  if (!value.startsWith('G') || value.length !== 56) {
-    throw new Error(`${name} must be a Stellar public key (G...)`)
+  if (!StrKey.isValidEd25519PublicKey(value)) {
+    throw new Error(`${name} must be a valid Stellar public key (G...)`)
   }
   return value
 }
 
 export function parseStellarSecretKey(name: string): string {
   const value = parseRequired(name)
-  if (!value.startsWith('S') || value.length !== 56) {
-    throw new Error(`${name} must be a Stellar secret key (S...)`)
+  if (!StrKey.isValidEd25519SecretSeed(value)) {
+    throw new Error(`${name} must be a valid Stellar secret key (S...)`)
   }
   return value
 }
 
 export function parseContractAddress(name: string): string {
   const value = parseRequired(name)
-  if (!value.startsWith('C') || value.length !== 56) {
-    throw new Error(`${name} must be a contract address (C...)`)
+  if (!StrKey.isValidContract(value)) {
+    throw new Error(`${name} must be a valid contract address (C...)`)
   }
   return value
 }

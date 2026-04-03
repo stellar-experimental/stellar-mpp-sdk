@@ -21,6 +21,7 @@ import { Keypair } from '@stellar/stellar-sdk'
 import { Mppx } from 'mppx/client'
 import { stellar } from '../sdk/src/channel/client/index.js'
 import { parseHexKey, parseOptional, parseRequired } from '../sdk/src/env.js'
+import { truncate } from './log-utils.js'
 
 const OPEN_TX_XDR = parseRequired('OPEN_TX_XDR')
 const COMMITMENT_SECRET = parseHexKey('COMMITMENT_SECRET')
@@ -47,16 +48,14 @@ Mppx.create({
         const ts = new Date().toISOString().slice(11, 23)
         switch (event.type) {
           case 'challenge':
-            console.log(
-              `  [${ts}] 💳 Challenge received — channel ${event.channel.slice(0, 12)}...`,
-            )
+            console.log(`  [${ts}] 💳 Challenge received — channel ${truncate(event.channel)}`)
             break
           case 'signing':
             console.log(`  [${ts}] ✍️  Signing initial commitment...`)
             break
           case 'signed':
             console.log(
-              `  [${ts}] ✅ Commitment signed (initial: ${event.cumulativeAmount} stroops)`,
+              `  [${ts}] ✅ Commitment signed (initial: ${truncate(event.cumulativeAmount)} stroops)`,
             )
             break
         }

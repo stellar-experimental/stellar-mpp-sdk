@@ -44,7 +44,7 @@ export function channel(parameters: channel.Parameters) {
     onProgress,
     rpcUrl,
     simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
-    store,
+    store = Store.memory(),
   } = parameters
 
   if (!commitmentKeyParam && !commitmentSecret) {

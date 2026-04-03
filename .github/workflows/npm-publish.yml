@@ -45,7 +45,7 @@ jobs:
         run: pnpm build
 
       - name: Upgrade npm for OIDC trusted publishing
-        run: npm install -g npm@^11.5.1
+        run: npm install -g npm@11.5.1
 
       - name: Publish to npm
         run: npm publish --provenance
