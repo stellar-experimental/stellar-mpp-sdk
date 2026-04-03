@@ -45,6 +45,24 @@ Each payment mode mirrors a client and server sharing a common Zod method schema
 Methods.ts (Zod schema) → client/ (create credentials) + server/ (verify credentials)
 ```
 
+### Charge Flows
+
+Charge has 6 combinations from 3 axes: **push vs pull**, **sponsored vs unsponsored**, and **FeeBump vs no FeeBump**.
+
+| Flow | Mode | Sponsorship | FeeBump | Who broadcasts | Who pays fee             |
+| ---- | ---- | ----------- | ------- | -------------- | ------------------------ |
+| 1    | push | unsponsored | no      | client         | client                   |
+| 2    | push | unsponsored | yes     | client         | fee bump key             |
+| 3    | pull | unsponsored | no      | server         | client (via tx)          |
+| 4    | pull | unsponsored | yes     | server         | fee bump key             |
+| 5    | pull | sponsored   | no      | server         | server (envelope signer) |
+| 6    | pull | sponsored   | yes     | server         | fee bump key             |
+
+- **Push** (`type: 'hash'`): Client broadcasts the tx on-chain, sends the tx hash to the server. Server polls the chain to verify.
+- **Pull** (`type: 'transaction'`): Client sends signed tx XDR to the server. Server verifies and broadcasts.
+- **Sponsored** (`feePayer` configured on server): Server rebuilds the tx with its own source account, signs the envelope, and pays the network fee. Client tx uses `ALL_ZEROS` as source.
+- **FeeBump**: The tx is wrapped in a `FeeBumpTransaction` so a separate key pays the network fee.
+
 ### Key Patterns
 
 - **mppx integration**: Methods defined via `Method.from()`, adapted with `.toClient()` / `.toServer()`.
