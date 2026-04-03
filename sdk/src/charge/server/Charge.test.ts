@@ -628,8 +628,10 @@ describe('charge tx hash dedup', () => {
       method.verify({ credential: cred1 as any, request: cred1.challenge.request }),
     ).rejects.toThrow()
 
+    // Hash is claimed as 'pending' early (prevents TOCTOU replays).
+    // A failed verification burns the hash — client must use a new one.
     const stored = await store.get(`stellar:charge:hash:${hash}`)
-    expect(stored).toBeFalsy()
+    expect((stored as any)?.state).toBe('pending')
   })
 
   it('marks tx hash as used only after successful verification', async () => {
@@ -1314,9 +1316,10 @@ describe('charge transaction verification', () => {
       method.verify({ credential: cred as any, request: cred.challenge.request }),
     ).rejects.toThrow()
 
-    // Challenge should NOT be burned — store should not have the key
+    // Challenge IS claimed as 'pending' early (prevents TOCTOU replays).
+    // A failed verification burns the challenge — client must get a new one.
     const stored = await store.get(`stellar:charge:challenge:${challengeId}`)
-    expect(stored).toBeFalsy()
+    expect((stored as any)?.state).toBe('pending')
   })
 })
 
@@ -2292,5 +2295,169 @@ describe('charge receipt externalId', () => {
     })
     expect(receipt.status).toBe('success')
     expect((receipt as any).externalId).toBe('order-abc-123')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// TOCTOU race condition tests
+// ---------------------------------------------------------------------------
+
+describe('charge TOCTOU: hash replay across instances sharing a store', () => {
+  it('rejects the second concurrent verify when two instances share a store (hash mode)', async () => {
+    // Simulate multi-process: two charge server instances with separate
+    // verifyLocks sharing the same store. pollTransaction is slow (~50ms),
+    // widening the TOCTOU window between hash check and hash mark.
+    const sharedStore = Store.memory()
+
+    const client = PAYER
+    const tx = buildTransferTx({
+      source: client.publicKey(),
+      from: client.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx.sign(client)
+
+    // Mock getTransaction to return slowly, simulating pollTransaction delay
+    mockGetTransaction.mockImplementation(
+      () =>
+        new Promise((r) =>
+          setTimeout(
+            () =>
+              r({
+                status: 'SUCCESS',
+                envelopeXdr: tx.toXDR(),
+              }),
+            50,
+          ),
+        ),
+    )
+
+    const method1 = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store: sharedStore,
+    })
+    const method2 = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store: sharedStore,
+    })
+
+    // Same hash credential sent to both instances — only one should succeed
+    const challenge = Challenge.from({
+      id: `toctou-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: { network: 'stellar:testnet' },
+      },
+    })
+    const cred = Object.assign(
+      Credential.from({ challenge, payload: { type: 'hash', hash: 'shared-tx-hash' } }),
+      { source: `did:pkh:stellar:testnet:${client.publicKey()}` },
+    )
+
+    const results = await Promise.allSettled([
+      method1.verify({ credential: cred as any, request: cred.challenge.request }),
+      method2.verify({ credential: cred as any, request: cred.challenge.request }),
+    ])
+
+    const successes = results.filter((r) => r.status === 'fulfilled')
+    const failures = results.filter((r) => r.status === 'rejected')
+
+    expect(successes).toHaveLength(1)
+    expect(failures).toHaveLength(1)
+    expect((failures[0] as PromiseRejectedResult).reason.message).toMatch(
+      /already used|Replay rejected/,
+    )
+  })
+
+  it('rejects the second concurrent verify for challenge replay across instances', async () => {
+    // Two instances race on the same challenge (hash mode, same challenge ID).
+    // Only one should succeed — the challenge must be claimed atomically.
+    const sharedStore = Store.memory()
+
+    const client = PAYER
+    const tx1 = buildTransferTx({
+      source: client.publicKey(),
+      from: client.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx1.sign(client)
+
+    const tx2 = buildTransferTx({
+      source: client.publicKey(),
+      from: client.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    tx2.sign(client)
+
+    // Slow poll to widen the window
+    let callCount = 0
+    mockGetTransaction.mockImplementation(
+      () =>
+        new Promise((r) => {
+          const txToReturn = callCount++ === 0 ? tx1 : tx2
+          setTimeout(
+            () =>
+              r({
+                status: 'SUCCESS',
+                envelopeXdr: txToReturn.toXDR(),
+              }),
+            50,
+          )
+        }),
+    )
+
+    const method1 = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store: sharedStore,
+    })
+    const method2 = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store: sharedStore,
+    })
+
+    // Same challenge ID, different hashes — tests challenge-level replay
+    const challenge = Challenge.from({
+      id: `toctou-challenge-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: { network: 'stellar:testnet' },
+      },
+    })
+    const cred1 = Object.assign(
+      Credential.from({ challenge, payload: { type: 'hash', hash: 'hash-a' } }),
+      { source: `did:pkh:stellar:testnet:${client.publicKey()}` },
+    )
+    const cred2 = Object.assign(
+      Credential.from({ challenge, payload: { type: 'hash', hash: 'hash-b' } }),
+      { source: `did:pkh:stellar:testnet:${client.publicKey()}` },
+    )
+
+    const results = await Promise.allSettled([
+      method1.verify({ credential: cred1 as any, request: cred1.challenge.request }),
+      method2.verify({ credential: cred2 as any, request: cred2.challenge.request }),
+    ])
+
+    const successes = results.filter((r) => r.status === 'fulfilled')
+    expect(successes).toHaveLength(1)
   })
 })

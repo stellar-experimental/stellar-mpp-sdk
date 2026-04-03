@@ -35,6 +35,7 @@ import { toBaseUnits } from '../../shared/units.js'
 import { simulateCall } from '../../shared/simulate.js'
 import { validateAmount, validateHexSignature } from '../../shared/validation.js'
 import { verifyInvokeContractOp } from '../../shared/verify-invoke.js'
+import { claimOrThrow, releaseClaim } from '../../shared/claim.js'
 import { channel as ChannelMethod } from '../Methods.js'
 import { getChannelState, type ChannelState } from './State.js'
 
@@ -183,18 +184,27 @@ export function channel(parameters: channel.Parameters) {
     }
 
     // Replay protection — applied to all actions including 'open'.
-    // The verifyLock serializes calls so the get→put gap cannot
-    // be exploited in a single-process deployment. Multi-process
-    // deployments MUST use a store with atomic put-if-absent semantics.
-    // Check early but only mark as used AFTER successful verification to
-    // avoid permanently burning a challenge on transient failures.
+    // Uses a two-layer claim: a synchronous in-process Set prevents
+    // intra-process TOCTOU races (two coroutines in the same event
+    // loop), and the store.get/put handles cross-process visibility.
+    // The challenge is claimed before any expensive RPC work.
     const challengeStoreKey = `${STORE_PREFIX}:challenge:${challenge.id}`
-    const existingChallenge = await store.get(challengeStoreKey)
-    if (existingChallenge) {
-      throw new ChannelVerificationError('Challenge already used. Replay rejected.', {
-        channel: channelAddress,
-      })
+    const replayError = new ChannelVerificationError('Challenge already used. Replay rejected.', {
+      channel: channelAddress,
+    })
+    claimOrThrow(store, challengeStoreKey, replayError)
+    try {
+      const existingChallenge = await store.get(challengeStoreKey)
+      if (existingChallenge) {
+        releaseClaim(store, challengeStoreKey)
+        throw replayError
+      }
+      await store.put(challengeStoreKey, { state: 'pending', claimedAt: new Date().toISOString() })
+    } catch (err) {
+      releaseClaim(store, challengeStoreKey)
+      throw err
     }
+    releaseClaim(store, challengeStoreKey)
 
     // Dispatch open action to its own handler — it has completely
     // different semantics (broadcasts an on-chain tx) compared to
@@ -284,8 +294,8 @@ export function channel(parameters: channel.Parameters) {
       amount: commitmentAmount.toString(),
     })
 
-    // Mark challenge as used only after successful voucher verification
-    await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
+    // Finalize challenge claim after successful voucher verification
+    await store.put(challengeStoreKey, { state: 'used', usedAt: new Date().toISOString() })
 
     return Receipt.from({
       method: 'stellar',
@@ -361,7 +371,7 @@ export function channel(parameters: channel.Parameters) {
       amount: commitmentAmount.toString(),
     })
 
-    await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
+    await store.put(challengeStoreKey, { state: 'used', usedAt: new Date().toISOString() })
 
     return Receipt.from({
       method: 'stellar',
@@ -502,8 +512,8 @@ export function channel(parameters: channel.Parameters) {
       amount: commitmentAmount.toString(),
     })
 
-    // Mark challenge as used only after successful open settlement
-    await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
+    // Finalize challenge claim after successful open settlement
+    await store.put(challengeStoreKey, { state: 'used', usedAt: new Date().toISOString() })
 
     return Receipt.from({
       method: 'stellar',

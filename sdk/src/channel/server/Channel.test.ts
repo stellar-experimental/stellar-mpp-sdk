@@ -907,9 +907,9 @@ describe('stellar server channel verification', () => {
     const closed = await store.get(`stellar:channel:closed:${CHANNEL_ADDRESS}`)
     expect(closed).toBeNull()
 
-    // Challenge should NOT be marked as used
+    // Challenge IS claimed as 'pending' (early claim prevents TOCTOU replays)
     const challenge = await store.get(`stellar:channel:challenge:${credential.challenge.id}`)
-    expect(challenge).toBeNull()
+    expect((challenge as any)?.state).toBe('pending')
 
     // Cumulative should NOT be advanced when close fails
     const cumulative = await store.get(`stellar:channel:cumulative:${CHANNEL_ADDRESS}`)
@@ -1667,5 +1667,105 @@ describe('close()', () => {
     })
 
     expect(hash).toBe('str-hash')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// TOCTOU race condition tests
+// ---------------------------------------------------------------------------
+
+describe('channel TOCTOU: challenge replay across instances sharing a store', () => {
+  it('rejects the second concurrent verify when two instances share a store', async () => {
+    // Simulate multi-process: two server instances with separate verifyLocks
+    // but sharing the same store. A slow RPC (simulateTransaction) widens the
+    // TOCTOU window between the challenge check and the challenge mark.
+    const sharedStore = Store.memory()
+    const commitmentBytes = Buffer.from('toctou-race-bytes')
+
+    // simulateTransaction returns slowly to widen the race window
+    mockSimulateTransaction.mockImplementation(
+      () => new Promise((r) => setTimeout(() => r(successSimResult(commitmentBytes)), 50)),
+    )
+    mockGetChannelState.mockResolvedValue({
+      balance: 9999999n,
+      refundWaitingPeriod: 1000,
+      token: 'CTOKEN...',
+      from: 'GFROM...',
+      to: 'GTO...',
+      closeEffectiveAtLedger: null,
+      currentLedger: 4000,
+    })
+
+    const method1 = channel({
+      channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
+      commitmentKey: COMMITMENT_KEY,
+      store: sharedStore,
+    })
+    const method2 = channel({
+      channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
+      commitmentKey: COMMITMENT_KEY,
+      store: sharedStore,
+    })
+
+    // Same credential sent to both instances — only one should succeed
+    const credential = makeSignedCredential({
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    const results = await Promise.allSettled([
+      method1.verify({ credential: credential as any, request: credential.challenge.request }),
+      method2.verify({ credential: credential as any, request: credential.challenge.request }),
+    ])
+
+    const successes = results.filter((r) => r.status === 'fulfilled')
+    const failures = results.filter((r) => r.status === 'rejected')
+
+    expect(successes).toHaveLength(1)
+    expect(failures).toHaveLength(1)
+    expect((failures[0] as PromiseRejectedResult).reason.message).toContain(
+      'Challenge already used',
+    )
+  })
+
+  it('rejects the second concurrent verify for cumulative tracking across instances', async () => {
+    // Two instances race to update the cumulative amount with the same credential.
+    // Only one should succeed; the other should see the updated cumulative.
+    const sharedStore = Store.memory()
+    const commitmentBytes1 = Buffer.from('toctou-cumulative-bytes')
+
+    mockSimulateTransaction.mockImplementation(
+      () => new Promise((r) => setTimeout(() => r(successSimResult(commitmentBytes1)), 50)),
+    )
+
+    const method1 = channel({
+      channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
+      commitmentKey: COMMITMENT_KEY,
+      store: sharedStore,
+    })
+    const method2 = channel({
+      channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
+      commitmentKey: COMMITMENT_KEY,
+      store: sharedStore,
+    })
+
+    const credential = makeSignedCredential({
+      commitmentBytes: commitmentBytes1,
+      cumulativeAmount: 500000n,
+      challengeAmount: '500000',
+    })
+
+    const results = await Promise.allSettled([
+      method1.verify({ credential: credential as any, request: credential.challenge.request }),
+      method2.verify({ credential: credential as any, request: credential.challenge.request }),
+    ])
+
+    const successes = results.filter((r) => r.status === 'fulfilled')
+    expect(successes).toHaveLength(1)
   })
 })

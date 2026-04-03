@@ -29,6 +29,7 @@ import { PaymentVerificationError, SettlementError } from '../../shared/errors.j
 import { noopLogger, type Logger } from '../../shared/logger.js'
 import { SimulationContractError, simulateCall } from '../../shared/simulate.js'
 import { verifyInvokeContractOp } from '../../shared/verify-invoke.js'
+import { claimOrThrow, releaseClaim } from '../../shared/claim.js'
 import {
   DEFAULT_MAX_FEE_BUMP_STROOPS,
   DEFAULT_POLL_MAX_ATTEMPTS,
@@ -126,13 +127,25 @@ export function charge(parameters: charge.Parameters) {
     const { challenge, source } = credential
     const { request: challengeRequest } = challenge
 
-    // Check challenge replay early, but only mark as used AFTER successful
-    // verification to avoid permanently burning a challenge on transient failures.
+    // Replay protection: two-layer claim prevents intra-process TOCTOU
+    // (synchronous Set) and cross-process replays (store get/put).
     const challengeStoreKey = `${STORE_PREFIX}:challenge:${challenge.id}`
-    const existingChallenge = await store.get(challengeStoreKey)
-    if (existingChallenge) {
-      throw new PaymentVerificationError(`${LOG_PREFIX} Challenge already used. Replay rejected.`)
+    const challengeReplayError = new PaymentVerificationError(
+      `${LOG_PREFIX} Challenge already used. Replay rejected.`,
+    )
+    claimOrThrow(store, challengeStoreKey, challengeReplayError)
+    try {
+      const existingChallenge = await store.get(challengeStoreKey)
+      if (existingChallenge) {
+        releaseClaim(store, challengeStoreKey)
+        throw challengeReplayError
+      }
+      await store.put(challengeStoreKey, { state: 'pending', claimedAt: new Date().toISOString() })
+    } catch (err) {
+      releaseClaim(store, challengeStoreKey)
+      throw err
     }
+    releaseClaim(store, challengeStoreKey)
 
     const { amount, externalId } = challengeRequest
     const expectedCurrency = challengeRequest.currency
@@ -152,21 +165,30 @@ export function charge(parameters: charge.Parameters) {
 
         const hash = payload.hash
 
-        // Check tx hash dedup BEFORE verification to reject known replays
-        // early, but only mark as used AFTER successful verification to
-        // avoid permanently burning a hash on transient failures.
+        // Two-layer claim for tx hash dedup: synchronous Set prevents
+        // intra-process TOCTOU, store handles cross-process visibility.
         const hashKey = `${STORE_PREFIX}:hash:${hash}`
-        const hashUsed = await store.get(hashKey)
-        if (hashUsed) {
-          logger.warn(`${LOG_PREFIX} Verification failed`, {
-            error: 'Transaction hash already used',
-            hash,
-          })
-          throw new PaymentVerificationError(
-            `${LOG_PREFIX} Transaction hash already used. Replay rejected.`,
-            { hash },
-          )
+        const hashReplayError = new PaymentVerificationError(
+          `${LOG_PREFIX} Transaction hash already used. Replay rejected.`,
+          { hash },
+        )
+        claimOrThrow(store, hashKey, hashReplayError)
+        try {
+          const hashUsed = await store.get(hashKey)
+          if (hashUsed) {
+            logger.warn(`${LOG_PREFIX} Verification failed`, {
+              error: 'Transaction hash already used',
+              hash,
+            })
+            releaseClaim(store, hashKey)
+            throw hashReplayError
+          }
+          await store.put(hashKey, { state: 'pending', claimedAt: new Date().toISOString() })
+        } catch (err) {
+          releaseClaim(store, hashKey)
+          throw err
         }
+        releaseClaim(store, hashKey)
 
         const txResult = await pollTransaction(rpcServer, hash, {
           maxAttempts: pollMaxAttempts,
@@ -189,9 +211,12 @@ export function charge(parameters: charge.Parameters) {
           networkPassphrase,
         )
 
-        // Mark challenge + hash as used only after successful verification
-        await store.put(`${STORE_PREFIX}:hash:${hash}`, { usedAt: new Date().toISOString() })
-        await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
+        // Finalize claims after successful verification
+        await store.put(`${STORE_PREFIX}:hash:${hash}`, {
+          state: 'used',
+          usedAt: new Date().toISOString(),
+        })
+        await store.put(challengeStoreKey, { state: 'used', usedAt: new Date().toISOString() })
 
         return Receipt.from({
           method: 'stellar',
@@ -357,12 +382,11 @@ export function charge(parameters: charge.Parameters) {
           )
         }
 
-        // Lock the challenge immediately after the network accepts the tx.
-        // This prevents replay if polling fails but the tx still settles.
+        // Attach the tx hash to the already-claimed challenge entry.
         await store.put(challengeStoreKey, {
           state: 'pending',
           hash: sendResult.hash,
-          createdAt: new Date().toISOString(),
+          claimedAt: new Date().toISOString(),
         })
 
         try {
