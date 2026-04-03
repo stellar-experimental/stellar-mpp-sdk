@@ -81,7 +81,7 @@ export function charge(parameters: charge.Parameters) {
 
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
   const networkPassphrase = NETWORK_PASSPHRASE[network]
-  const server = new rpc.Server(resolvedRpcUrl)
+  const rpcServer = new rpc.Server(resolvedRpcUrl)
 
   const envelopeKP = feePayer ? resolveKeypair(feePayer.envelopeSigner) : undefined
   const feeBumpKP = feePayer?.feeBumpSigner ? resolveKeypair(feePayer.feeBumpSigner) : undefined
@@ -167,7 +167,7 @@ export function charge(parameters: charge.Parameters) {
           )
         }
 
-        const txResult = await pollTransaction(server, hash, {
+        const txResult = await pollTransaction(rpcServer, hash, {
           maxAttempts: pollMaxAttempts,
           delayMs: pollDelayMs,
           timeoutMs: pollTimeoutMs,
@@ -253,7 +253,7 @@ export function charge(parameters: charge.Parameters) {
 
           // Rebuild the tx with the signer's account as source
           logger.debug(`${LOG_PREFIX} Rebuilding sponsored tx...`)
-          const serverAccount = await server.getAccount(envelopeKP.publicKey())
+          const serverAccount = await rpcServer.getAccount(envelopeKP.publicKey())
           const envelopeTx = tx.toEnvelope().v1().tx()
           const rawOp = envelopeTx.operations()[0]
 
@@ -335,7 +335,7 @@ export function charge(parameters: charge.Parameters) {
         let sendResult: rpc.Api.SendTransactionResponse
         try {
           logger.debug(`${LOG_PREFIX} Broadcasting tx`)
-          sendResult = await server.sendTransaction(txToSubmit)
+          sendResult = await rpcServer.sendTransaction(txToSubmit)
           logger.debug(`${LOG_PREFIX} Broadcast result`, {
             hash: sendResult.hash,
             status: sendResult.status,
@@ -365,7 +365,7 @@ export function charge(parameters: charge.Parameters) {
         })
 
         try {
-          await pollTransaction(server, sendResult.hash, {
+          await pollTransaction(rpcServer, sendResult.hash, {
             maxAttempts: pollMaxAttempts,
             delayMs: pollDelayMs,
             timeoutMs: pollTimeoutMs,
@@ -415,7 +415,7 @@ export function charge(parameters: charge.Parameters) {
   ): Promise<rpc.Api.SimulateTransactionSuccessResponse> {
     let simResponse: rpc.Api.SimulateTransactionSuccessResponse
     try {
-      simResponse = await simulateCall(server, tx, { timeoutMs: simulationTimeoutMs })
+      simResponse = await simulateCall(rpcServer, tx, { timeoutMs: simulationTimeoutMs })
     } catch (error) {
       if (error instanceof SimulationContractError) {
         throw new PaymentVerificationError(
@@ -467,7 +467,7 @@ export function charge(parameters: charge.Parameters) {
           nowSecs,
         })
       }
-      const latestLedger = await server.getLatestLedger()
+      const latestLedger = await rpcServer.getLatestLedger()
       maxLedger = latestLedger.sequence + Math.ceil(secsUntilExpiry / DEFAULT_LEDGER_CLOSE_TIME)
     }
 

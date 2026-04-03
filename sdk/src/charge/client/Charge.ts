@@ -78,7 +78,7 @@ export function charge(parameters: charge.Parameters) {
     throw new StellarMppError('Either keypair or secretKey must be provided.')
   }
 
-  const keypair = keypairParam ?? resolveKeypair(secretKey!)
+  const clientKP = keypairParam ?? resolveKeypair(secretKey!)
 
   return Method.toClient(Methods.charge, {
     context: z.object({
@@ -127,7 +127,7 @@ export function charge(parameters: charge.Parameters) {
 
         const transferOp = contract.call(
           'transfer',
-          new Address(keypair.publicKey()).toScVal(),
+          new Address(clientKP.publicKey()).toScVal(),
           new Address(recipient).toScVal(),
           nativeToScVal(stellarAmount, { type: 'i128' }),
         )
@@ -178,7 +178,7 @@ export function charge(parameters: charge.Parameters) {
             ) {
               authEntries[i] = await authorizeEntry(
                 entry,
-                keypair,
+                clientKP,
                 validUntilLedger,
                 networkPassphrase,
               )
@@ -189,7 +189,7 @@ export function charge(parameters: charge.Parameters) {
         const signedXdr = envelope.toXDR('base64')
         onProgress?.({ type: 'signed', transaction: signedXdr })
 
-        const source = `did:pkh:${network}:${keypair.publicKey()}`
+        const source = `did:pkh:${network}:${clientKP.publicKey()}`
 
         return Credential.serialize({
           challenge,
@@ -201,11 +201,11 @@ export function charge(parameters: charge.Parameters) {
       // ── Standard (unsponsored) path ────────────────────────────────────────
       // Client builds and signs the full transaction; server submits as-is
       // (or wraps it in a fee bump if it has a configured fee payer).
-      const sourceAccount = await server.getAccount(keypair.publicKey())
+      const sourceAccount = await server.getAccount(clientKP.publicKey())
 
       const transferOp = contract.call(
         'transfer',
-        new Address(keypair.publicKey()).toScVal(),
+        new Address(clientKP.publicKey()).toScVal(),
         new Address(recipient).toScVal(),
         nativeToScVal(stellarAmount, { type: 'i128' }),
       )
@@ -227,12 +227,12 @@ export function charge(parameters: charge.Parameters) {
       const prepared = await server.prepareTransaction(transaction)
 
       onProgress?.({ type: 'signing' })
-      prepared.sign(keypair)
+      prepared.sign(clientKP)
 
       const signedXdr = prepared.toXDR()
       onProgress?.({ type: 'signed', transaction: signedXdr })
 
-      const source = `did:pkh:${network}:${keypair.publicKey()}`
+      const source = `did:pkh:${network}:${clientKP.publicKey()}`
 
       if (effectiveMode === 'push') {
         // Client broadcasts

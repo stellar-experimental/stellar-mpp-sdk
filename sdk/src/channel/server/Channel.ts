@@ -7,7 +7,7 @@ import {
   nativeToScVal,
   rpc,
 } from '@stellar/stellar-sdk'
-import { Method, Receipt, Store } from 'mppx'
+import { Credential, Method, Receipt, Store } from 'mppx'
 import {
   DEFAULT_DECIMALS,
   DEFAULT_FEE,
@@ -34,6 +34,10 @@ import { simulateCall } from '../../shared/simulate.js'
 import { validateAmount, validateHexSignature } from '../../shared/validation.js'
 import { channel as ChannelMethod } from '../Methods.js'
 import { getChannelState, type ChannelState } from './State.js'
+
+type ChannelCredential = Parameters<Method.VerifyFn<typeof ChannelMethod>>[0]['credential']
+type OpenPayload = Extract<ChannelCredential['payload'], { action: 'open' }>
+type OpenCredential = Credential.Credential<OpenPayload, ChannelCredential['challenge']>
 
 /**
  * Creates a Stellar one-way-channel method for use on the **server**.
@@ -91,20 +95,18 @@ export function channel(parameters: channel.Parameters) {
 
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
   const networkPassphrase = NETWORK_PASSPHRASE[network]
-  const server = new rpc.Server(resolvedRpcUrl)
+  const rpcServer = new rpc.Server(resolvedRpcUrl)
 
   // Parse the commitment public key (accepts G... Stellar public key string or Keypair)
-  const commitmentKeypair = (() => {
+  const commitmentKP = (() => {
     if (typeof commitmentKeyParam === 'string') {
       return Keypair.fromPublicKey(commitmentKeyParam)
     }
     return commitmentKeyParam
   })()
 
-  const signerKeypair = feePayer ? resolveKeypair(feePayer.envelopeSigner) : undefined
-  const feeBumpKeypair = feePayer?.feeBumpSigner
-    ? resolveKeypair(feePayer.feeBumpSigner)
-    : undefined
+  const envelopeKP = feePayer ? resolveKeypair(feePayer.envelopeSigner) : undefined
+  const feeBumpKP = feePayer?.feeBumpSigner ? resolveKeypair(feePayer.feeBumpSigner) : undefined
 
   // Track cumulative amounts per channel in the store
   const cumulativeKey = `${STORE_PREFIX}:cumulative:${channelAddress}`
@@ -143,7 +145,7 @@ export function channel(parameters: channel.Parameters) {
     },
     async verify({ credential }) {
       // Serialize through the lock to prevent concurrent double-acceptance
-      const result = await new Promise<any>((resolve, reject) => {
+      const result = await new Promise<Receipt.Receipt>((resolve, reject) => {
         verifyLock = verifyLock.then(
           () => doVerify(credential).then(resolve, reject),
           () => doVerify(credential).then(resolve, reject),
@@ -153,16 +155,14 @@ export function channel(parameters: channel.Parameters) {
     },
   })
 
-  async function doVerify(credential: any) {
-    const { challenge } = credential
+  async function doVerify(credential: ChannelCredential) {
+    const { challenge, payload } = credential
     const { request: challengeRequest } = challenge
 
-    const payload = credential.payload
     const action = payload.action ?? 'voucher'
     const { externalId } = challengeRequest
 
-    // NM-001: Reject credentials once the channel has been closed on-chain.
-    // Applied to all actions including 'open'.
+    // Reject credentials once the channel has been closed on-chain. Applied to all actions including 'open'.
     const closed = await store.get(`${STORE_PREFIX}:closed:${channelAddress}`)
     if (closed) {
       logger.warn(`${LOG_PREFIX} Rejecting credential — channel already closed`, {
@@ -175,7 +175,7 @@ export function channel(parameters: channel.Parameters) {
     }
 
     // Replay protection — applied to all actions including 'open'.
-    // NM-002: The verifyLock serializes calls so the get→put gap cannot
+    // The verifyLock serializes calls so the get→put gap cannot
     // be exploited in a single-process deployment. Multi-process
     // deployments MUST use a store with atomic put-if-absent semantics.
     // Check early but only mark as used AFTER successful verification to
@@ -192,7 +192,7 @@ export function channel(parameters: channel.Parameters) {
     // different semantics (broadcasts an on-chain tx) compared to
     // voucher/close which operate on existing channels.
     if (action === 'open') {
-      return doVerifyOpen(credential, challengeStoreKey)
+      return doVerifyOpen(credential as OpenCredential, challengeStoreKey)
     }
 
     // NM-001 (voucher/close): closed and replay checks are now applied
@@ -360,7 +360,7 @@ export function channel(parameters: channel.Parameters) {
       nativeToScVal(commitmentAmount, { type: 'i128' }),
     )
 
-    const account = await server.getAccount(sourceAccount ?? commitmentKeypair.publicKey())
+    const account = await rpcServer.getAccount(sourceAccount ?? commitmentKP.publicKey())
     const simTx = new TransactionBuilder(account, {
       fee: DEFAULT_FEE,
       networkPassphrase,
@@ -369,7 +369,7 @@ export function channel(parameters: channel.Parameters) {
       .setTimeout(simulationTimeoutMs / 1000)
       .build()
 
-    const simResult = await simulateCall(server, simTx, { timeoutMs: simulationTimeoutMs })
+    const simResult = await simulateCall(rpcServer, simTx, { timeoutMs: simulationTimeoutMs })
 
     const returnValue = simResult.result?.retval
     if (!returnValue) {
@@ -379,7 +379,7 @@ export function channel(parameters: channel.Parameters) {
     const commitmentBytes = returnValue.bytes()
 
     // Verify the ed25519 signature
-    const valid = commitmentKeypair.verify(Buffer.from(commitmentBytes), signatureBytes)
+    const valid = commitmentKP.verify(Buffer.from(commitmentBytes), signatureBytes)
 
     if (!valid) {
       logger.warn(`${LOG_PREFIX} Commitment signature verification failed`, {
@@ -402,7 +402,7 @@ export function channel(parameters: channel.Parameters) {
 
     // Dispatch on action
     if (action === 'close') {
-      if (!signerKeypair) {
+      if (!envelopeKP) {
         throw new ChannelVerificationError(
           `${LOG_PREFIX} Close action requires a feePayer.envelopeSigner (transaction source and envelope signer) to be configured.`,
           {},
@@ -416,7 +416,7 @@ export function channel(parameters: channel.Parameters) {
         nativeToScVal(Buffer.from(signatureBytes), { type: 'bytes' }),
       )
 
-      const closeAccount = await server.getAccount(signerKeypair.publicKey())
+      const closeAccount = await rpcServer.getAccount(envelopeKP.publicKey())
       const closeTx = new TransactionBuilder(closeAccount, {
         fee: DEFAULT_FEE,
         networkPassphrase,
@@ -425,19 +425,19 @@ export function channel(parameters: channel.Parameters) {
         .setTimeout(DEFAULT_TIMEOUT)
         .build()
 
-      const prepared = await server.prepareTransaction(closeTx)
-      prepared.sign(signerKeypair)
+      const prepared = await rpcServer.prepareTransaction(closeTx)
+      prepared.sign(envelopeKP)
 
       let txToSubmit: Transaction | FeeBumpTransaction = prepared
-      if (feeBumpKeypair) {
-        txToSubmit = wrapFeeBump(prepared, feeBumpKeypair, {
+      if (feeBumpKP) {
+        txToSubmit = wrapFeeBump(prepared, feeBumpKP, {
           networkPassphrase,
           maxFeeStroops: maxFeeBumpStroops,
         })
       }
 
       logger.debug(`${LOG_PREFIX} Broadcasting close tx...`)
-      const sendResult = await server.sendTransaction(txToSubmit)
+      const sendResult = await rpcServer.sendTransaction(txToSubmit)
 
       if (sendResult.status === 'ERROR' || sendResult.status === 'DUPLICATE') {
         throw new ChannelVerificationError(
@@ -446,7 +446,7 @@ export function channel(parameters: channel.Parameters) {
         )
       }
 
-      const txResult = await pollTransaction(server, sendResult.hash, {
+      const txResult = await pollTransaction(rpcServer, sendResult.hash, {
         maxAttempts: pollMaxAttempts,
         delayMs: pollDelayMs,
         timeoutMs: pollTimeoutMs,
@@ -500,7 +500,7 @@ export function channel(parameters: channel.Parameters) {
    * broadcasts the transaction, waits for confirmation, then initialises
    * the cumulative amount in the store.
    */
-  async function doVerifyOpen(credential: any, challengeStoreKey: string) {
+  async function doVerifyOpen(credential: OpenCredential, challengeStoreKey: string) {
     const { challenge } = credential
     const { externalId } = challenge.request
     const payload = credential.payload
@@ -579,7 +579,7 @@ export function channel(parameters: channel.Parameters) {
       nativeToScVal(commitmentAmount, { type: 'i128' }),
     )
 
-    const account = await server.getAccount(sourceAccount ?? commitmentKeypair.publicKey())
+    const account = await rpcServer.getAccount(sourceAccount ?? commitmentKP.publicKey())
     const simTx = new TransactionBuilder(account, {
       fee: DEFAULT_FEE,
       networkPassphrase,
@@ -588,7 +588,7 @@ export function channel(parameters: channel.Parameters) {
       .setTimeout(simulationTimeoutMs / 1000)
       .build()
 
-    const simResult = await simulateCall(server, simTx, { timeoutMs: simulationTimeoutMs })
+    const simResult = await simulateCall(rpcServer, simTx, { timeoutMs: simulationTimeoutMs })
 
     const returnValue = simResult.result?.retval
     if (!returnValue) {
@@ -600,7 +600,7 @@ export function channel(parameters: channel.Parameters) {
 
     const commitmentBytes = returnValue.bytes()
 
-    const valid = commitmentKeypair.verify(Buffer.from(commitmentBytes), signatureBytes)
+    const valid = commitmentKP.verify(Buffer.from(commitmentBytes), signatureBytes)
 
     if (!valid) {
       logger.warn(`${LOG_PREFIX} Initial commitment signature verification failed`, {
@@ -627,15 +627,15 @@ export function channel(parameters: channel.Parameters) {
     }
 
     let txToSubmit = openTx
-    if (feeBumpKeypair) {
+    if (feeBumpKP) {
       const innerTx =
         openTx instanceof FeeBumpTransaction ? openTx.innerTransaction : (openTx as Transaction)
-      txToSubmit = wrapFeeBump(innerTx, feeBumpKeypair, {
+      txToSubmit = wrapFeeBump(innerTx, feeBumpKP, {
         networkPassphrase,
         maxFeeStroops: maxFeeBumpStroops,
       })
     }
-    const sendResult = await server.sendTransaction(txToSubmit)
+    const sendResult = await rpcServer.sendTransaction(txToSubmit)
 
     if (sendResult.status === 'ERROR' || sendResult.status === 'DUPLICATE') {
       throw new ChannelVerificationError(
@@ -644,7 +644,7 @@ export function channel(parameters: channel.Parameters) {
       )
     }
 
-    const txResult = await pollTransaction(server, sendResult.hash, {
+    const txResult = await pollTransaction(rpcServer, sendResult.hash, {
       maxAttempts: pollMaxAttempts,
       delayMs: pollDelayMs,
       timeoutMs: pollTimeoutMs,
@@ -702,7 +702,12 @@ export async function close(parameters: {
   }
   /** Network identifier. */
   network?: NetworkId
-  /** Custom RPC URL. */
+  /**
+   * Soroban RPC endpoint URL.
+   *
+   * @defaultValue `"https://soroban-testnet.stellar.org"` (testnet) or
+   *   `"https://soroban-rpc.mainnet.stellar.gateway.fm"` (pubnet)
+   */
   rpcUrl?: string
   /** Maximum fee bump in stroops. */
   maxFeeBumpStroops?: number
@@ -839,7 +844,16 @@ export declare namespace channel {
     pollDelayMs?: number
     /** Poll timeout in milliseconds. @default 30_000 */
     pollTimeoutMs?: number
-    /** Custom Soroban RPC URL. */
+    /**
+     * Custom Soroban RPC URL.
+     * @defaultValue
+     * ```ts
+     * {
+     *   [STELLAR_PUBNET]: 'https://soroban-rpc.mainnet.stellar.gateway.fm',
+     *   [STELLAR_TESTNET]: 'https://soroban-testnet.stellar.org',
+     * }
+     * ```
+     */
     rpcUrl?: string
     /** Simulation timeout in milliseconds. @default 10_000 */
     simulationTimeoutMs?: number
