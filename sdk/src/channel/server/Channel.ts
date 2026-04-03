@@ -79,7 +79,7 @@ export function channel(parameters: channel.Parameters) {
 
   const {
     channel: channelAddress,
-    checkOnChainState = false,
+    checkOnChainState = true,
     commitmentKey: commitmentKeyParam,
     decimals = DEFAULT_DECIMALS,
     feePayer,
@@ -117,6 +117,12 @@ export function channel(parameters: channel.Parameters) {
   // Without a transactional store, two concurrent verify calls could both
   // read the same cumulative amount, both pass, and only one write wins.
   let verifyLock: Promise<unknown> = Promise.resolve()
+
+  if (!checkOnChainState) {
+    logger.warn(
+      `${LOG_PREFIX} checkOnChainState is disabled — the server will not detect external channel closes. Vouchers accepted after an external close cannot be settled.`,
+    )
+  }
 
   logger.info(
     `${LOG_PREFIX} Initialized. Multi-process deployments require the store to provide atomic put-if-absent semantics for replay protection.`,
@@ -257,20 +263,26 @@ export function channel(parameters: channel.Parameters) {
 
     await verifyCommitmentSignature(commitmentAmount, signatureBytes)
 
-    // Update cumulative amount in store
-    await store.put(cumulativeKey, {
-      amount: commitmentAmount.toString(),
-    })
-
-    // Dispatch on action
+    // Dispatch on action — for close, defer cumulative write until the
+    // on-chain close succeeds to avoid advancing state when settlement fails.
     if (action === 'close') {
-      return doVerifyClose({
+      const receipt = await doVerifyClose({
         commitmentAmount,
         signatureBytes,
         challengeStoreKey,
         externalId,
       })
+      await store.put(cumulativeKey, {
+        amount: commitmentAmount.toString(),
+      })
+      return receipt
     }
+
+    // Voucher path: persist cumulative eagerly — the commitment signature is
+    // valid and can be used for close later regardless of transient failures.
+    await store.put(cumulativeKey, {
+      amount: commitmentAmount.toString(),
+    })
 
     // Mark challenge as used only after successful voucher verification
     await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
@@ -791,7 +803,7 @@ export declare namespace channel {
     channel: string
     /**
      * When true, each verify call lazily reads on-chain state to detect
-     * if `close_start` has been called (dispute detection). @default false
+     * if `close_start` has been called (dispute detection). @default true
      */
     checkOnChainState?: boolean
     /**

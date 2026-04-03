@@ -283,7 +283,7 @@ stellar.channel({
     envelopeSigner: Keypair | string,   // source account + envelope signer
     feeBumpSigner?: Keypair | string,   // wraps tx in FeeBumpTransaction
   },
-  checkOnChainState?: boolean,    // detect on-chain disputes (default: false)
+  checkOnChainState?: boolean,    // detect on-chain disputes (default: true)
   onDisputeDetected?: (state) => void, // callback when close_start detected
   maxFeeBumpStroops?: number,     // max fee bump in stroops (default: 10,000,000)
   pollMaxAttempts?: number,       // max polling attempts (default: 30)

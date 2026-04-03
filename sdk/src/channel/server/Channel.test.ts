@@ -254,6 +254,7 @@ describe('stellar server channel', () => {
   it('creates a server method with correct name and intent', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       store: Store.memory(),
     })
@@ -264,6 +265,7 @@ describe('stellar server channel', () => {
   it('has a verify function', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       store: Store.memory(),
     })
@@ -273,6 +275,7 @@ describe('stellar server channel', () => {
   it('requires store for replay protection and cumulative tracking', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       store: Store.memory(),
     })
@@ -282,6 +285,7 @@ describe('stellar server channel', () => {
   it('accepts custom network', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       network: 'stellar:pubnet',
       store: Store.memory(),
@@ -292,6 +296,7 @@ describe('stellar server channel', () => {
   it('accepts custom rpcUrl', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       rpcUrl: 'https://custom.rpc.example.com',
       store: Store.memory(),
@@ -302,6 +307,7 @@ describe('stellar server channel', () => {
   it('accepts commitmentKey as Keypair', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -311,6 +317,7 @@ describe('stellar server channel', () => {
   it('accepts custom decimals', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       decimals: 6,
       store: Store.memory(),
@@ -321,6 +328,7 @@ describe('stellar server channel', () => {
   it('accepts feePayer with envelopeSigner', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       feePayer: { envelopeSigner: Keypair.random() },
       store: Store.memory(),
@@ -331,11 +339,63 @@ describe('stellar server channel', () => {
   it('accepts feePayer with envelopeSigner and feeBumpSigner', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY.publicKey(),
       feePayer: { envelopeSigner: Keypair.random(), feeBumpSigner: Keypair.random() },
       store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
+  })
+
+  it('defaults checkOnChainState to true (NM-003)', async () => {
+    mockGetChannelState.mockResolvedValueOnce({
+      balance: 1000000n,
+      refundWaitingPeriod: 1000,
+      token: 'CTOKEN...',
+      from: 'GFROM...',
+      to: 'GTO...',
+      closeEffectiveAtLedger: null,
+      currentLedger: 4000,
+    })
+
+    const commitmentBytes = Buffer.from('default-check-bytes')
+    mockSimulateTransaction.mockResolvedValueOnce(successSimResult(commitmentBytes))
+
+    const credential = makeSignedCredential({
+      commitmentBytes,
+      cumulativeAmount: 1000000n,
+      challengeAmount: '1000000',
+    })
+
+    // No checkOnChainState — should default to true
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
+    })
+
+    const receipt = await method.verify({
+      credential: credential as any,
+      request: credential.challenge.request,
+    })
+    expect(receipt.status).toBe('success')
+    expect(mockGetChannelState).toHaveBeenCalled()
+  })
+
+  it('logs warning when checkOnChainState is explicitly disabled', () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+
+    channel({
+      channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
+      commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
+      logger,
+    })
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('checkOnChainState is disabled'),
+    )
   })
 })
 
@@ -349,6 +409,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -374,6 +435,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store,
     })
@@ -394,6 +456,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -419,6 +482,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store,
     })
@@ -440,6 +504,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -461,6 +526,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -486,6 +552,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -513,6 +580,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store,
     })
@@ -541,6 +609,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store,
     })
@@ -571,6 +640,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store,
     })
@@ -603,6 +673,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -634,6 +705,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       feePayer: { envelopeSigner: signerKp },
       store,
@@ -656,6 +728,11 @@ describe('stellar server channel verification', () => {
     // Challenge marked as used
     const challenge = await store.get(`stellar:channel:challenge:${credential.challenge.id}`)
     expect(challenge).toBeDefined()
+
+    // Cumulative advanced after successful close (NM-005)
+    const cumulative = await store.get(`stellar:channel:cumulative:${CHANNEL_ADDRESS}`)
+    expect(cumulative).toBeDefined()
+    expect((cumulative as any).amount).toBe('5000000')
   })
 
   it('rejects close when sendTransaction returns non-PENDING status', async () => {
@@ -675,6 +752,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       feePayer: { envelopeSigner: signerKp },
       store: Store.memory(),
@@ -708,6 +786,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       feePayer: { envelopeSigner: signerKp },
       store: Store.memory(),
@@ -739,6 +818,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       feePayer: { envelopeSigner: signerKp },
       store: Store.memory(),
@@ -772,6 +852,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       feePayer: { envelopeSigner: signerKp, feeBumpSigner: bumpKp },
       store: Store.memory(),
@@ -809,6 +890,7 @@ describe('stellar server channel verification', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       feePayer: { envelopeSigner: signerKp },
       store,
@@ -828,6 +910,10 @@ describe('stellar server channel verification', () => {
     // Challenge should NOT be marked as used
     const challenge = await store.get(`stellar:channel:challenge:${credential.challenge.id}`)
     expect(challenge).toBeNull()
+
+    // Cumulative should NOT be advanced when close fails (NM-005)
+    const cumulative = await store.get(`stellar:channel:cumulative:${CHANNEL_ADDRESS}`)
+    expect(cumulative).toBeNull()
   })
 })
 
@@ -991,7 +1077,7 @@ describe('stellar server channel dispute detection', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
       commitmentKey: COMMITMENT_KEY,
-      // checkOnChainState defaults to false
+      checkOnChainState: false,
       store: Store.memory(),
     })
 
@@ -1018,6 +1104,7 @@ describe('stellar server channel dispute detection', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store,
     })
@@ -1173,6 +1260,7 @@ describe('stellar server channel open action', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -1194,6 +1282,7 @@ describe('stellar server channel open action', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -1218,6 +1307,7 @@ describe('stellar server channel open action', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -1248,6 +1338,7 @@ describe('stellar server channel open action', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store,
     })
@@ -1282,6 +1373,7 @@ describe('stellar server channel open action', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -1311,6 +1403,7 @@ describe('stellar server channel open action', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -1340,6 +1433,7 @@ describe('stellar server channel open action', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -1368,6 +1462,7 @@ describe('stellar server channel open action', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
@@ -1398,6 +1493,7 @@ describe('stellar server channel open action', () => {
 
     const method = channel({
       channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
     })
