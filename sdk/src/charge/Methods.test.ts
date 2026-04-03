@@ -20,8 +20,8 @@ describe('toBaseUnits', () => {
     expect(toBaseUnits('0', 7)).toBe('0')
   })
 
-  it('truncates excess decimals', () => {
-    expect(toBaseUnits('1.123456789', 7)).toBe('11234567')
+  it('throws on excess decimals', () => {
+    expect(() => toBaseUnits('1.123456789', 7)).toThrow('Precision loss')
   })
 
   it('pads fewer decimals', () => {
