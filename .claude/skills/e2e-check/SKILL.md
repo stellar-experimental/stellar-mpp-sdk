@@ -103,7 +103,7 @@ STELLAR_SECRET=S... SERVER_URL=http://localhost:3099 \
 
 ```bash
 source .env
-STELLAR_RECIPIENT="$STELLAR_RECIPIENT" STELLAR_SECRET="$STELLAR_SECRET" timeout 120 ./demo/run.sh
+STELLAR_RECIPIENT="$STELLAR_RECIPIENT" STELLAR_SECRET="$STELLAR_SECRET" timeout 15 ./demo/run.sh
 ```
 
 **Expected flow:**
@@ -120,7 +120,7 @@ STELLAR_RECIPIENT="$STELLAR_RECIPIENT" STELLAR_SECRET="$STELLAR_SECRET" timeout 
 
 ```bash
 source .env
-CHANNEL_CONTRACT="$CHANNEL_CONTRACT" COMMITMENT_PUBKEY="$COMMITMENT_PUBKEY" COMMITMENT_SECRET="$COMMITMENT_SECRET" SOURCE_ACCOUNT="${SOURCE_ACCOUNT:-}" timeout 120 ./demo/run-channel.sh
+CHANNEL_CONTRACT="$CHANNEL_CONTRACT" COMMITMENT_PUBKEY="$COMMITMENT_PUBKEY" COMMITMENT_SECRET="$COMMITMENT_SECRET" SOURCE_ACCOUNT="${SOURCE_ACCOUNT:-}" timeout 15 ./demo/run-channel.sh
 ```
 
 **Expected flow:**
@@ -139,7 +139,7 @@ Requires the compiled one-way-channel WASM from https://github.com/stellar-exper
 
 ```bash
 WASM_PATH=/Users/marcelosantos/Workspace/one-way-channel/target/wasm32v1-none/release/channel.wasm \
-  ./demo/run-channel-e2e.sh
+  timeout 60 ./demo/run-channel-e2e.sh
 ```
 
 Full lifecycle: deploy contract -> 2 off-chain payments -> on-chain close -> balance verified at 0.

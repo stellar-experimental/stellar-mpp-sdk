@@ -322,8 +322,18 @@ export function channel(parameters: channel.Parameters) {
   }
 
   /**
-   * Builds, signs, broadcasts, and polls a close transaction on-chain,
-   * then marks the channel and challenge in the store.
+   * Settles a channel close on-chain after a verified close credential.
+   *
+   * Steps:
+   * 1. Ensures an `envelopeSigner` is configured (required for on-chain tx).
+   * 2. Builds a `close(amount, signature)` contract invocation.
+   * 3. Prepares the transaction via Soroban simulation and signs it.
+   * 4. Optionally wraps in a FeeBumpTransaction when `feeBumpSigner` is set.
+   * 5. Broadcasts and polls for on-chain confirmation.
+   * 6. Marks the channel as closed and the challenge as used in the store.
+   *
+   * @throws {ChannelVerificationError} If no envelopeSigner is configured,
+   *   broadcast returns a non-PENDING status, or the on-chain tx fails.
    */
   async function doVerifyClose(params: {
     contract: Contract

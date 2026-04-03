@@ -46,7 +46,6 @@ const mppx = Mppx.create({
     stellar.channel({
       channel: Env.channelContract,
       commitmentKey: commitmentPublicKeyG,
-      sourceAccount: Env.sourceAccount,
       store,
       network: 'stellar:testnet',
       logger,

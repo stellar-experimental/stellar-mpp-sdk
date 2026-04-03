@@ -87,13 +87,6 @@ describe('stellar client channel', () => {
     )
   })
 
-  it('accepts sourceAccount parameter', () => {
-    const method = channel({
-      commitmentKey: TEST_KEYPAIR,
-      sourceAccount: Keypair.random().publicKey(),
-    })
-    expect(method.name).toBe('stellar')
-  })
 })
 
 // ── createCredential behaviour ─────────────────────────────────────────────

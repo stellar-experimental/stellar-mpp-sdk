@@ -1,7 +1,7 @@
-import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stellar/stellar-sdk'
+import { Account, Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stellar/stellar-sdk'
 import { Credential, Method, Store } from 'mppx'
 import { z } from 'zod/mini'
-import { DEFAULT_FEE, NETWORK_PASSPHRASE, SOROBAN_RPC_URLS } from '../../constants.js'
+import { ALL_ZEROS, DEFAULT_FEE, NETWORK_PASSPHRASE, SOROBAN_RPC_URLS } from '../../constants.js'
 import { DEFAULT_SIMULATION_TIMEOUT_MS } from '../../shared/defaults.js'
 import { StellarMppError } from '../../shared/errors.js'
 import { simulateCall } from '../../shared/simulate.js'
@@ -37,7 +37,6 @@ export function channel(parameters: channel.Parameters) {
     onProgress,
     rpcUrl,
     simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
-    sourceAccount,
     store,
   } = parameters
 
@@ -115,7 +114,7 @@ export function channel(parameters: channel.Parameters) {
       )
 
       // Simulate the call to get the commitment bytes
-      const account = await server.getAccount(sourceAccount ?? commitmentKey.publicKey())
+      const account = new Account(ALL_ZEROS, '0')
       const simTx = new TransactionBuilder(account, {
         fee: DEFAULT_FEE,
         networkPassphrase,
@@ -186,12 +185,6 @@ export declare namespace channel {
     rpcUrl?: string
     /** Simulation timeout in milliseconds. @default 10_000 */
     simulationTimeoutMs?: number
-    /**
-     * Funded Stellar account address (G...) used as the source for
-     * read-only transaction simulations. If omitted, the commitment
-     * key's public key is used, which requires it to be a funded account.
-     */
-    sourceAccount?: string
     /**
      * Optional persistent store for client-side cumulative amount tracking.
      *

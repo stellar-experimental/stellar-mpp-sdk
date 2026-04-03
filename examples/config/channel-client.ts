@@ -9,7 +9,4 @@ export class Env {
     return parseOptional('SERVER_URL', 'http://localhost:3001')!
   }
 
-  static get sourceAccount(): string | undefined {
-    return parseOptional('SOURCE_ACCOUNT')
-  }
 }

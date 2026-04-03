@@ -136,7 +136,6 @@ describe('getChannelState', () => {
 
     const state = await getChannelState({
       channel: CHANNEL_ADDRESS,
-      sourceAccount: SOURCE_ACCOUNT,
     })
 
     expect(state.balance).toBe(10_000_000n)
@@ -161,7 +160,6 @@ describe('getChannelState', () => {
 
     const state = await getChannelState({
       channel: CHANNEL_ADDRESS,
-      sourceAccount: SOURCE_ACCOUNT,
     })
 
     expect(state.closeEffectiveAtLedger).toBe(6000)
@@ -181,7 +179,6 @@ describe('getChannelState', () => {
 
     const state = await getChannelState({
       channel: CHANNEL_ADDRESS,
-      sourceAccount: SOURCE_ACCOUNT,
     })
 
     expect(state.closeEffectiveAtLedger).toBeNull()
@@ -195,8 +192,7 @@ describe('getChannelState', () => {
     await expect(
       getChannelState({
         channel: CHANNEL_ADDRESS,
-        sourceAccount: SOURCE_ACCOUNT,
-      }),
+        }),
     ).rejects.toThrow('Failed to simulate')
   })
 })

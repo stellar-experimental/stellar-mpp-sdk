@@ -43,7 +43,6 @@ Mppx.create({
   methods: [
     stellar.channel({
       commitmentKey,
-      sourceAccount: parseOptional('SOURCE_ACCOUNT'),
       onProgress(event) {
         const ts = new Date().toISOString().slice(11, 23)
         switch (event.type) {

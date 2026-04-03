@@ -23,10 +23,6 @@ export class Env {
     return parseOptional('MPP_SECRET_KEY', 'stellar-mpp-channel-demo-secret')!
   }
 
-  static get sourceAccount(): string | undefined {
-    return parseOptional('SOURCE_ACCOUNT')
-  }
-
   static get rateLimitWindowMs(): number {
     return parseNumber('RATE_LIMIT_WINDOW_MS', { fallback: 60000, min: 1 })
   }
