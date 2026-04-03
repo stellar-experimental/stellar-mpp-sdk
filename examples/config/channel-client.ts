@@ -8,5 +8,4 @@ export class Env {
   static get serverUrl(): string {
     return parseOptional('SERVER_URL', 'http://localhost:3001')!
   }
-
 }

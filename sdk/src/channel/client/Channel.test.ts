@@ -86,7 +86,6 @@ describe('stellar client channel', () => {
       'Either commitmentKey or commitmentSecret must be provided.',
     )
   })
-
 })
 
 // ── createCredential behaviour ─────────────────────────────────────────────

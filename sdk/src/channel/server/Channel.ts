@@ -255,43 +255,7 @@ export function channel(parameters: channel.Parameters) {
       )
     }
 
-    // Verify: call prepare_commitment on the channel contract to reconstruct the expected commitment
-    // bytes, then verify the ed25519 signature.
-    logger.debug(`${LOG_PREFIX} Verifying commitment signature...`)
-    const contract = new Contract(channelAddress)
-    const call = contract.call(
-      'prepare_commitment',
-      nativeToScVal(commitmentAmount, { type: 'i128' }),
-    )
-
-    const account = new Account(ALL_ZEROS, '0')
-    const simTx = new TransactionBuilder(account, {
-      fee: DEFAULT_FEE,
-      networkPassphrase,
-    })
-      .addOperation(call)
-      .setTimeout(simulationTimeoutMs / 1000)
-      .build()
-
-    const simResult = await simulateCall(rpcServer, simTx, { timeoutMs: simulationTimeoutMs })
-
-    const returnValue = simResult.result?.retval
-    if (!returnValue) {
-      throw new ChannelVerificationError(`${LOG_PREFIX} prepare_commitment returned no value.`, {})
-    }
-
-    const commitmentBytes = returnValue.bytes()
-    const valid = commitmentKP.verify(Buffer.from(commitmentBytes), signatureBytes)
-
-    if (!valid) {
-      throw new ChannelVerificationError(
-        `${LOG_PREFIX} Commitment signature verification failed.`,
-        {
-          amount: commitmentAmount.toString(),
-          channel: channelAddress,
-        },
-      )
-    }
+    await verifyCommitmentSignature(commitmentAmount, signatureBytes)
 
     // Update cumulative amount in store
     await store.put(cumulativeKey, {
@@ -301,7 +265,6 @@ export function channel(parameters: channel.Parameters) {
     // Dispatch on action
     if (action === 'close') {
       return doVerifyClose({
-        contract,
         commitmentAmount,
         signatureBytes,
         challengeStoreKey,
@@ -336,13 +299,12 @@ export function channel(parameters: channel.Parameters) {
    *   broadcast returns a non-PENDING status, or the on-chain tx fails.
    */
   async function doVerifyClose(params: {
-    contract: Contract
     commitmentAmount: bigint
     signatureBytes: Buffer
     challengeStoreKey: string
     externalId?: string
   }) {
-    const { contract, commitmentAmount, signatureBytes, challengeStoreKey, externalId } = params
+    const { commitmentAmount, signatureBytes, challengeStoreKey, externalId } = params
 
     if (!envelopeKP) {
       throw new ChannelVerificationError(
@@ -351,6 +313,7 @@ export function channel(parameters: channel.Parameters) {
       )
     }
 
+    const contract = new Contract(channelAddress)
     const closeOp = contract.call(
       'close',
       nativeToScVal(commitmentAmount, { type: 'i128' }),
@@ -377,36 +340,12 @@ export function channel(parameters: channel.Parameters) {
       })
     }
 
-    logger.debug(`${LOG_PREFIX} Broadcasting close tx...`)
-    const sendResult = await rpcServer.sendTransaction(txToSubmit)
-
-    if (sendResult.status !== 'PENDING') {
-      throw new ChannelVerificationError(
-        `${LOG_PREFIX} Close broadcast failed: sendTransaction returned ${sendResult.status}.`,
-        { hash: sendResult.hash, status: sendResult.status },
-      )
-    }
-
-    const txResult = await pollTransaction(rpcServer, sendResult.hash, {
-      maxAttempts: pollMaxAttempts,
-      delayMs: pollDelayMs,
-      timeoutMs: pollTimeoutMs,
-    })
-
-    if (txResult.status !== 'SUCCESS') {
-      throw new ChannelVerificationError(
-        `${LOG_PREFIX} Close transaction failed: ${txResult.status}`,
-        {
-          hash: sendResult.hash,
-          status: txResult.status,
-        },
-      )
-    }
+    const txHash = await broadcastAndPoll(txToSubmit, 'Close')
 
     logger.debug(`${LOG_PREFIX} Channel closed, marking in store`)
     await store.put(`${STORE_PREFIX}:closed:${channelAddress}`, {
       closedAt: new Date().toISOString(),
-      txHash: sendResult.hash,
+      txHash,
       amount: commitmentAmount.toString(),
     })
 
@@ -414,7 +353,7 @@ export function channel(parameters: channel.Parameters) {
 
     return Receipt.from({
       method: 'stellar',
-      reference: sendResult.hash,
+      reference: txHash,
       status: 'success',
       timestamp: new Date().toISOString(),
       ...(externalId ? { externalId } : {}),
@@ -508,44 +447,7 @@ export function channel(parameters: channel.Parameters) {
     }
 
     // Step 3: Verify the initial commitment signature via prepare_commitment simulation
-    logger.debug(`${LOG_PREFIX} Verifying commitment signature...`)
-    const contract = new Contract(channelAddress)
-    const call = contract.call(
-      'prepare_commitment',
-      nativeToScVal(commitmentAmount, { type: 'i128' }),
-    )
-
-    const account = new Account(ALL_ZEROS, '0')
-    const simTx = new TransactionBuilder(account, {
-      fee: DEFAULT_FEE,
-      networkPassphrase,
-    })
-      .addOperation(call)
-      .setTimeout(simulationTimeoutMs / 1000)
-      .build()
-
-    const simResult = await simulateCall(rpcServer, simTx, { timeoutMs: simulationTimeoutMs })
-
-    const returnValue = simResult.result?.retval
-    if (!returnValue) {
-      throw new ChannelVerificationError(
-        `${LOG_PREFIX} prepare_commitment returned no value during open.`,
-        {},
-      )
-    }
-
-    const commitmentBytes = returnValue.bytes()
-    const valid = commitmentKP.verify(Buffer.from(commitmentBytes), signatureBytes)
-
-    if (!valid) {
-      throw new ChannelVerificationError(
-        `${LOG_PREFIX} Initial commitment signature verification failed.`,
-        {
-          amount: commitmentAmount.toString(),
-          channel: channelAddress,
-        },
-      )
-    }
+    await verifyCommitmentSignature(commitmentAmount, signatureBytes)
 
     // Step 4: Parse and validate the open transaction to ensure it targets the correct channel contract
     // before broadcasting it.
@@ -581,10 +483,92 @@ export function channel(parameters: channel.Parameters) {
     }
 
     // Step 6: Broadcast the transaction and poll for confirmation
-    const sendResult = await rpcServer.sendTransaction(txToSubmit)
+    const txHash = await broadcastAndPoll(txToSubmit, 'Open')
+
+    // Initialise cumulative amount in the store
+    await store.put(cumulativeKey, {
+      amount: commitmentAmount.toString(),
+    })
+
+    // Mark challenge as used only after successful open settlement
+    await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
+
+    return Receipt.from({
+      method: 'stellar',
+      reference: txHash,
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      ...(externalId ? { externalId } : {}),
+    })
+  }
+
+  /**
+   * Simulates `prepare_commitment` on the channel contract and verifies
+   * the ed25519 signature against the returned commitment bytes.
+   *
+   * @throws {ChannelVerificationError} If the simulation returns no value
+   *   or the signature does not match.
+   */
+  async function verifyCommitmentSignature(
+    commitmentAmount: bigint,
+    signatureBytes: Buffer,
+  ): Promise<void> {
+    logger.debug(`${LOG_PREFIX} Verifying commitment signature...`)
+    const contract = new Contract(channelAddress)
+    const call = contract.call(
+      'prepare_commitment',
+      nativeToScVal(commitmentAmount, { type: 'i128' }),
+    )
+
+    const account = new Account(ALL_ZEROS, '0')
+    const simTx = new TransactionBuilder(account, {
+      fee: DEFAULT_FEE,
+      networkPassphrase,
+    })
+      .addOperation(call)
+      .setTimeout(simulationTimeoutMs / 1000)
+      .build()
+
+    const simResult = await simulateCall(rpcServer, simTx, { timeoutMs: simulationTimeoutMs })
+
+    const returnValue = simResult.result?.retval
+    if (!returnValue) {
+      throw new ChannelVerificationError(`${LOG_PREFIX} prepare_commitment returned no value.`, {})
+    }
+
+    const commitmentBytes = returnValue.bytes()
+    const valid = commitmentKP.verify(Buffer.from(commitmentBytes), signatureBytes)
+
+    if (!valid) {
+      throw new ChannelVerificationError(
+        `${LOG_PREFIX} Commitment signature verification failed.`,
+        {
+          amount: commitmentAmount.toString(),
+          channel: channelAddress,
+        },
+      )
+    }
+  }
+
+  /**
+   * Broadcasts a transaction via Soroban RPC, polls for confirmation, and
+   * returns the transaction hash on success.
+   *
+   * @param tx - The signed transaction (or FeeBumpTransaction) to submit.
+   * @param label - Action label for error messages (e.g. "Close", "Open").
+   * @throws {ChannelVerificationError} If sendTransaction returns a non-PENDING
+   *   status or the polled result is not SUCCESS.
+   */
+  async function broadcastAndPoll(
+    tx: Transaction | FeeBumpTransaction | ReturnType<typeof TransactionBuilder.fromXDR>,
+    label: string,
+  ): Promise<string> {
+    logger.debug(`${LOG_PREFIX} Broadcasting ${label.toLowerCase()} tx...`)
+    const sendResult = await rpcServer.sendTransaction(tx as Transaction | FeeBumpTransaction)
+
     if (sendResult.status !== 'PENDING') {
       throw new ChannelVerificationError(
-        `${LOG_PREFIX} Open broadcast failed: sendTransaction returned ${sendResult.status}.`,
+        `${LOG_PREFIX} ${label} broadcast failed: sendTransaction returned ${sendResult.status}.`,
         { hash: sendResult.hash, status: sendResult.status },
       )
     }
@@ -597,7 +581,7 @@ export function channel(parameters: channel.Parameters) {
 
     if (txResult.status !== 'SUCCESS') {
       throw new ChannelVerificationError(
-        `${LOG_PREFIX} Open transaction failed: ${txResult.status}`,
+        `${LOG_PREFIX} ${label} transaction failed: ${txResult.status}`,
         {
           hash: sendResult.hash,
           status: txResult.status,
@@ -605,21 +589,7 @@ export function channel(parameters: channel.Parameters) {
       )
     }
 
-    // Initialise cumulative amount in the store
-    await store.put(cumulativeKey, {
-      amount: commitmentAmount.toString(),
-    })
-
-    // Mark challenge as used only after successful open settlement
-    await store.put(challengeStoreKey, { usedAt: new Date().toISOString() })
-
-    return Receipt.from({
-      method: 'stellar',
-      reference: sendResult.hash,
-      status: 'success',
-      timestamp: new Date().toISOString(),
-      ...(externalId ? { externalId } : {}),
-    })
+    return sendResult.hash
   }
 
   /**

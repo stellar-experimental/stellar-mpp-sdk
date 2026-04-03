@@ -192,7 +192,7 @@ describe('getChannelState', () => {
     await expect(
       getChannelState({
         channel: CHANNEL_ADDRESS,
-        }),
+      }),
     ).rejects.toThrow('Failed to simulate')
   })
 })

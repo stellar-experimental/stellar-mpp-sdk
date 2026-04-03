@@ -318,7 +318,6 @@ describe('stellar server channel', () => {
     expect(method.name).toBe('stellar')
   })
 
-
   it('accepts feePayer with envelopeSigner', () => {
     const method = channel({
       channel: CHANNEL_ADDRESS,
@@ -1228,7 +1227,7 @@ describe('stellar server channel open action', () => {
         credential: credential as any,
         request: credential.challenge.request,
       }),
-    ).rejects.toThrow('Initial commitment signature verification failed')
+    ).rejects.toThrow('Commitment signature verification failed')
   })
 
   it('accepts valid open credential, broadcasts tx, and initialises store', async () => {
