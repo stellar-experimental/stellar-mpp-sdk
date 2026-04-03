@@ -1,4 +1,5 @@
 import {
+  Account,
   Address,
   FeeBumpTransaction,
   Keypair,
@@ -280,10 +281,12 @@ export function charge(parameters: charge.Parameters) {
           // Rebuild the tx with the signer's account as source
           logger.debug(`${LOG_PREFIX} Rebuilding sponsored tx...`)
           const serverAccount = await rpcServer.getAccount(envelopeKP.publicKey())
+          const originalSeq = serverAccount.sequenceNumber() // neded because Transaction.build sets sequence to account's current + 1 in place.
           const envelopeTx = tx.toEnvelope().v1().tx()
           const rawOp = envelopeTx.operations()[0]
 
-          // Build without sorobanData so simulation determines resources
+          // Build without sorobanData so simulation determines resources.
+          // This consumes the account's sequence (N → N+1).
           const simBuilder = new TransactionBuilder(serverAccount, {
             fee: Math.min(Number(tx.fee), maxFeeBumpStroops).toString(),
             networkPassphrase,
@@ -306,8 +309,11 @@ export function charge(parameters: charge.Parameters) {
             serverAddress: envelopeKP.publicKey(),
           })
 
-          // Rebuild with server-determined resources from simulation
-          const prepBuilder = new TransactionBuilder(serverAccount, {
+          // Rebuild with server-determined resources from simulation.
+          // Use a fresh Account at the original sequence so this tx
+          // also gets sequence N+1 (the simulation tx is never submitted).
+          const submitAccount = new Account(envelopeKP.publicKey(), originalSeq)
+          const prepBuilder = new TransactionBuilder(submitAccount, {
             fee: Math.min(Number(tx.fee), maxFeeBumpStroops).toString(),
             networkPassphrase,
             ...(tx.timeBounds ? { timebounds: tx.timeBounds } : {}),

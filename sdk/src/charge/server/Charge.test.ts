@@ -2299,6 +2299,77 @@ describe('charge receipt externalId', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Sponsored path sequence number
+// ---------------------------------------------------------------------------
+
+describe('charge sponsored path sequence number', () => {
+  beforeEach(() => {
+    mockGetAccount.mockReset()
+    mockGetLatestLedger.mockReset()
+    mockSimulateTransaction.mockReset()
+    mockSendTransaction.mockReset()
+    mockGetTransaction.mockReset()
+  })
+
+  it('submits the transaction with the correct sequence (account seq + 1)', async () => {
+    const signerKp = Keypair.random()
+    const serverSeq = '200'
+
+    const tx = buildTransferTx({
+      source: ALL_ZEROS,
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+
+    mockGetAccount.mockResolvedValueOnce(new Account(signerKp.publicKey(), serverSeq))
+    mockGetLatestLedger.mockResolvedValueOnce({ sequence: 1000 })
+    mockSimulateTransaction.mockResolvedValueOnce({
+      result: { retval: null },
+      events: [defaultMockEvent()],
+      transactionData: new SorobanDataBuilder(),
+    })
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'seq-test-hash', status: 'PENDING' })
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
+
+    const challenge = Challenge.from({
+      id: `test-${crypto.randomUUID()}`,
+      realm: 'localhost',
+      method: 'stellar',
+      intent: 'charge',
+      request: {
+        amount: '10000000',
+        currency: USDC_SAC_TESTNET,
+        recipient: RECIPIENT,
+        methodDetails: { network: 'stellar:testnet', feePayer: true },
+      },
+    })
+    const cred = Object.assign(
+      Credential.from({
+        challenge,
+        payload: { type: 'transaction', transaction: tx.toXDR() },
+      }),
+      { source: `did:pkh:stellar:testnet:${PAYER.publicKey()}` },
+    )
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      feePayer: { envelopeSigner: signerKp },
+      store: Store.memory(),
+    })
+
+    await method.verify({ credential: cred as any, request: cred.challenge.request })
+
+    // The submitted tx must have sequence = serverSeq + 1, NOT serverSeq + 2
+    const sentTx = mockSendTransaction.mock.calls[0][0] as Transaction
+    const expectedSeq = (BigInt(serverSeq) + 1n).toString()
+    expect(sentTx.sequence).toBe(expectedSeq)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // TOCTOU race condition tests
 // ---------------------------------------------------------------------------
 
