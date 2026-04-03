@@ -490,8 +490,8 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
   })
 })
 
-describe('charge push-mode verification (NM-001 regression)', () => {
-  it('rejects hash whose on-chain tx has wrong amount (NM-001)', async () => {
+describe('charge push-mode verification', () => {
+  it('rejects hash whose on-chain tx has wrong amount', async () => {
     // Before the fix, verifySacTransfer swallowed all errors — any successful on-chain tx
     // would be accepted as payment. Now it must throw on wrong transfer parameters.
     const wrongAmountTx = buildTransferTx({
@@ -523,7 +523,7 @@ describe('charge push-mode verification (NM-001 regression)', () => {
     ).rejects.toThrow('Transfer amount does not match')
   })
 
-  it('rejects hash whose on-chain tx transfers to wrong recipient (NM-001)', async () => {
+  it('rejects hash whose on-chain tx transfers to wrong recipient', async () => {
     const wrongRecipient = Keypair.random().publicKey()
     const tx = buildTransferTx({
       source: PAYER.publicKey(),
@@ -554,7 +554,7 @@ describe('charge push-mode verification (NM-001 regression)', () => {
     ).rejects.toThrow('Transfer "to" does not match')
   })
 
-  it('rejects hash whose on-chain tx uses wrong currency (NM-001)', async () => {
+  it('rejects hash whose on-chain tx uses wrong currency', async () => {
     const wrongCurrency = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC'
     const tx = buildTransferTx({
       source: PAYER.publicKey(),
@@ -585,7 +585,7 @@ describe('charge push-mode verification (NM-001 regression)', () => {
     ).rejects.toThrow('Contract address does not match')
   })
 
-  it('rejects hash when on-chain tx has no envelopeXdr (NM-001)', async () => {
+  it('rejects hash when on-chain tx has no envelopeXdr', async () => {
     mockGetTransaction.mockResolvedValueOnce({
       status: 'SUCCESS',
       envelopeXdr: undefined,

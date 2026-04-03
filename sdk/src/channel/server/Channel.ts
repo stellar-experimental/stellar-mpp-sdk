@@ -622,7 +622,7 @@ export function channel(parameters: channel.Parameters) {
         rpcUrl,
       })
     } catch (error) {
-      // NM-005: Fail closed — reject the voucher when the on-chain
+      // Fail closed — reject the voucher when the on-chain
       // check cannot be completed rather than silently skipping it.
       throw new ChannelVerificationError(
         `${LOG_PREFIX} On-chain state check failed. Cannot verify channel status.`,

@@ -347,7 +347,7 @@ describe('stellar server channel', () => {
     expect(method.name).toBe('stellar')
   })
 
-  it('defaults checkOnChainState to true (NM-003)', async () => {
+  it('defaults checkOnChainState to true', async () => {
     mockGetChannelState.mockResolvedValueOnce({
       balance: 1000000n,
       refundWaitingPeriod: 1000,
@@ -729,7 +729,7 @@ describe('stellar server channel verification', () => {
     const challenge = await store.get(`stellar:channel:challenge:${credential.challenge.id}`)
     expect(challenge).toBeDefined()
 
-    // Cumulative advanced after successful close (NM-005)
+    // Cumulative advanced after successful close
     const cumulative = await store.get(`stellar:channel:cumulative:${CHANNEL_ADDRESS}`)
     expect(cumulative).toBeDefined()
     expect((cumulative as any).amount).toBe('5000000')
@@ -911,7 +911,7 @@ describe('stellar server channel verification', () => {
     const challenge = await store.get(`stellar:channel:challenge:${credential.challenge.id}`)
     expect(challenge).toBeNull()
 
-    // Cumulative should NOT be advanced when close fails (NM-005)
+    // Cumulative should NOT be advanced when close fails
     const cumulative = await store.get(`stellar:channel:cumulative:${CHANNEL_ADDRESS}`)
     expect(cumulative).toBeNull()
   })
@@ -1009,7 +1009,7 @@ describe('stellar server channel dispute detection', () => {
       store: Store.memory(),
     })
 
-    // NM-005: Fail closed — on-chain check failure now rejects the voucher
+    // Fail closed — on-chain check failure now rejects the voucher
     await expect(
       method.verify({
         credential: credential as any,
@@ -1089,7 +1089,7 @@ describe('stellar server channel dispute detection', () => {
     expect(mockGetChannelState).not.toHaveBeenCalled()
   })
 
-  it('rejects voucher after channel closure (NM-001)', async () => {
+  it('rejects voucher after channel closure', async () => {
     const store = Store.memory()
     await store.put(`stellar:channel:closed:${CHANNEL_ADDRESS}`, {
       closedAt: new Date().toISOString(),
@@ -1217,7 +1217,7 @@ describe('stellar server channel dispute detection', () => {
     expect(receipt.status).toBe('success')
   })
 
-  it('rejects commitment that exceeds on-chain balance (NM-003)', async () => {
+  it('rejects commitment that exceeds on-chain balance', async () => {
     mockGetChannelState.mockResolvedValueOnce({
       balance: 500000n, // less than commitment
       refundWaitingPeriod: 1000,
