@@ -3,14 +3,21 @@
 **Base branch:** main
 
 ## Title
-
-docs: fix CHANGELOG entries for v0.3.0
+fix: harden verification, replay protection, and sponsored charge path
 
 ## What
-
-- Move PR #34 (`feePayer` channel signer refactor) from `[Unreleased]` into the `0.3.0 / Changed` section where it belongs
-- Add missing PR #35 (draft-stellar-charge-00 spec references) under a new `0.3.0 / Added` section
+- Prevent challenge/hash replay via synchronous claim before async verification (TOCTOU fix)
+- Fix sponsored charge path submitting transactions with wrong sequence number (txBadSeq)
+- Default `checkOnChainState` to `true` in channel server
+- Extract shared helpers (`claim.ts`, `verify-invoke.ts`, `validation.ts`, `log-utils.ts`)
+- Harden env parsing with full Stellar strkey checksum validation
+- Add charge-client-fee-bump example for flows 2 and 4
+- Add `CHARGE_CLIENT_MODE` env var for push/pull mode selection
+- Expand test coverage from ~175 to 370 tests
 
 ## Why
+Addresses replay protection gaps in multi-instance deployments, a broken sponsored charge path (every sponsored transaction failed with `txBadSeq`), and missing validation across the codebase.
 
-The last two commits landed on `main` after the `0.3.0` changelog section was drafted, leaving #34 stranded under `[Unreleased]` and #35 absent entirely. This PR corrects the record so the changelog accurately reflects the full 0.3.0 release.
+Closes https://github.com/stellar/internal-agents/issues/323
+Closes https://github.com/stellar/internal-agents/issues/322
+Closes https://github.com/stellar/internal-agents/issues/318
