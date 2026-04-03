@@ -170,10 +170,17 @@ Every PR must add a line to `CHANGELOG.md` under the `## [Unreleased]` heading. 
 
 After running all checks, report:
 
-| Check                                              | Status    | Notes                                                          |
-| -------------------------------------------------- | --------- | -------------------------------------------------------------- |
-| `make check` (full pipeline)                       | PASS/FAIL | test count, any errors                                         |
-| Example script validation (6 scripts)              | PASS/FAIL | which scripts failed                                           |
-| Charge E2E (`demo/run.sh`)                         | PASS/FAIL | final HTTP status                                              |
-| Channel E2E (`demo/run-channel.sh`)                | PASS/FAIL | request count, cumulative amounts                              |
-| Channel E2E settlement (`demo/run-channel-e2e.sh`) | PASS/FAIL | balance after close. ATTENTION: this is explained in `Check 5` |
+| #    | Check                                              | Status    | Notes                                                          |
+| ---- | -------------------------------------------------- | --------- | -------------------------------------------------------------- |
+| 1    | `make check` (full pipeline)                       | PASS/FAIL | test count, any errors                                         |
+| 2a   | Example scripts (7 scripts)                        | PASS/FAIL | which scripts failed                                           |
+| 2b-1 | Charge: push, no FeeBump                           | PASS/FAIL | 200 or error                                                   |
+| 2b-2 | Charge: push + FeeBump                             | PASS/FAIL | 200 or error                                                   |
+| 2b-3 | Charge: pull unsponsored                           | PASS/FAIL | 200 or error                                                   |
+| 2b-4 | Charge: pull unsponsored + FeeBump                 | PASS/FAIL | 200 or error                                                   |
+| 2b-5 | Charge: pull sponsored                             | PASS/FAIL | 200 or error                                                   |
+| 2b-6 | Charge: pull sponsored + FeeBump                   | PASS/FAIL | 200 or error                                                   |
+| 3    | Charge E2E (`demo/run.sh`)                         | PASS/FAIL | final HTTP status                                              |
+| 4    | Channel E2E (`demo/run-channel.sh`)                | PASS/FAIL | request count, cumulative amounts                              |
+| 5    | Channel E2E settlement (`demo/run-channel-e2e.sh`) | PASS/FAIL | balance after close. ATTENTION: this is explained in `Check 5` |
+| 6    | CHANGELOG entry                                    | PASS/FAIL | PR link present                                                |
