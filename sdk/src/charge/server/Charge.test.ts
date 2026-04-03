@@ -1083,6 +1083,54 @@ describe('charge transaction verification', () => {
     expect(receipt.method).toBe('stellar')
   })
 
+  it('verifies and broadcasts FeeBump-wrapped transfer in unsponsored pull mode', async () => {
+    const innerTx = buildTransferTx({
+      source: PAYER.publicKey(),
+      from: PAYER.publicKey(),
+      to: RECIPIENT,
+      amount: 10000000n,
+      currency: USDC_SAC_TESTNET,
+    })
+    innerTx.sign(PAYER)
+
+    const feeSource = Keypair.random()
+    const feeBumpTx = TransactionBuilder.buildFeeBumpTransaction(
+      feeSource,
+      '200',
+      innerTx,
+      NETWORK_PASSPHRASE,
+    )
+    feeBumpTx.sign(feeSource)
+
+    mockSimulateTransaction.mockResolvedValueOnce({
+      result: { retval: null },
+      events: [defaultMockEvent()],
+      transactionData: 'mock',
+    })
+    mockSendTransaction.mockResolvedValueOnce({ hash: 'feebump-pull-hash', status: 'PENDING' })
+    mockGetTransaction.mockResolvedValueOnce({ status: 'SUCCESS' })
+
+    // Use toEnvelope().toXDR('base64') to get the FeeBump envelope XDR correctly
+    const cred = makeTransactionCredential(feeBumpTx.toEnvelope().toXDR('base64'))
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
+    })
+
+    const receipt = await method.verify({
+      credential: cred as any,
+      request: cred.challenge.request,
+    })
+    expect(receipt.status).toBe('success')
+    expect(receipt.reference).toBe('feebump-pull-hash')
+    // The FeeBump tx (not the inner tx) must be what gets broadcast.
+    // FeeBumpTransaction has an innerTransaction property; plain Transaction does not.
+    expect(mockSendTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ innerTransaction: expect.anything() }),
+    )
+  })
+
   it('throws SettlementError when broadcast fails', async () => {
     const tx = buildTransferTx({
       source: PAYER.publicKey(),

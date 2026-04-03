@@ -203,12 +203,24 @@ export function charge(parameters: charge.Parameters) {
 
       case 'transaction': {
         const txXdr = payload.transaction
-        const parsedTx = TransactionBuilder.fromXDR(txXdr, networkPassphrase)
 
-        const tx =
-          parsedTx instanceof FeeBumpTransaction
-            ? parsedTx.innerTransaction
-            : (parsedTx as Transaction)
+        // Detect FeeBump by inspecting the XDR envelope type directly.
+        // Using explicit constructors instead of TransactionBuilder.fromXDR +
+        // instanceof avoids false negatives when the FeeBumpTransaction class
+        // reference differs across module boundaries (e.g. in test environments).
+        const txEnvelope = xdr.TransactionEnvelope.fromXDR(txXdr, 'base64')
+        const isFeeBump = txEnvelope.switch().name === 'envelopeTypeTxFeeBump'
+
+        let tx: Transaction
+        let txToSubmit: Transaction | FeeBumpTransaction
+        if (isFeeBump) {
+          const feeBumpTx = new FeeBumpTransaction(txEnvelope, networkPassphrase)
+          tx = feeBumpTx.innerTransaction
+          txToSubmit = feeBumpTx
+        } else {
+          tx = new Transaction(txEnvelope, networkPassphrase)
+          txToSubmit = tx
+        }
 
         verifyNoSigningAddressInSources(tx, envelopeKP)
 
@@ -220,10 +232,6 @@ export function charge(parameters: charge.Parameters) {
           from: expectedFrom,
         })
 
-        let txToSubmit: Transaction | FeeBumpTransaction = parsedTx as
-          | Transaction
-          | FeeBumpTransaction
-
         if (!envelopeKP && tx.source === ALL_ZEROS) {
           logger.warn(`${LOG_PREFIX} Verification failed`, {
             error: 'Sponsored source without feePayer',
@@ -234,12 +242,11 @@ export function charge(parameters: charge.Parameters) {
           )
         }
 
-        // Determine expires from challenge for ledger expiration calculations
         const expiresTimestamp: number | undefined = challenge.expires
           ? Math.floor(new Date(challenge.expires).getTime() / 1000)
           : undefined
 
-        if (envelopeKP && tx.source === ALL_ZEROS) {
+        if (envelopeKP !== undefined && tx.source === ALL_ZEROS) {
           // ── Sponsored path ──────────────────────────────────────────
 
           await validateAuthEntries(tx, envelopeKP.publicKey(), expiresTimestamp)
