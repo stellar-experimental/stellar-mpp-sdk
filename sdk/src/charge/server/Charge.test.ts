@@ -67,24 +67,13 @@ describe('stellar server charge', () => {
     expect(typeof method.verify).toBe('function')
   })
 
-  it('defaults to in-memory store when store is omitted', () => {
-    const method = charge({
-      recipient: RECIPIENT,
-      currency: USDC_SAC_TESTNET,
-    })
-    expect(method.name).toBe('stellar')
-  })
-
-  it('warns when no store is provided', () => {
-    const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() }
-    charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, logger })
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No store provided'))
-  })
-
-  it('does not warn when a store is explicitly provided', () => {
-    const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() }
-    charge({ recipient: RECIPIENT, currency: USDC_SAC_TESTNET, store: Store.memory(), logger })
-    expect(logger.warn).not.toHaveBeenCalled()
+  it('throws when store is omitted', () => {
+    expect(() =>
+      charge({
+        recipient: RECIPIENT,
+        currency: USDC_SAC_TESTNET,
+      } as any),
+    ).toThrow('A store is required for charge mode')
   })
 
   it('accepts custom network', () => {
@@ -111,6 +100,7 @@ describe('stellar server charge', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
       feePayer: { envelopeSigner: Keypair.random() },
     })
     expect(method.name).toBe('stellar')
@@ -120,6 +110,7 @@ describe('stellar server charge', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
       feePayer: { envelopeSigner: Keypair.random().secret() },
     })
     expect(method.name).toBe('stellar')
@@ -129,6 +120,7 @@ describe('stellar server charge', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
       feePayer: { envelopeSigner: Keypair.random(), feeBumpSigner: Keypair.random() },
     })
     expect(method.name).toBe('stellar')
@@ -138,6 +130,7 @@ describe('stellar server charge', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
       feePayer: { envelopeSigner: Keypair.random(), feeBumpSigner: Keypair.random().secret() },
     })
     expect(method.name).toBe('stellar')
@@ -189,6 +182,7 @@ describe('charge request transform', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
       feePayer: { envelopeSigner: Keypair.random() },
     })
     const transformed = (method as any).request({
@@ -663,6 +657,7 @@ describe('charge hash format validation', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
     })
     const cred = makeHashCredential({ hash: 'not-hex-at-all' })
     await expect(
@@ -674,6 +669,7 @@ describe('charge hash format validation', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
     })
     const cred = makeHashCredential({ hash: 'abcd1234' })
     await expect(
@@ -685,6 +681,7 @@ describe('charge hash format validation', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
     })
     const cred = makeHashCredential({ hash: 'zzzz' + '0'.repeat(60) })
     await expect(
@@ -700,6 +697,7 @@ describe('charge hash format validation', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
     })
     const payer = Keypair.random()
     const cred = makeHashCredential({
@@ -729,6 +727,7 @@ describe('charge DoS prevention: no global serial lock', () => {
     const method = charge({
       recipient: RECIPIENT,
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
     })
 
     const cred1 = makeHashCredential({ hash: testHash('parallel-a') })

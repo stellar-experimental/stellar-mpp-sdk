@@ -60,6 +60,13 @@ const STORE_PREFIX = 'stellar:charge'
  * @see https://paymentauth.org/draft-stellar-charge-00
  */
 export function charge(parameters: charge.Parameters) {
+  if (!parameters.store) {
+    throw new PaymentVerificationError(
+      `${LOG_PREFIX} A store is required for charge mode. Provide a Store instance for replay protection and transaction hash deduplication.`,
+      {},
+    )
+  }
+
   const {
     currency,
     decimals = DEFAULT_DECIMALS,
@@ -74,16 +81,8 @@ export function charge(parameters: charge.Parameters) {
     recipient,
     rpcUrl,
     simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
-    store = Store.memory(),
+    store,
   } = parameters
-
-  if (!parameters.store) {
-    logger.warn(
-      `${LOG_PREFIX} No store provided — using in-memory store. ` +
-        `Replay protection will not survive restarts or work across multiple instances. ` +
-        `Pass a persistent store in production.`,
-    )
-  }
 
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
   const networkPassphrase = NETWORK_PASSPHRASE[network]
@@ -912,13 +911,13 @@ export declare namespace charge {
     /**
      * Replay protection store for challenge and tx hash deduplication.
      *
-     * Defaults to an in-memory store when omitted — suitable for development
-     * and single-process deployments only. In production, pass a persistent
-     * store (e.g. backed by Redis, PostgreSQL, or a similar durable backend)
-     * so that consumed hashes and challenges survive restarts and are visible
-     * across all instances.
+     * Required — all replay protection depends on this store. Use
+     * `Store.memory()` for development and single-process deployments.
+     * In production, pass a persistent store (e.g. backed by Redis or
+     * PostgreSQL) so that consumed hashes and challenges survive restarts
+     * and are visible across all server instances.
      */
-    store?: Store.Store
+    store: Store.Store
     /** Maximum fee in stroops for the inner transaction and fee bump. @defaultValue `10_000_000` (1 XLM) */
     maxFeeBumpStroops?: number
     /** Maximum number of polling attempts when waiting for tx confirmation. @defaultValue `20` */

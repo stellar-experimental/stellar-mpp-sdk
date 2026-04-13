@@ -47,6 +47,14 @@ export function channel(parameters: channel.Parameters) {
     store = Store.memory(),
   } = parameters
 
+  if (!parameters.store) {
+    console.warn(
+      '[stellar:channel:client] No persistent store provided — ' +
+        'cumulative anti-reset protection will not survive process restarts. ' +
+        'Pass a persistent Store for production use.',
+    )
+  }
+
   if (!commitmentKeyParam && !commitmentSecret) {
     throw new StellarMppError('Either commitmentKey or commitmentSecret must be provided.')
   }
@@ -200,6 +208,10 @@ export declare namespace channel {
      * maximum of the locally tracked value and the server-reported value.
      * This prevents a malicious or compromised server from resetting the
      * client's cumulative baseline to inflate the signed commitment.
+     *
+     * Defaults to an in-memory store — protection is active within the
+     * process lifetime but does not survive restarts. Pass a persistent
+     * store for production use.
      */
     store?: Store.Store
     /** Callback invoked at each lifecycle stage. */
