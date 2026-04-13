@@ -41,13 +41,6 @@ if [ -z "${COMMITMENT_SECRET:-}" ]; then
   export COMMITMENT_SECRET="${commitment_secret}"
 fi
 
-if [ -z "${SOURCE_ACCOUNT:-}" ]; then
-  echo ""
-  echo "Enter a funded testnet Stellar account (G..., 56 chars) for simulations:"
-  read -rp "  SOURCE_ACCOUNT=" source_account
-  export SOURCE_ACCOUNT="${source_account}"
-fi
-
 echo ""
 echo "══════════════════════════════════════════════════"
 echo "  Stellar MPP Channel Demo"

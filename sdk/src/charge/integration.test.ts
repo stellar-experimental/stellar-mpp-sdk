@@ -33,6 +33,7 @@ describe('server charge creation', () => {
     const method = serverCharge({
       recipient: RECIPIENT.publicKey(),
       currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
     })
     expect(method.name).toBe('stellar')
     expect(method.intent).toBe('charge')
@@ -47,6 +48,7 @@ describe('server charge creation', () => {
         serverCharge({
           recipient: RECIPIENT.publicKey(),
           currency: USDC_SAC_TESTNET,
+          store: Store.memory(),
         }),
       ],
     })

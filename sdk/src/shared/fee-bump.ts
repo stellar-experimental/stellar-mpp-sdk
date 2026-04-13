@@ -1,11 +1,6 @@
 import { FeeBumpTransaction, Keypair, Transaction, TransactionBuilder } from '@stellar/stellar-sdk'
 import { DEFAULT_MAX_FEE_BUMP_STROOPS } from './defaults.js'
 
-export interface FeeBumpOptions {
-  networkPassphrase: string
-  maxFeeStroops?: number
-}
-
 /**
  * Wraps a transaction in a `FeeBumpTransaction`.
  *
@@ -18,7 +13,10 @@ export interface FeeBumpOptions {
 export function wrapFeeBump(
   tx: Transaction | FeeBumpTransaction,
   signer: Keypair,
-  opts: FeeBumpOptions,
+  opts: {
+    networkPassphrase: string
+    maxFeeStroops?: number
+  },
 ): Transaction | FeeBumpTransaction {
   if (tx instanceof FeeBumpTransaction) {
     return tx

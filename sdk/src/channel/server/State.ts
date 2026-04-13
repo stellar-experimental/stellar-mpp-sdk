@@ -1,5 +1,6 @@
-import { Address, Contract, TransactionBuilder, rpc, xdr } from '@stellar/stellar-sdk'
+import { Account, Address, Contract, TransactionBuilder, rpc, xdr } from '@stellar/stellar-sdk'
 import {
+  ALL_ZEROS,
   DEFAULT_FEE,
   NETWORK_PASSPHRASE,
   SOROBAN_RPC_URLS,
@@ -51,7 +52,6 @@ export type ChannelState = {
  *
  * const state = await getChannelState({
  *   channel: 'CABC...',
- *   sourceAccount: 'GABC...',
  * })
  *
  * if (state.closeEffectiveAtLedger != null) {
@@ -62,14 +62,14 @@ export type ChannelState = {
 export async function getChannelState(
   parameters: getChannelState.Parameters,
 ): Promise<ChannelState> {
-  const { channel: channelAddress, network = STELLAR_TESTNET, rpcUrl, sourceAccount } = parameters
+  const { channel: channelAddress, network = STELLAR_TESTNET, rpcUrl } = parameters
 
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
   const networkPassphrase = NETWORK_PASSPHRASE[network]
   const server = new rpc.Server(resolvedRpcUrl)
 
   const contract = new Contract(channelAddress)
-  const account = await server.getAccount(sourceAccount)
+  const account = new Account(ALL_ZEROS, '0')
 
   async function simulateGetter(fnName: string, ...args: xdr.ScVal[]) {
     const call = contract.call(fnName, ...args)
@@ -137,8 +137,6 @@ export declare namespace getChannelState {
     network?: NetworkId
     /** Custom Soroban RPC URL. */
     rpcUrl?: string
-    /** Funded Stellar account address (G...) used as the source for simulations. */
-    sourceAccount: string
   }
 }
 

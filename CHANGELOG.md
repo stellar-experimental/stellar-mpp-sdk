@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - End-toEnd tests for the charge intent, submitting real transactions on Testnet, and making sure the flows work in combinations of push/pull and sponsorship ([#41](https://github.com/stellar/stellar-mpp-sdk/pull/41))
 
+## [0.5.0] - 2026-04-13
+
+- Harden verification, replay protection, fix sponsored charge path, and replace SAC terminology with SEP-41 across docs, comments, and error messages ([#42](https://github.com/stellar/stellar-mpp-sdk/pull/42))
+
 ## [0.4.0] - 2026-04-01
 
 ### Changed
@@ -55,13 +59,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Initial release of `@stellar/mpp` — a TypeScript SDK for Stellar blockchain payment methods in the Machine Payments Protocol (MPP)
-- **Charge module**: one-time on-chain SAC token transfers with pull (transaction credential) and push (hash credential) modes, following the [draft-stellar-charge-00](https://paymentauth.org/draft-stellar-charge-00) specification
+- **Charge module**: one-time on-chain SEP-41 token transfers with pull (transaction credential) and push (hash credential) modes, following the [draft-stellar-charge-00](https://paymentauth.org/draft-stellar-charge-00) specification
 - **Channel module**: off-chain payment commitments via one-way payment channel contracts with batch settlement on close (session spec in progress)
 - Subpath exports for selective imports (`@stellar/mpp/charge/client`, `@stellar/mpp/charge/server`, `@stellar/mpp/channel/client`, `@stellar/mpp/channel/server`, `@stellar/mpp/env`)
 - Env parsing primitives for Stellar-aware configuration
 - Shared utilities: fee bump wrapping, transaction polling with backoff, Soroban simulation, unit conversion, keypair resolution
 
-[Unreleased]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.2.0...v0.2.1

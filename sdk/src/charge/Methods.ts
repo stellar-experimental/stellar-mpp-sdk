@@ -2,11 +2,11 @@ import { Method } from 'mppx'
 import { z } from 'zod/mini'
 
 /**
- * Stellar charge intent for one-time SAC token transfers.
+ * Stellar charge intent for one-time SEP-41 token transfers.
  *
  * Supports two credential flows:
  * - `type: "transaction"` — **server-broadcast** (pull mode):
- *   Client signs a Soroban SAC `transfer` invocation and sends the
+ *   Client signs a Soroban SEP-41 `transfer` invocation and sends the
  *   serialised XDR as `payload.transaction`. The server broadcasts it.
  * - `type: "hash"` — **client-broadcast** (push mode):
  *   Client broadcasts itself and sends the transaction hash.
@@ -29,7 +29,7 @@ export const charge = Method.from({
     request: z.object({
       /** Payment amount in base units (stroops). */
       amount: z.string(),
-      /** SAC contract address (C...) for the token to transfer. */
+      /** SEP-41 token contract address (C...) for the token to transfer. */
       currency: z.string(),
       /** Recipient Stellar public key (G...) or contract address (C...). */
       recipient: z.string(),

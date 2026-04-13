@@ -26,7 +26,7 @@ Runs: install -> format-check -> lint -> typecheck -> test -> build.
 Verify all 6 example scripts start correctly (imports resolve, env parsing works):
 
 ```bash
-for f in examples/charge-server.ts examples/charge-client.ts examples/channel-server.ts examples/channel-client.ts examples/channel-open.ts examples/channel-close.ts; do
+for f in examples/charge-server.ts examples/charge-client.ts examples/charge-client-fee-bump.ts examples/channel-server.ts examples/channel-client.ts examples/channel-open.ts examples/channel-close.ts; do
   echo "--- $f ---"
   timeout 3 npx tsx "$f" 2>&1 | head -3
   echo ""
@@ -37,8 +37,9 @@ done
 
 | Script                       | Expected                                                        |
 | ---------------------------- | --------------------------------------------------------------- |
-| `examples/charge-server.ts`         | Starts Express on port 3000 (pino JSON log)                     |
-| `examples/charge-client.ts`         | Loads keypair, starts client                                    |
+| `examples/charge-server.ts`  | Starts Express on port 3000 (pino JSON log)                     |
+| `examples/charge-client.ts`          | Loads keypair, starts client                                                   |
+| `examples/charge-client-fee-bump.ts` | Loads keypair+fee-bump-key, prints account keys, ECONNREFUSED |
 | `examples/channel-server.ts` | Starts Express on port 3001 (pino JSON log)                     |
 | `examples/channel-client.ts` | Loads commitment key, starts client                             |
 | `examples/channel-open.ts`   | Env validation error: `OPEN_TX_XDR is required` (expected)      |
@@ -46,11 +47,63 @@ done
 
 **Fail:** Any import error, syntax error, or module-not-found error.
 
+## Check 2b: Charge Flow Variations
+
+Six flows are available by combining client and server env vars. Each requires a running
+charge server (Terminal 1) and charge client (Terminal 2).
+
+### Server configurations
+
+```bash
+# Unsponsored (flows 1-4): no feePayer env vars needed
+PORT=3099 STELLAR_RECIPIENT=G... npx tsx examples/charge-server.ts
+
+# Sponsored, no fee bump (flow 5): set ENVELOPE_SIGNER_SECRET
+PORT=3099 STELLAR_RECIPIENT=G... ENVELOPE_SIGNER_SECRET=S... \
+  npx tsx examples/charge-server.ts
+
+# Sponsored + FeeBump (flow 6): set both signer secrets
+PORT=3099 STELLAR_RECIPIENT=G... ENVELOPE_SIGNER_SECRET=S... FEE_BUMP_SIGNER_SECRET=S... \
+  npx tsx examples/charge-server.ts
+```
+
+### Client invocations (Terminal 2, replace S... with real key)
+
+```bash
+# Flow 1: push (no FeeBump)
+STELLAR_SECRET=S... SERVER_URL=http://localhost:3099 CHARGE_CLIENT_MODE=push \
+  npx tsx examples/charge-client.ts
+
+# Flow 2: push + FeeBump
+STELLAR_SECRET=S... FEE_BUMP_SECRET=S... SERVER_URL=http://localhost:3099 CHARGE_CLIENT_MODE=push \
+  npx tsx examples/charge-client-fee-bump.ts
+
+# Flow 3: pull non-sponsored (no FeeBump)  [default CHARGE_CLIENT_MODE]
+STELLAR_SECRET=S... SERVER_URL=http://localhost:3099 \
+  npx tsx examples/charge-client.ts
+
+# Flow 4: pull non-sponsored + FeeBump
+STELLAR_SECRET=S... FEE_BUMP_SECRET=S... SERVER_URL=http://localhost:3099 \
+  npx tsx examples/charge-client-fee-bump.ts
+
+# Flow 5: pull sponsored (no FeeBump) — server must have ENVELOPE_SIGNER_SECRET set
+STELLAR_SECRET=S... SERVER_URL=http://localhost:3099 \
+  npx tsx examples/charge-client.ts
+
+# Flow 6: pull sponsored + FeeBump
+# NOTE: client invocation is identical to Flow 5 — the difference is ONLY the server config.
+# The server's feeBumpSigner wraps the rebuilt tx in FeeBump; no client-side change needed.
+STELLAR_SECRET=S... SERVER_URL=http://localhost:3099 \
+  npx tsx examples/charge-client.ts
+```
+
+**Pass:** Each client prints `--- Response (200) ---` with paid content JSON.
+
 ## Check 3: Charge E2E Demo
 
 ```bash
 source .env
-STELLAR_RECIPIENT="$STELLAR_RECIPIENT" STELLAR_SECRET="$STELLAR_SECRET" timeout 120 ./demo/run.sh
+STELLAR_RECIPIENT="$STELLAR_RECIPIENT" STELLAR_SECRET="$STELLAR_SECRET" timeout 15 ./demo/run.sh
 ```
 
 **Expected flow:**
@@ -67,7 +120,7 @@ STELLAR_RECIPIENT="$STELLAR_RECIPIENT" STELLAR_SECRET="$STELLAR_SECRET" timeout 
 
 ```bash
 source .env
-CHANNEL_CONTRACT="$CHANNEL_CONTRACT" COMMITMENT_PUBKEY="$COMMITMENT_PUBKEY" COMMITMENT_SECRET="$COMMITMENT_SECRET" SOURCE_ACCOUNT="${SOURCE_ACCOUNT:-}" timeout 120 ./demo/run-channel.sh
+CHANNEL_CONTRACT="$CHANNEL_CONTRACT" COMMITMENT_PUBKEY="$COMMITMENT_PUBKEY" COMMITMENT_SECRET="$COMMITMENT_SECRET" timeout 15 ./demo/run-channel.sh
 ```
 
 **Expected flow:**
@@ -86,7 +139,7 @@ Requires the compiled one-way-channel WASM from https://github.com/stellar-exper
 
 ```bash
 WASM_PATH=/Users/marcelosantos/Workspace/one-way-channel/target/wasm32v1-none/release/channel.wasm \
-  ./demo/run-channel-e2e.sh
+  timeout 60 ./demo/run-channel-e2e.sh
 ```
 
 Full lifecycle: deploy contract -> 2 off-chain payments -> on-chain close -> balance verified at 0.
@@ -117,10 +170,17 @@ Every PR must add a line to `CHANGELOG.md` under the `## [Unreleased]` heading. 
 
 After running all checks, report:
 
-| Check                                              | Status    | Notes                             |
-| -------------------------------------------------- | --------- | --------------------------------- |
-| `make check` (full pipeline)                       | PASS/FAIL | test count, any errors            |
-| Example script validation (6 scripts)              | PASS/FAIL | which scripts failed              |
-| Charge E2E (`demo/run.sh`)                         | PASS/FAIL | final HTTP status                 |
-| Channel E2E (`demo/run-channel.sh`)                | PASS/FAIL | request count, cumulative amounts |
-| Channel E2E settlement (`demo/run-channel-e2e.sh`) | PASS/FAIL | balance after close               |
+| #    | Check                                              | Status    | Notes                                                          |
+| ---- | -------------------------------------------------- | --------- | -------------------------------------------------------------- |
+| 1    | `make check` (full pipeline)                       | PASS/FAIL | test count, any errors                                         |
+| 2a   | Example scripts (7 scripts)                        | PASS/FAIL | which scripts failed                                           |
+| 2b-1 | Charge: push, no FeeBump                           | PASS/FAIL | 200 or error                                                   |
+| 2b-2 | Charge: push + FeeBump                             | PASS/FAIL | 200 or error                                                   |
+| 2b-3 | Charge: pull unsponsored                           | PASS/FAIL | 200 or error                                                   |
+| 2b-4 | Charge: pull unsponsored + FeeBump                 | PASS/FAIL | 200 or error                                                   |
+| 2b-5 | Charge: pull sponsored                             | PASS/FAIL | 200 or error                                                   |
+| 2b-6 | Charge: pull sponsored + FeeBump                   | PASS/FAIL | 200 or error                                                   |
+| 3    | Charge E2E (`demo/run.sh`)                         | PASS/FAIL | final HTTP status                                              |
+| 4    | Channel E2E (`demo/run-channel.sh`)                | PASS/FAIL | request count, cumulative amounts                              |
+| 5    | Channel E2E settlement (`demo/run-channel-e2e.sh`) | PASS/FAIL | balance after close. ATTENTION: this is explained in `Check 5` |
+| 6    | CHANGELOG entry                                    | PASS/FAIL | PR link present                                                |

@@ -50,6 +50,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Audit
+        run: pnpm audit --audit-level high
+
   complete:
     if: always()
     needs: [check-test-build]

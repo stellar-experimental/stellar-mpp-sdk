@@ -20,15 +20,15 @@ describe('toBaseUnits', () => {
     expect(toBaseUnits('0', 7)).toBe('0')
   })
 
-  it('truncates excess decimals', () => {
-    expect(toBaseUnits('1.123456789', 7)).toBe('11234567')
+  it('throws on excess decimals', () => {
+    expect(() => toBaseUnits('1.123456789', 7)).toThrow('Precision loss')
   })
 
   it('pads fewer decimals', () => {
     expect(toBaseUnits('1.5', 7)).toBe('15000000')
   })
 
-  it('handles negative amounts correctly (NM-006)', () => {
+  it('handles negative amounts correctly', () => {
     expect(toBaseUnits('-1.5', 7)).toBe('-15000000')
     expect(toBaseUnits('-0.01', 7)).toBe('-100000')
   })
@@ -56,12 +56,12 @@ describe('fromBaseUnits', () => {
     expect(fromBaseUnits(base, 7)).toBe('42.1234567')
   })
 
-  it('handles negative amounts correctly (NM-006)', () => {
+  it('handles negative amounts correctly', () => {
     expect(fromBaseUnits('-15000000', 7)).toBe('-1.5000000')
     expect(fromBaseUnits('-5000000', 7)).toBe('-0.5000000')
   })
 
-  it('roundtrips negative amounts (NM-006)', () => {
+  it('roundtrips negative amounts', () => {
     const base = toBaseUnits('-1.5', 7)
     expect(fromBaseUnits(base, 7)).toBe('-1.5000000')
   })
