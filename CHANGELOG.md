@@ -7,8 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Harden verification, replay protection, and fix sponsored charge path ([#42](https://github.com/stellar/stellar-mpp-sdk/pull/42))
-- Replace generic SAC terminology with SEP-41 across docs, comments, and error messages ([#39](https://github.com/stellar/stellar-mpp-sdk/pull/39))
+## [0.5.0] - 2026-04-13
+
+- Harden verification, replay protection, fix sponsored charge path, and replace SAC terminology with SEP-41 across docs, comments, and error messages ([#42](https://github.com/stellar/stellar-mpp-sdk/pull/42))
 
 ## [0.4.0] - 2026-04-01
 
@@ -60,7 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Env parsing primitives for Stellar-aware configuration
 - Shared utilities: fee bump wrapping, transaction polling with backoff, Soroban simulation, unit conversion, keypair resolution
 
-[Unreleased]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.2.0...v0.2.1
