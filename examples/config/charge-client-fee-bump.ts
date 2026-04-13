@@ -5,6 +5,10 @@ export class Env {
     return parseStellarSecretKey('STELLAR_SECRET')
   }
 
+  static get feeBumpSecret(): string {
+    return parseStellarSecretKey('FEE_BUMP_SECRET')
+  }
+
   static get serverUrl(): string {
     return parseOptional('SERVER_URL', 'http://localhost:3000')!
   }

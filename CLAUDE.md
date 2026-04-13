@@ -6,10 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Stellar MPP SDK — a TypeScript SDK implementing Stellar blockchain payment methods for the Machine Payments Protocol (MPP). Provides two payment modes:
 
-- **Charge**: One-time on-chain SAC (Stellar Asset Contract) token transfers with pull/push credential modes
+- **Charge**: One-time on-chain SEP-41 token transfers with pull/push credential modes
 - **Channel**: Off-chain payment commitments via one-way payment channel contracts (batch settlement on close)
 
 Built on the `mppx` framework. Peer dependencies: `@stellar/stellar-sdk` (^14.6.1) and `mppx` (^0.4.11).
+
+## Terminology
+
+This project works with **SEP-41 token transfers** — the Stellar standard interface for fungible tokens. SAC (Stellar Asset Contract) is one implementation of SEP-41, but the SDK supports any SEP-41-compliant token contract. Use "SEP-41 token transfer" or "token transfer" in code, comments, and documentation — not "SAC transfer."
 
 ## Commands
 
@@ -20,162 +24,58 @@ pnpm run check:types    # Type-check only (tsc --noEmit)
 pnpm test               # Run vitest (watch mode)
 pnpm test -- --run      # Run tests once without watch
 pnpm test -- sdk/src/charge/client/Charge.test.ts   # Run a single test file
-make help               # Show all Makefile targets
 make check              # Run full quality pipeline (mirrors CI)
 pnpm run lint           # Run ESLint
 pnpm run format:check   # Check Prettier formatting
 ```
 
-## Verification Checklist
+## Completion Checklist
 
-After any code change, run **all** of the following to ensure nothing is broken:
+Before committing or telling the user a task is complete:
 
-### 1. Offline checks (always run)
-
-```bash
-pnpm test -- --run       # 256 unit tests
-pnpm run check:types     # TypeScript type check
-pnpm run build           # Compile to dist/
-```
-
-### 2. Example scripts (always run)
-
-Each example must load and execute without import/type errors. Expected behavior noted inline.
-
-```bash
-# Charge server — should start and return 402 on requests
-PORT=3099 STELLAR_RECIPIENT=GBHEGW3KWOY2OFH767EDALFGCUTBOEVBDQMCKUVJ3LKEWI4ZNVPP5EFC \
-  npx tsx examples/charge-server.ts
-# → pino JSON log with "Stellar MPP server started" — Ctrl+C to stop
-
-# Channel server — should start and return 402 on requests
-CHANNEL_CONTRACT=CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
-  COMMITMENT_PUBKEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
-  SOURCE_ACCOUNT=GBHEGW3KWOY2OFH767EDALFGCUTBOEVBDQMCKUVJ3LKEWI4ZNVPP5EFC \
-  PORT=3098 \
-  npx tsx examples/channel-server.ts
-# → pino JSON log with "Stellar MPP Channel server started" — Ctrl+C to stop
-
-# Client — should load, create keypair, fail on network (no server running)
-STELLAR_SECRET=$(npx tsx -e "import{Keypair}from'@stellar/stellar-sdk';console.log(Keypair.random().secret())" 2>/dev/null) \
-  SERVER_URL=http://localhost:9999 \
-  npx tsx examples/charge-client.ts
-# → "Using Stellar account: G..." then ECONNREFUSED (expected)
-
-# Channel client — should load, create commitment key, fail on network
-COMMITMENT_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
-  SOURCE_ACCOUNT=GBHEGW3KWOY2OFH767EDALFGCUTBOEVBDQMCKUVJ3LKEWI4ZNVPP5EFC \
-  SERVER_URL=http://localhost:9999 \
-  npx tsx examples/channel-client.ts
-# → "Using commitment key: G..." then ECONNREFUSED (expected)
-
-# Channel open — should exit with env var validation error
-npx tsx examples/channel-open.ts
-# → "OPEN_TX_XDR is required" (expected)
-
-# Channel close — should exit with env var validation error
-npx tsx examples/channel-close.ts
-# → "CLOSE_SECRET is required" (expected)
-```
-
-### 3. E2E demo (run when channel logic changes)
-
-Requires: `stellar` CLI, Node.js 20+, and the one-way-channel WASM binary.
-
-```bash
-WASM_PATH=/Users/marcelosantos/Workspace/one-way-channel/target/wasm32v1-none/release/channel.wasm \
-  ./demo/run-channel-e2e.sh
-# Full lifecycle: deploy → 2 off-chain payments → on-chain close → balance verified at 0
-```
-
-### 4. Interactive demos (run manually with funded testnet accounts)
-
-```bash
-./demo/run.sh              # Charge demo — prompts for STELLAR_RECIPIENT + STELLAR_SECRET
-./demo/run-channel.sh      # Channel demo — prompts for CHANNEL_CONTRACT + COMMITMENT keys
-```
+1. Run `make check` — mirrors CI: formatting, lint, type-check, tests, build. Fix any failures before proceeding.
+2. If formatting fails, run `npx prettier --write .` — applies to **all** changed files including `.md`.
+3. Call the `/e2e-check` skill to run end-to-end checks.
 
 ## Architecture
 
-### Twin Client/Server Pattern
-
-Each payment mode mirrors a client and server implementation sharing a common method schema:
+Each payment mode mirrors a client and server sharing a common Zod method schema:
 
 ```
 Methods.ts (Zod schema) → client/ (create credentials) + server/ (verify credentials)
 ```
 
-### Module Map
+### Charge Flows
 
-| Path                                | Role                                                                                                                               |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `sdk/src/charge/Methods.ts`         | Charge method schema (Zod discriminated union: `transaction` vs `hash` credentials)                                                |
-| `sdk/src/charge/client/Charge.ts`   | Creates SAC `transfer` invocations; handles pull (send XDR) and push (broadcast + send hash) flows                                 |
-| `sdk/src/charge/server/Charge.ts`   | Verifies and broadcasts SAC transfers; supports fee sponsorship via FeeBumpTransaction                                             |
-| `sdk/src/channel/Methods.ts`        | Channel method schema (discriminated union: `open` / `voucher` / `close` actions)                                                  |
-| `sdk/src/channel/client/Channel.ts` | Signs cumulative commitment amounts off-chain via ed25519; handles `open` action (sends signed deploy tx XDR + initial commitment) |
-| `sdk/src/channel/server/Channel.ts` | Verifies commitment signatures via contract simulation; `open` action broadcasts the deploy tx and initialises cumulative store    |
-| `sdk/src/channel/server/State.ts`   | Queries on-chain channel state (balance, close status, refund period)                                                              |
-| `sdk/src/channel/server/Watcher.ts` | Polls for contract events (close, refund, top_up)                                                                                  |
-| `sdk/src/shared/defaults.ts`        | Internal default constants (poll intervals, fee limits, timeouts)                                                                  |
-| `sdk/src/shared/errors.ts`          | StellarMppError, PaymentVerificationError, ChannelVerificationError, SettlementError                                               |
-| `sdk/src/shared/fee-bump.ts`        | Fee bump wrapping                                                                                                                  |
-| `sdk/src/shared/keypairs.ts`        | Keypair resolution (Keypair or S... string)                                                                                        |
-| `sdk/src/shared/logger.ts`          | Logger interface (pino-compatible) and noopLogger                                                                                  |
-| `sdk/src/shared/poll.ts`            | Transaction polling with backoff and jitter                                                                                        |
-| `sdk/src/shared/scval.ts`           | Soroban ScVal ↔ BigInt conversion                                                                                                  |
-| `sdk/src/shared/simulate.ts`        | Simulation with timeout and error classification                                                                                   |
-| `sdk/src/shared/units.ts`           | toBaseUnits / fromBaseUnits                                                                                                        |
-| `sdk/src/shared/validation.ts`      | Hex signature and amount validation                                                                                                |
-| `sdk/src/constants.ts`              | SAC addresses (USDC/XLM), RPC URLs, network passphrases, defaults                                                                  |
-| `sdk/src/env.ts`                    | Stellar-aware env parsing primitives (parsePort, parseStellarPublicKey, etc.)                                                      |
-| `examples/config/*.ts`              | Per-example Env classes using env primitives                                                                                       |
+Charge has 6 combinations from 3 axes: **push vs pull**, **sponsored vs unsponsored**, and **FeeBump vs no FeeBump**.
 
-### Subpath Exports
+| Flow | Mode | Sponsorship | FeeBump | Who broadcasts | Who pays fee             |
+| ---- | ---- | ----------- | ------- | -------------- | ------------------------ |
+| 1    | push | unsponsored | no      | client         | client                   |
+| 2    | push | unsponsored | yes     | client         | fee bump key             |
+| 3    | pull | unsponsored | no      | server         | client (via tx)          |
+| 4    | pull | unsponsored | yes     | server         | fee bump key             |
+| 5    | pull | sponsored   | no      | server         | server (envelope signer) |
+| 6    | pull | sponsored   | yes     | server         | fee bump key             |
 
-Package.json exports allow selective imports to avoid bundling unused code:
-
-- `@stellar/mpp` — root (schemas + constants + `resolveKeypair` + `Logger` type + unit conversion)
-- `@stellar/mpp/charge` — charge method schema
-- `@stellar/mpp/charge/client` — charge client only
-- `@stellar/mpp/charge/server` — charge server only
-- `@stellar/mpp/channel` — channel schema
-- `@stellar/mpp/channel/client` — channel client
-- `@stellar/mpp/channel/server` — channel server
-- `@stellar/mpp/env` — env parsing primitives
-
-### Shared Utilities Convention
-
-The `shared/` directory contains internal utility modules. These are **not** exported as a subpath from the package. Exceptions that are re-exported from the root `index.ts`:
-
-- `resolveKeypair` (from `shared/keypairs.ts`)
-- `Logger` type (from `shared/logger.ts`)
-- `toBaseUnits` / `fromBaseUnits` (from `shared/units.ts`)
-
-All other `shared/` modules are strictly internal and consumed only by `charge/` and `channel/` code.
+- **Push** (`type: 'hash'`): Client broadcasts the tx on-chain, sends the tx hash to the server. Server polls the chain to verify.
+- **Pull** (`type: 'transaction'`): Client sends signed tx XDR to the server. Server verifies and broadcasts.
+- **Sponsored** (`feePayer` configured on server): Server rebuilds the tx with its own source account, signs the envelope, and pays the network fee. Client tx uses `ALL_ZEROS` as source.
+- **FeeBump**: The tx is wrapped in a `FeeBumpTransaction` so a separate key pays the network fee.
 
 ### Key Patterns
 
-- **mppx integration**: Methods defined via `Method.from()`, adapted with `.toClient()` / `.toServer()`. Namespaced as `stellar.charge()` and `stellar.channel()`.
-- **Serialization locks**: Both Charge and Channel servers use Promise-based locks (`let verifyLock: Promise<unknown> = Promise.resolve()`) to serialize verification and prevent race conditions on store get/put.
-- **Contract simulation**: Uses Soroban RPC `simulateTransaction` for read-only verification — SAC transfer validation, `prepare_commitment` for commitment bytes, and channel state queries.
-- **Zod validation**: All method schemas use Zod v4 with discriminated unions for credential/action types.
-- **Shared utility extraction**: Common logic (polling, fee bumps, simulation, keypair resolution, validation, error types, logging) lives in `shared/` and is imported by both `charge/` and `channel/`.
-- **Configurable defaults**: Server and client functions accept optional parameters (`pollMaxAttempts`, `pollDelayMs`, `pollTimeoutMs`, `simulationTimeoutMs`, `maxFeeBumpStroops`, `logger`) with defaults from `shared/defaults.ts`, applied via parameter destructuring.
-- **Logger interface**: Matches pino's API (`debug`, `info`, `warn`, `error` methods). A `noopLogger` is used when no logger is provided.
-- **Store key naming**: Keys follow the convention `stellar:{intent}:{type}:{id}` (e.g., `stellar:charge:nonce:abc123`).
-- **Express + security headers**: Example servers use Express with helmet and rate limiting middleware. Env vars configure rate limits and trust proxy.
-- **Env parsing**: Published as `@stellar/mpp/env`. Core primitives read from `process.env` with validation. Per-example `Env` classes compose these into static getters.
+- **mppx integration**: Methods defined via `Method.from()`, adapted with `.toClient()` / `.toServer()`.
+- **Serialization + claim**: Servers use a Promise-based `verifyLock` plus a synchronous `claimOrThrow` (from `shared/claim.ts`) to prevent replay races on store get/put.
+- **Contract simulation**: Uses Soroban RPC `simulateTransaction` for read-only verification — SEP-41 transfer validation, `prepare_commitment` for commitment bytes, and channel state queries.
+- **Configurable defaults**: Server/client functions accept optional parameters with defaults from `shared/defaults.ts`.
+- **Store key naming**: `stellar:{intent}:{type}:{id}` (e.g., `stellar:charge:challenge:abc123`).
+- **Env parsing**: Published as `@stellar/mpp/env`. Per-example `Env` classes in `examples/config/` compose primitives from `sdk/src/env.ts`.
 
 ### Test Setup
 
-- **Vitest** with test files colocated alongside source (`*.test.ts` next to `*.ts`)
+- **Vitest** with colocated test files (`*.test.ts` next to `*.ts`)
 - Tests mock `@stellar/stellar-sdk` and `mppx` internals
-- Integration test at `sdk/src/channel/integration.test.ts`
-
-### Tooling
-
-- **ESLint 9** flat config (`eslint.config.mjs`) with typescript-eslint recommended rules
-- **Prettier** for formatting (`.prettierrc`), separate from ESLint
-- **GitHub Actions** CI runs: format-check → lint → typecheck → test → build
-- **Makefile** for dev workflow (`make help` for all targets, `make check` mirrors CI)
+- **ESLint 9** flat config, **Prettier** for formatting
+- **GitHub Actions** CI: format-check → lint → typecheck → test → build
+- **Makefile** for dev workflow (`make check` mirrors CI)

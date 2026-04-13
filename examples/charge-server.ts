@@ -1,7 +1,7 @@
 /**
  * Example: Stellar MPP Server
  *
- * Charges 0.01 USDC per request via Soroban SAC transfer.
+ * Charges 0.01 USDC per request via Soroban SEP-41 transfer.
  * Uses Express with security headers (helmet, rate limiting).
  *
  * Usage:
@@ -36,6 +36,15 @@ app.use(rateLimit({ windowMs: Env.rateLimitWindowMs, max: Env.rateLimitMax }))
 app.use(pinoHttp({ logger }))
 app.use(express.json())
 
+const feePayer = Env.envelopeSignerSecret
+  ? {
+      envelopeSigner: Keypair.fromSecret(Env.envelopeSignerSecret),
+      ...(Env.feeBumpSignerSecret
+        ? { feeBumpSigner: Keypair.fromSecret(Env.feeBumpSignerSecret) }
+        : {}),
+    }
+  : undefined
+
 const mppx = Mppx.create({
   secretKey: Env.mppSecretKey,
   methods: [
@@ -44,6 +53,7 @@ const mppx = Mppx.create({
       currency: USDC_SAC_TESTNET,
       network: 'stellar:testnet',
       store: Store.memory(),
+      ...(feePayer ? { feePayer } : {}),
       logger,
     }),
   ],

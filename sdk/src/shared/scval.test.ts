@@ -37,7 +37,7 @@ describe('scValToBigInt', () => {
     expect(scValToBigInt(val)).toBe(99n)
   })
 
-  it('converts scvI128 with non-zero hi (large SAC amounts, regression for NM-006)', () => {
+  it('converts scvI128 with non-zero hi (large SAC amounts)', () => {
     // Verifies hi << 64 | lo is computed correctly for large token amounts.
     // Before the fix, inconsistent implementations could produce wrong results.
     const val = xdr.ScVal.scvI128(

@@ -1,6 +1,6 @@
 # @stellar/mpp
 
-Stellar blockchain payment method for the [Machine Payments Protocol (MPP)](https://mpp.dev). Enables machine-to-machine payments using Soroban SAC token transfers on the Stellar network, with optional support for [one-way payment channels](https://github.com/stellar-experimental/one-way-channel) for high-frequency off-chain payments.
+Stellar blockchain payment method for the [Machine Payments Protocol (MPP)](https://mpp.dev). Enables machine-to-machine payments using Soroban SEP-41 token transfers on the Stellar network, with optional support for [one-way payment channels](https://github.com/stellar-experimental/one-way-channel) for high-frequency off-chain payments.
 
 ## Specification
 
@@ -10,7 +10,7 @@ The charge payment mode implements the [draft-stellar-charge-00](https://payment
 
 ### Charge (one-time transfers)
 
-Each payment is a Soroban SAC `transfer` settled on-chain individually.
+Each payment is a Soroban SEP-41 `transfer` settled on-chain individually.
 
 ```
 Client                          Server                         Stellar
@@ -23,7 +23,7 @@ Client                          Server                         Stellar
   |<------------------------------|                               |
   |                               |                               |
   |  prepareTransaction ----------------- (simulate) ------------>|
-  |  Sign SAC transfer            |                               |
+  |  Sign SEP-41 transfer          |                               |
   |  Send credential (XDR)        |                               |
   |------------------------------>|                               |
   |                               |  sendTransaction ------------>|
@@ -232,7 +232,7 @@ const data = await response.json()
 ```ts
 stellar.charge({
   recipient: string,              // Stellar public key (G...) or contract (C...)
-  currency: string,               // SAC contract address
+  currency: string,               // SEP-41 token contract address
   network?: 'stellar:testnet' | 'stellar:pubnet', // default: 'stellar:testnet'
   decimals?: number,              // default: 7
   rpcUrl?: string,                // custom Soroban RPC URL
@@ -242,9 +242,9 @@ stellar.charge({
   },
   store?: Store.Store,            // replay protection
   maxFeeBumpStroops?: number,     // max fee bump in stroops (default: 10,000,000)
-  pollMaxAttempts?: number,       // max polling attempts (default: 30)
+  pollMaxAttempts?: number,       // max polling attempts (default: 20)
   pollDelayMs?: number,           // delay between poll attempts in ms (default: 1,000)
-  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 30,000)
+  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 20,000)
   simulationTimeoutMs?: number,   // simulation timeout in ms (default: 10,000)
   logger?: Logger,                // structured logger (default: no-op)
 })
@@ -260,9 +260,9 @@ stellar.charge({
   timeout?: number,               // tx timeout in seconds (default: 180)
   decimals?: number,              // default: 7
   rpcUrl?: string,                // custom Soroban RPC URL
-  pollMaxAttempts?: number,       // max polling attempts (default: 30)
+  pollMaxAttempts?: number,       // max polling attempts (default: 20)
   pollDelayMs?: number,           // delay between poll attempts in ms (default: 1,000)
-  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 30,000)
+  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 20,000)
   simulationTimeoutMs?: number,   // simulation timeout in ms (default: 10,000)
   onProgress?: (event) => void,   // lifecycle callback
 })
@@ -283,12 +283,12 @@ stellar.channel({
     envelopeSigner: Keypair | string,   // source account + envelope signer
     feeBumpSigner?: Keypair | string,   // wraps tx in FeeBumpTransaction
   },
-  checkOnChainState?: boolean,    // detect on-chain disputes (default: false)
+  checkOnChainState?: boolean,    // detect on-chain disputes (default: true)
   onDisputeDetected?: (state) => void, // callback when close_start detected
   maxFeeBumpStroops?: number,     // max fee bump in stroops (default: 10,000,000)
-  pollMaxAttempts?: number,       // max polling attempts (default: 30)
+  pollMaxAttempts?: number,       // max polling attempts (default: 20)
   pollDelayMs?: number,           // delay between poll attempts in ms (default: 1,000)
-  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 30,000)
+  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 20,000)
   simulationTimeoutMs?: number,   // simulation timeout in ms (default: 10,000)
   logger?: Logger,                // structured logger (default: no-op)
 })

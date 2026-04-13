@@ -2,11 +2,15 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
 const mockSimulateTransaction = vi.fn()
 const mockIsSimulationSuccess = vi.fn()
+const mockIsSimulationError = vi.fn()
 
 vi.mock('@stellar/stellar-sdk', () => ({
+  FeeBumpTransaction: class {},
+  Transaction: class {},
   rpc: {
     Api: {
       isSimulationSuccess: (...args: unknown[]) => mockIsSimulationSuccess(...args),
+      isSimulationError: (...args: unknown[]) => mockIsSimulationError(...args),
     },
   },
 }))
@@ -37,11 +41,23 @@ describe('simulateCall', () => {
     const simResult = { error: 'contract invocation failed' }
     mockSimulateTransaction.mockResolvedValue(simResult)
     mockIsSimulationSuccess.mockReturnValue(false)
+    mockIsSimulationError.mockReturnValue(true)
 
     const err = await simulateCall(rpcServer, {} as any).catch((e) => e)
     expect(err).toBeInstanceOf(SimulationContractError)
     expect(err.message).toMatch(/contract invocation failed/)
     expect(err.simulationError).toBe('contract invocation failed')
+  })
+
+  it('throws SimulationContractError with unknown error when not a recognized error response', async () => {
+    const simResult = { id: 'sim-restore' }
+    mockSimulateTransaction.mockResolvedValue(simResult)
+    mockIsSimulationSuccess.mockReturnValue(false)
+    mockIsSimulationError.mockReturnValue(false)
+
+    const err = await simulateCall(rpcServer, {} as any).catch((e) => e)
+    expect(err).toBeInstanceOf(SimulationContractError)
+    expect(err.simulationError).toBe('unknown error')
   })
 
   it('throws SimulationNetworkError when RPC call throws', async () => {

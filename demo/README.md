@@ -4,7 +4,7 @@ Interactive playground for testing the Stellar MPP payment flow — via browser 
 
 Two demo modes are available:
 
-- **Charge** — one-time on-chain SAC token transfers (default)
+- **Charge** — one-time on-chain SEP-41 token transfers (default)
 - **Channel** — off-chain payment channel commitments (no on-chain tx per payment)
 
 ## Prerequisites
@@ -82,7 +82,7 @@ Client                          Server
   |   currency, recipient)        |
   |<------------------------------|
   |                               |
-  |  Sign Soroban SAC transfer    |
+  |  Sign Soroban SEP-41 transfer |
   |  Send credential (XDR/hash)   |
   |------------------------------>|
   |                               |

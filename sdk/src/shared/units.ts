@@ -17,8 +17,19 @@ export function toBaseUnits(amount: string, decimals: number): string {
   }
   const [whole = '0', frac = ''] = parts
   if (decimals === 0) return BigInt(whole).toString()
-  const paddedFrac = frac.padEnd(decimals, '0').slice(0, decimals)
-  return (BigInt(whole) * 10n ** BigInt(decimals) + BigInt(paddedFrac)).toString()
+  if (frac.length > decimals) {
+    throw new Error(
+      `Precision loss: "${amount}" has ${frac.length} fractional digits but only ${decimals} are supported`,
+    )
+  }
+  const paddedFrac = frac.padEnd(decimals, '0')
+  const result = (BigInt(whole) * 10n ** BigInt(decimals) + BigInt(paddedFrac)).toString()
+  if (result === '0' && !/^0(\.0*)?$/.test(amount)) {
+    throw new Error(
+      `Precision loss: "${amount}" converts to zero base units with ${decimals} decimals`,
+    )
+  }
+  return result
 }
 
 /**

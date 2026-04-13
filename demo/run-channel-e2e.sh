@@ -167,7 +167,6 @@ fi
 echo "  Starting channel server on port $PORT..."
 CHANNEL_CONTRACT="$CONTRACT" \
 COMMITMENT_PUBKEY="$COMMITMENT_PKEY" \
-SOURCE_ACCOUNT="$FUNDER_ADDR" \
 PORT=$PORT \
 npx tsx examples/channel-server.ts &
 SERVER_PID=$!
@@ -186,7 +185,6 @@ echo "  Running channel client (2 off-chain payments)..."
 echo ""
 
 COMMITMENT_SECRET="$COMMITMENT_SKEY" \
-SOURCE_ACCOUNT="$FUNDER_ADDR" \
 SERVER_URL="http://localhost:$PORT" \
 npx tsx examples/channel-client.ts
 
