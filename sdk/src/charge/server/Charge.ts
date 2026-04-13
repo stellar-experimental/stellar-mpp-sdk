@@ -35,9 +35,11 @@ import {
   DEFAULT_MAX_FEE_BUMP_STROOPS,
   DEFAULT_POLL_MAX_ATTEMPTS,
   DEFAULT_POLL_DELAY_MS,
+  DEFAULT_POLL_MAX_CONCURRENT,
   DEFAULT_POLL_TIMEOUT_MS,
   DEFAULT_SIMULATION_TIMEOUT_MS,
 } from '../../shared/defaults.js'
+import { Semaphore } from '../../shared/semaphore.js'
 
 type ChargePayload = z.output<(typeof Methods.charge)['schema']['credential']['payload']>
 type ChargeRequest = z.output<(typeof Methods.charge)['schema']['request']>
@@ -67,6 +69,7 @@ export function charge(parameters: charge.Parameters) {
     network = STELLAR_TESTNET,
     pollDelayMs = DEFAULT_POLL_DELAY_MS,
     pollMaxAttempts = DEFAULT_POLL_MAX_ATTEMPTS,
+    pollMaxConcurrent = DEFAULT_POLL_MAX_CONCURRENT,
     pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
     recipient,
     rpcUrl,
@@ -85,13 +88,10 @@ export function charge(parameters: charge.Parameters) {
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
   const networkPassphrase = NETWORK_PASSPHRASE[network]
   const rpcServer = new rpc.Server(resolvedRpcUrl)
+  const pollSemaphore = new Semaphore(pollMaxConcurrent)
 
   const envelopeKP = feePayer ? resolveKeypair(feePayer.envelopeSigner) : undefined
   const feeBumpKP = feePayer?.feeBumpSigner ? resolveKeypair(feePayer.feeBumpSigner) : undefined
-
-  // Serialize verify operations to prevent concurrent race conditions
-  // on tx hash deduplication (get/put is not atomic).
-  let verifyLock: Promise<unknown> = Promise.resolve()
 
   return Method.toServer(Methods.charge, {
     defaults: { currency, recipient },
@@ -106,14 +106,7 @@ export function charge(parameters: charge.Parameters) {
       }
     },
     async verify({ credential }) {
-      // Serialize through the lock to prevent concurrent race conditions
-      const result = await new Promise<Receipt.Receipt>((resolve, reject) => {
-        verifyLock = verifyLock.then(
-          () => doVerify(credential).then(resolve, reject), // previous succeeded
-          () => doVerify(credential).then(resolve, reject), // previous failed
-        )
-      })
-      return result
+      return doVerify(credential)
     },
   })
 
@@ -121,8 +114,8 @@ export function charge(parameters: charge.Parameters) {
    * Verifies a charge credential (hash or transaction) and settles it on-chain.
    *
    * Dispatches to push mode (on-chain hash lookup) or pull mode (server-broadcast
-   * XDR) based on `payload.type`. Serialized through {@link verifyLock} to prevent
-   * concurrent race conditions on store deduplication.
+   * XDR) based on `payload.type`. Concurrent calls are safe: {@link claimOrThrow}
+   * prevents intra-process TOCTOU races via synchronous Set operations.
    */
   async function doVerify(credential: ChargeCredential) {
     const { challenge, source } = credential
@@ -166,6 +159,13 @@ export function charge(parameters: charge.Parameters) {
 
         const hash = payload.hash
 
+        // Reject obviously invalid hashes before any expensive work.
+        if (!/^[0-9a-f]{64}$/i.test(hash)) {
+          throw new PaymentVerificationError(`${LOG_PREFIX} Invalid transaction hash format.`, {
+            hash,
+          })
+        }
+
         // Two-layer claim for tx hash dedup: synchronous Set prevents
         // intra-process TOCTOU, store handles cross-process visibility.
         const hashKey = `${STORE_PREFIX}:hash:${hash}`
@@ -195,6 +195,7 @@ export function charge(parameters: charge.Parameters) {
           maxAttempts: pollMaxAttempts,
           delayMs: pollDelayMs,
           timeoutMs: pollTimeoutMs,
+          semaphore: pollSemaphore,
         })
 
         // Extract the payer's public key from the credential DID to verify
@@ -400,6 +401,7 @@ export function charge(parameters: charge.Parameters) {
             maxAttempts: pollMaxAttempts,
             delayMs: pollDelayMs,
             timeoutMs: pollTimeoutMs,
+            semaphore: pollSemaphore,
           })
         } catch (error) {
           throw new SettlementError(
@@ -919,11 +921,13 @@ export declare namespace charge {
     store?: Store.Store
     /** Maximum fee in stroops for the inner transaction and fee bump. @defaultValue `10_000_000` (1 XLM) */
     maxFeeBumpStroops?: number
-    /** Maximum number of polling attempts when waiting for tx confirmation. @defaultValue `30` */
+    /** Maximum number of polling attempts when waiting for tx confirmation. @defaultValue `20` */
     pollMaxAttempts?: number
+    /** Maximum concurrent polling operations for this server instance. @defaultValue `10` */
+    pollMaxConcurrent?: number
     /** Base delay between polling attempts in milliseconds. @defaultValue `1_000` */
     pollDelayMs?: number
-    /** Overall timeout for transaction polling in milliseconds. @defaultValue `30_000` */
+    /** Overall timeout for transaction polling in milliseconds. @defaultValue `20_000` */
     pollTimeoutMs?: number
     /** Timeout for Soroban RPC simulation calls in milliseconds. @defaultValue `10_000` */
     simulationTimeoutMs?: number

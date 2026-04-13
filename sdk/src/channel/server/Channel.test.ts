@@ -911,9 +911,11 @@ describe('stellar server channel verification', () => {
     const challenge = await store.get(`stellar:channel:challenge:${credential.challenge.id}`)
     expect((challenge as any)?.state).toBe('pending')
 
-    // Cumulative should NOT be advanced when close fails
+    // Cumulative IS advanced eagerly — the commitment signature was validated
+    // and can be used for a retry. Writing eagerly allows the cumulative lock
+    // to be released before the long on-chain broadcast, preventing DoS.
     const cumulative = await store.get(`stellar:channel:cumulative:${CHANNEL_ADDRESS}`)
-    expect(cumulative).toBeNull()
+    expect((cumulative as any)?.amount).toBe('5000000')
   })
 })
 

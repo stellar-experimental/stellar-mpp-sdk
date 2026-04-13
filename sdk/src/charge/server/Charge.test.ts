@@ -40,6 +40,11 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
 
 const { charge } = await import('./Charge.js')
 
+/** Pad a label into a valid 64-hex-char transaction hash for push-mode tests. */
+function testHash(label: string): string {
+  return Buffer.from(label).toString('hex').padEnd(64, '0').slice(0, 64)
+}
+
 const RECIPIENT = Keypair.random().publicKey()
 
 describe('stellar server charge', () => {
@@ -267,7 +272,7 @@ describe('charge hash+feePayer rejection', () => {
     })
     const cred = Credential.from({
       challenge,
-      payload: { type: 'hash', hash: 'some-tx-hash' },
+      payload: { type: 'hash', hash: testHash('some-tx-hash') },
     })
 
     const method = charge({
@@ -318,7 +323,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
     })
     // Attacker's credential claims their own key as source
     const cred = Object.assign(
-      Credential.from({ challenge, payload: { type: 'hash', hash: 'stolen-hash' } }),
+      Credential.from({ challenge, payload: { type: 'hash', hash: testHash('stolen-hash') } }),
       { source: `did:pkh:stellar:testnet:${attackerKey}` },
     )
 
@@ -363,7 +368,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
     })
     // Credential source matches the actual `from` in the tx
     const cred = Object.assign(
-      Credential.from({ challenge, payload: { type: 'hash', hash: 'legit-hash' } }),
+      Credential.from({ challenge, payload: { type: 'hash', hash: testHash('legit-hash') } }),
       { source: `did:pkh:stellar:testnet:${client.publicKey()}` },
     )
 
@@ -386,7 +391,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
       envelopeXdr: 'unused',
     })
 
-    const cred = makeHashCredential({ hash: 'no-source-hash' }) // source field absent
+    const cred = makeHashCredential({ hash: testHash('no-source-hash') }) // source field absent
 
     const method = charge({
       recipient: RECIPIENT,
@@ -414,7 +419,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
       },
     })
     const cred = Object.assign(
-      Credential.from({ challenge, payload: { type: 'hash', hash: 'bad-did-hash' } }),
+      Credential.from({ challenge, payload: { type: 'hash', hash: testHash('bad-did-hash') } }),
       { source: 'not-a-valid-did' },
     )
 
@@ -444,7 +449,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
       },
     })
     const cred = Object.assign(
-      Credential.from({ challenge, payload: { type: 'hash', hash: 'eip155-hash' } }),
+      Credential.from({ challenge, payload: { type: 'hash', hash: testHash('eip155-hash') } }),
       { source: `did:pkh:eip155:1:0xabc123` },
     )
 
@@ -474,7 +479,7 @@ describe('charge push-mode sender verification (hash-theft attack prevention)', 
       },
     })
     const cred = Object.assign(
-      Credential.from({ challenge, payload: { type: 'hash', hash: 'bad-key-hash' } }),
+      Credential.from({ challenge, payload: { type: 'hash', hash: testHash('bad-key-hash') } }),
       { source: 'did:pkh:stellar:testnet:NOT_A_VALID_KEY' },
     )
 
@@ -509,7 +514,7 @@ describe('charge push-mode verification', () => {
     })
 
     const cred = makeHashCredential({
-      hash: 'wrong-amount-tx-hash',
+      hash: testHash('wrong-amount-tx-hash'),
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
     })
     const method = charge({
@@ -540,7 +545,7 @@ describe('charge push-mode verification', () => {
     })
 
     const cred = makeHashCredential({
-      hash: 'wrong-recipient-tx-hash',
+      hash: testHash('wrong-recipient-tx-hash'),
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
     })
     const method = charge({
@@ -571,7 +576,7 @@ describe('charge push-mode verification', () => {
     })
 
     const cred = makeHashCredential({
-      hash: 'wrong-currency-tx-hash',
+      hash: testHash('wrong-currency-tx-hash'),
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
     })
     const method = charge({
@@ -592,7 +597,7 @@ describe('charge push-mode verification', () => {
     })
 
     const cred = makeHashCredential({
-      hash: 'no-envelope-hash',
+      hash: testHash('no-envelope-hash'),
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
     })
     const method = charge({
@@ -621,7 +626,7 @@ describe('charge tx hash dedup', () => {
       store,
     })
 
-    const hash = 'abc123firstuse'
+    const hash = testHash('abc123firstuse')
 
     const cred1 = makeHashCredential({ hash })
     await expect(
@@ -637,7 +642,7 @@ describe('charge tx hash dedup', () => {
   it('marks tx hash as used only after successful verification', async () => {
     const store = Store.memory()
 
-    const hash = 'already-used-hash'
+    const hash = testHash('already-used-hash')
     await store.put(`stellar:charge:hash:${hash}`, { usedAt: new Date().toISOString() })
 
     const method = charge({
@@ -650,6 +655,94 @@ describe('charge tx hash dedup', () => {
     await expect(
       method.verify({ credential: cred as any, request: cred.challenge.request }),
     ).rejects.toThrow('Transaction hash already used')
+  })
+})
+
+describe('charge hash format validation', () => {
+  it('rejects a hash that is not 64 hex characters', async () => {
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+    })
+    const cred = makeHashCredential({ hash: 'not-hex-at-all' })
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('Invalid transaction hash format')
+  })
+
+  it('rejects a hash that is too short', async () => {
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+    })
+    const cred = makeHashCredential({ hash: 'abcd1234' })
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('Invalid transaction hash format')
+  })
+
+  it('rejects a hash that is 64 chars but not hex', async () => {
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+    })
+    const cred = makeHashCredential({ hash: 'zzzz' + '0'.repeat(60) })
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('Invalid transaction hash format')
+  })
+
+  it('accepts a valid 64-hex hash', async () => {
+    mockGetTransaction.mockResolvedValueOnce({
+      status: 'SUCCESS',
+      envelopeXdr: undefined,
+    })
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+    })
+    const payer = Keypair.random()
+    const cred = makeHashCredential({
+      hash: 'a'.repeat(64),
+      source: `did:pkh:stellar:testnet:${payer.publicKey()}`,
+    })
+    // Will fail later (missing envelope), but should NOT fail on hash format
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('missing envelope XDR')
+  })
+})
+
+describe('charge DoS prevention: no global serial lock', () => {
+  it('processes concurrent verify calls in parallel, not serially', async () => {
+    // Regression test: verifyLock was removed to prevent head-of-line blocking.
+    // Two concurrent verifications with different hashes must run in parallel,
+    // not serially. We verify this by timing: if serial, total time >= 2×delay.
+    const delayMs = 50
+    mockGetTransaction.mockImplementation(
+      () =>
+        new Promise((r) =>
+          setTimeout(() => r({ status: 'SUCCESS', envelopeXdr: undefined }), delayMs),
+        ),
+    )
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+    })
+
+    const cred1 = makeHashCredential({ hash: testHash('parallel-a') })
+    const cred2 = makeHashCredential({ hash: testHash('parallel-b') })
+
+    const start = Date.now()
+    await Promise.allSettled([
+      method.verify({ credential: cred1 as any, request: cred1.challenge.request }),
+      method.verify({ credential: cred2 as any, request: cred2.challenge.request }),
+    ])
+    const elapsed = Date.now() - start
+
+    // If serial, elapsed would be >= 2×50 = 100ms. Parallel should be ~50ms.
+    expect(elapsed).toBeLessThan(delayMs * 1.8)
   })
 })
 
@@ -2157,7 +2250,7 @@ describe('charge push-mode FeeBump envelope', () => {
       store: Store.memory(),
     })
     const cred = makeHashCredential({
-      hash: 'feebump-hash',
+      hash: testHash('feebump-hash'),
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
     })
 
@@ -2199,7 +2292,7 @@ describe('charge push-mode FeeBump envelope', () => {
       store: Store.memory(),
     })
     const cred = makeHashCredential({
-      hash: 'feebump-xdr-obj-hash',
+      hash: testHash('feebump-xdr-obj-hash'),
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
     })
 
@@ -2234,7 +2327,7 @@ describe('charge push-mode envelopeXdr as XDR object', () => {
       store: Store.memory(),
     })
     const cred = makeHashCredential({
-      hash: 'xdr-obj-hash',
+      hash: testHash('xdr-obj-hash'),
       source: `did:pkh:stellar:testnet:${PAYER.publicKey()}`,
     })
 
@@ -2430,7 +2523,7 @@ describe('charge TOCTOU: hash replay across instances sharing a store', () => {
       },
     })
     const cred = Object.assign(
-      Credential.from({ challenge, payload: { type: 'hash', hash: 'shared-tx-hash' } }),
+      Credential.from({ challenge, payload: { type: 'hash', hash: testHash('shared-tx-hash') } }),
       { source: `did:pkh:stellar:testnet:${client.publicKey()}` },
     )
 
@@ -2515,11 +2608,11 @@ describe('charge TOCTOU: hash replay across instances sharing a store', () => {
       },
     })
     const cred1 = Object.assign(
-      Credential.from({ challenge, payload: { type: 'hash', hash: 'hash-a' } }),
+      Credential.from({ challenge, payload: { type: 'hash', hash: testHash('hash-a') } }),
       { source: `did:pkh:stellar:testnet:${client.publicKey()}` },
     )
     const cred2 = Object.assign(
-      Credential.from({ challenge, payload: { type: 'hash', hash: 'hash-b' } }),
+      Credential.from({ challenge, payload: { type: 'hash', hash: testHash('hash-b') } }),
       { source: `did:pkh:stellar:testnet:${client.publicKey()}` },
     )
 

@@ -302,11 +302,11 @@ export declare namespace charge {
     timeout?: number
     /** Callback invoked at each lifecycle stage. */
     onProgress?: (event: ProgressEvent) => void
-    /** Maximum polling attempts. @default 30 */
+    /** Maximum polling attempts. @default 20 */
     pollMaxAttempts?: number
     /** Delay between poll attempts in ms. @default 1_000 */
     pollDelayMs?: number
-    /** Overall poll timeout in ms. @default 30_000 */
+    /** Overall poll timeout in ms. @default 20_000 */
     pollTimeoutMs?: number
     /** Simulation timeout in ms. @default 10_000 */
     simulationTimeoutMs?: number

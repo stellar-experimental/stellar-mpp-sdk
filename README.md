@@ -242,9 +242,9 @@ stellar.charge({
   },
   store?: Store.Store,            // replay protection
   maxFeeBumpStroops?: number,     // max fee bump in stroops (default: 10,000,000)
-  pollMaxAttempts?: number,       // max polling attempts (default: 30)
+  pollMaxAttempts?: number,       // max polling attempts (default: 20)
   pollDelayMs?: number,           // delay between poll attempts in ms (default: 1,000)
-  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 30,000)
+  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 20,000)
   simulationTimeoutMs?: number,   // simulation timeout in ms (default: 10,000)
   logger?: Logger,                // structured logger (default: no-op)
 })
@@ -260,9 +260,9 @@ stellar.charge({
   timeout?: number,               // tx timeout in seconds (default: 180)
   decimals?: number,              // default: 7
   rpcUrl?: string,                // custom Soroban RPC URL
-  pollMaxAttempts?: number,       // max polling attempts (default: 30)
+  pollMaxAttempts?: number,       // max polling attempts (default: 20)
   pollDelayMs?: number,           // delay between poll attempts in ms (default: 1,000)
-  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 30,000)
+  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 20,000)
   simulationTimeoutMs?: number,   // simulation timeout in ms (default: 10,000)
   onProgress?: (event) => void,   // lifecycle callback
 })
@@ -286,9 +286,9 @@ stellar.channel({
   checkOnChainState?: boolean,    // detect on-chain disputes (default: true)
   onDisputeDetected?: (state) => void, // callback when close_start detected
   maxFeeBumpStroops?: number,     // max fee bump in stroops (default: 10,000,000)
-  pollMaxAttempts?: number,       // max polling attempts (default: 30)
+  pollMaxAttempts?: number,       // max polling attempts (default: 20)
   pollDelayMs?: number,           // delay between poll attempts in ms (default: 1,000)
-  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 30,000)
+  pollTimeoutMs?: number,         // overall poll timeout in ms (default: 20,000)
   simulationTimeoutMs?: number,   // simulation timeout in ms (default: 10,000)
   logger?: Logger,                // structured logger (default: no-op)
 })

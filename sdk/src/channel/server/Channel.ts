@@ -23,9 +23,11 @@ import {
   DEFAULT_MAX_FEE_BUMP_STROOPS,
   DEFAULT_POLL_DELAY_MS,
   DEFAULT_POLL_MAX_ATTEMPTS,
+  DEFAULT_POLL_MAX_CONCURRENT,
   DEFAULT_POLL_TIMEOUT_MS,
   DEFAULT_SIMULATION_TIMEOUT_MS,
 } from '../../shared/defaults.js'
+import { Semaphore } from '../../shared/semaphore.js'
 import { ChannelVerificationError } from '../../shared/errors.js'
 import { wrapFeeBump } from '../../shared/fee-bump.js'
 import { resolveKeypair } from '../../shared/keypairs.js'
@@ -89,6 +91,7 @@ export function channel(parameters: channel.Parameters) {
     onDisputeDetected,
     pollDelayMs = DEFAULT_POLL_DELAY_MS,
     pollMaxAttempts = DEFAULT_POLL_MAX_ATTEMPTS,
+    pollMaxConcurrent = DEFAULT_POLL_MAX_CONCURRENT,
     pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
     rpcUrl,
     simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
@@ -99,6 +102,7 @@ export function channel(parameters: channel.Parameters) {
   const resolvedRpcUrl = rpcUrl ?? SOROBAN_RPC_URLS[network]
   const networkPassphrase = NETWORK_PASSPHRASE[network]
   const rpcServer = new rpc.Server(resolvedRpcUrl)
+  const pollSemaphore = new Semaphore(pollMaxConcurrent)
 
   // Parse the commitment public key (accepts G... Stellar public key string or Keypair)
   const commitmentKP = (() => {
@@ -114,10 +118,12 @@ export function channel(parameters: channel.Parameters) {
   // Track cumulative amounts per channel in the store
   const cumulativeKey = `${STORE_PREFIX}:cumulative:${channelAddress}`
 
-  // Serialize verify operations to prevent concurrent double-acceptance.
+  // Serialize cumulative amount updates to prevent concurrent double-acceptance.
   // Without a transactional store, two concurrent verify calls could both
   // read the same cumulative amount, both pass, and only one write wins.
-  let verifyLock: Promise<unknown> = Promise.resolve()
+  // Only the validation+write phase runs under the lock — long operations
+  // like on-chain broadcasts run outside to prevent head-of-line blocking.
+  let cumulativeLock: Promise<unknown> = Promise.resolve()
 
   if (!checkOnChainState) {
     logger.warn(
@@ -153,18 +159,38 @@ export function channel(parameters: channel.Parameters) {
       }
     },
     async verify({ credential }) {
-      // Serialize through the lock to prevent concurrent double-acceptance
-      const result = await new Promise<Receipt.Receipt>((resolve, reject) => {
-        verifyLock = verifyLock.then(
-          () => doVerify(credential).then(resolve, reject),
-          () => doVerify(credential).then(resolve, reject),
+      // Phase 1: validate and update cumulative under lock (fast path).
+      // Phase 2: long operations (broadcast, poll) run outside the lock.
+      const validated = await new Promise<ValidatedCredential>((resolve, reject) => {
+        cumulativeLock = cumulativeLock.then(
+          () => doValidate(credential).then(resolve, reject),
+          () => doValidate(credential).then(resolve, reject),
         )
       })
-      return result
+      return doSettle(validated)
     },
   })
 
-  async function doVerify(credential: ChannelCredential) {
+  type ValidatedCredential =
+    | { action: 'voucher'; receipt: Receipt.Receipt }
+    | { action: 'open'; credential: OpenCredential; challengeStoreKey: string }
+    | {
+        action: 'close'
+        commitmentAmount: bigint
+        signatureBytes: Buffer
+        challengeStoreKey: string
+        externalId?: string
+      }
+
+  /**
+   * Phase 1 — validation (runs under {@link cumulativeLock}).
+   *
+   * Performs replay protection, cumulative amount checks, and signature
+   * verification. For vouchers, writes the cumulative and returns the
+   * receipt directly. For close/open, returns the validated state so
+   * the long on-chain operations can run outside the lock.
+   */
+  async function doValidate(credential: ChannelCredential): Promise<ValidatedCredential> {
     const { challenge, payload } = credential
     const { request: challengeRequest } = challenge
 
@@ -206,11 +232,10 @@ export function channel(parameters: channel.Parameters) {
     }
     releaseClaim(store, challengeStoreKey)
 
-    // Dispatch open action to its own handler — it has completely
-    // different semantics (broadcasts an on-chain tx) compared to
-    // voucher/close which operate on existing channels.
+    // Dispatch open action — it has completely different semantics
+    // (broadcasts an on-chain tx). Return validated state for phase 2.
     if (action === 'open') {
-      return doVerifyOpen(credential as OpenCredential, challengeStoreKey)
+      return { action: 'open', credential: credential as OpenCredential, challengeStoreKey }
     }
 
     validateAmount(payload.amount)
@@ -267,37 +292,43 @@ export function channel(parameters: channel.Parameters) {
 
     await verifyCommitmentSignature(commitmentAmount, signatureBytes)
 
-    // Dispatch on action — for close, defer cumulative write until the
-    // on-chain close succeeds to avoid advancing state when settlement fails.
+    // Close: write cumulative eagerly (signature is valid), settle on-chain in phase 2.
     if (action === 'close') {
-      const receipt = await doVerifyClose({
-        commitmentAmount,
-        signatureBytes,
-        challengeStoreKey,
-        externalId,
-      })
-      await store.put(cumulativeKey, {
-        amount: commitmentAmount.toString(),
-      })
-      return receipt
+      await store.put(cumulativeKey, { amount: commitmentAmount.toString() })
+      return { action: 'close', commitmentAmount, signatureBytes, challengeStoreKey, externalId }
     }
 
-    // Voucher path: persist cumulative eagerly — the commitment signature is
-    // valid and can be used for close later regardless of transient failures.
-    await store.put(cumulativeKey, {
-      amount: commitmentAmount.toString(),
-    })
-
-    // Finalize challenge claim after successful voucher verification
+    // Voucher path: persist cumulative and return receipt directly (no long operation).
+    await store.put(cumulativeKey, { amount: commitmentAmount.toString() })
     await store.put(challengeStoreKey, { state: 'used', usedAt: new Date().toISOString() })
 
-    return Receipt.from({
-      method: 'stellar',
-      reference: challengeRequest.methodDetails?.reference ?? challenge.id,
-      status: 'success',
-      timestamp: new Date().toISOString(),
-      ...(externalId ? { externalId } : {}),
-    })
+    return {
+      action: 'voucher',
+      receipt: Receipt.from({
+        method: 'stellar',
+        reference: challengeRequest.methodDetails?.reference ?? challenge.id,
+        status: 'success',
+        timestamp: new Date().toISOString(),
+        ...(externalId ? { externalId } : {}),
+      }),
+    }
+  }
+
+  /**
+   * Phase 2 — settlement (runs outside the lock).
+   *
+   * Handles long on-chain operations: broadcasting close/open transactions
+   * and polling for confirmation. Vouchers return directly from phase 1.
+   */
+  async function doSettle(validated: ValidatedCredential): Promise<Receipt.Receipt> {
+    switch (validated.action) {
+      case 'voucher':
+        return validated.receipt
+      case 'open':
+        return doVerifyOpen(validated.credential, validated.challengeStoreKey)
+      case 'close':
+        return doVerifyClose(validated)
+    }
   }
 
   /**
@@ -577,6 +608,7 @@ export function channel(parameters: channel.Parameters) {
       maxAttempts: pollMaxAttempts,
       delayMs: pollDelayMs,
       timeoutMs: pollTimeoutMs,
+      semaphore: pollSemaphore,
     })
 
     if (txResult.status !== 'SUCCESS') {
@@ -822,11 +854,13 @@ export declare namespace channel {
      * Use this to trigger a close response before the waiting period elapses.
      */
     onDisputeDetected?: (state: ChannelState) => void
-    /** Maximum poll attempts when waiting for transaction confirmation. @default 30 */
+    /** Maximum poll attempts when waiting for transaction confirmation. @default 20 */
     pollMaxAttempts?: number
+    /** Maximum concurrent polling operations for this server instance. @default 10 */
+    pollMaxConcurrent?: number
     /** Poll delay between attempts in milliseconds. @default 1000 */
     pollDelayMs?: number
-    /** Poll timeout in milliseconds. @default 30_000 */
+    /** Poll timeout in milliseconds. @default 20_000 */
     pollTimeoutMs?: number
     /**
      * Custom Soroban RPC URL.
