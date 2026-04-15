@@ -191,13 +191,14 @@ export function charge(parameters: charge.Parameters) {
         releaseClaim(store, hashKey)
 
         // Push mode requires the transaction to be confirmed on-chain
-        // before the client submits the hash. A single lookup replaces the
-        // unbounded poll loop, eliminating the semaphore-exhaustion DoS
-        // vector (an attacker can no longer hold slots with fake hashes).
+        // before the client submits the hash.
         const result = await rpcServer.getTransaction(hash)
 
         if (result.status === 'FAILED') {
-          throw new PaymentVerificationError(`${LOG_PREFIX} Transaction failed on-chain.`, { hash })
+          throw new PaymentVerificationError(`${LOG_PREFIX} Transaction failed on-chain.`, {
+            hash,
+            ...(result.resultXdr ? { resultXdr: result.resultXdr } : {}),
+          })
         }
 
         if (result.status !== 'SUCCESS') {

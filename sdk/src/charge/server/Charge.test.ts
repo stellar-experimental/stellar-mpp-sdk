@@ -748,6 +748,53 @@ describe('charge push-mode: single lookup (no polling)', () => {
     ).rejects.toThrow('Transaction failed on-chain')
   })
 
+  it('includes resultXdr in error details when transaction FAILED', async () => {
+    const fakeResultXdr = 'AAAAAAAAAGT/////AAAAAQAAAAAAAAAB////+wAAAAA='
+    mockGetTransaction.mockResolvedValueOnce({ status: 'FAILED', resultXdr: fakeResultXdr })
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
+    })
+    const cred = makeHashCredential({
+      hash: 'c'.repeat(64),
+      source: `did:pkh:stellar:testnet:${Keypair.random().publicKey()}`,
+    })
+
+    try {
+      await method.verify({ credential: cred as any, request: cred.challenge.request })
+      expect.unreachable('should have thrown')
+    } catch (err: any) {
+      expect(err.message).toMatch('Transaction failed on-chain')
+      expect(err.details.resultXdr).toBe(fakeResultXdr)
+      expect(err.details.hash).toBe('c'.repeat(64))
+    }
+  })
+
+  it('omits resultXdr from error details when not present in FAILED response', async () => {
+    mockGetTransaction.mockResolvedValueOnce({ status: 'FAILED' })
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
+    })
+    const cred = makeHashCredential({
+      hash: 'd'.repeat(64),
+      source: `did:pkh:stellar:testnet:${Keypair.random().publicKey()}`,
+    })
+
+    try {
+      await method.verify({ credential: cred as any, request: cred.challenge.request })
+      expect.unreachable('should have thrown')
+    } catch (err: any) {
+      expect(err.message).toMatch('Transaction failed on-chain')
+      expect(err.details.resultXdr).toBeUndefined()
+      expect(err.details.hash).toBe('d'.repeat(64))
+    }
+  })
+
   it('does not hold a semaphore slot for push-mode lookups', async () => {
     // Fake hashes should be rejected instantly without consuming semaphore
     // slots — this is the core fix for the DoS vector.
