@@ -145,14 +145,33 @@ describe('Methods.charge', () => {
   })
 
   it('credential payload accepts hash type (push)', () => {
+    const hash = 'a'.repeat(64)
     const result = Methods.charge.schema.credential.payload.parse({
       type: 'hash',
-      hash: 'abc123',
+      hash,
     })
     expect(result.type).toBe('hash')
     if (result.type === 'hash') {
-      expect(result.hash).toBe('abc123')
+      expect(result.hash).toBe(hash)
     }
+  })
+
+  it('credential payload rejects invalid hash format', () => {
+    expect(() =>
+      Methods.charge.schema.credential.payload.parse({
+        type: 'hash',
+        hash: 'abc123',
+      }),
+    ).toThrow()
+  })
+
+  it('credential payload rejects hash that is not hex', () => {
+    expect(() =>
+      Methods.charge.schema.credential.payload.parse({
+        type: 'hash',
+        hash: 'zzzz' + '0'.repeat(60),
+      }),
+    ).toThrow()
   })
 
   it('credential payload accepts transaction type (pull)', () => {

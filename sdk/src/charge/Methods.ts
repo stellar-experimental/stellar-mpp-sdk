@@ -21,7 +21,7 @@ export const charge = Method.from({
     credential: {
       payload: z.discriminatedUnion('type', [
         /** Push mode: client broadcasts and sends the tx hash. */
-        z.object({ hash: z.string(), type: z.literal('hash') }),
+        z.object({ hash: z.string().check(z.regex(/^[0-9a-f]{64}$/i)), type: z.literal('hash') }),
         /** Pull mode: client sends signed XDR as `payload.transaction`, server broadcasts. */
         z.object({ transaction: z.string(), type: z.literal('transaction') }),
       ]),

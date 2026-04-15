@@ -711,6 +711,76 @@ describe('charge hash format validation', () => {
   })
 })
 
+describe('charge push-mode: single lookup (no polling)', () => {
+  it('rejects when transaction is NOT_FOUND on-chain', async () => {
+    mockGetTransaction.mockResolvedValueOnce({ status: 'NOT_FOUND' })
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
+    })
+    const cred = makeHashCredential({
+      hash: 'a'.repeat(64),
+      source: `did:pkh:stellar:testnet:${Keypair.random().publicKey()}`,
+    })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('Transaction not found on-chain')
+  })
+
+  it('rejects when transaction FAILED on-chain', async () => {
+    mockGetTransaction.mockResolvedValueOnce({ status: 'FAILED' })
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
+    })
+    const cred = makeHashCredential({
+      hash: 'b'.repeat(64),
+      source: `did:pkh:stellar:testnet:${Keypair.random().publicKey()}`,
+    })
+
+    await expect(
+      method.verify({ credential: cred as any, request: cred.challenge.request }),
+    ).rejects.toThrow('Transaction failed on-chain')
+  })
+
+  it('does not hold a semaphore slot for push-mode lookups', async () => {
+    // Fake hashes should be rejected instantly without consuming semaphore
+    // slots — this is the core fix for the DoS vector.
+    mockGetTransaction.mockResolvedValue({ status: 'NOT_FOUND' })
+
+    const method = charge({
+      recipient: RECIPIENT,
+      currency: USDC_SAC_TESTNET,
+      store: Store.memory(),
+      pollMaxConcurrent: 1, // only 1 semaphore slot
+    })
+
+    // Fire 5 concurrent requests with different fake hashes — all must
+    // reject promptly instead of queueing behind a semaphore.
+    const start = Date.now()
+    const results = await Promise.allSettled(
+      Array.from({ length: 5 }, (_, i) => {
+        const cred = makeHashCredential({
+          hash: `${i}`.repeat(64).slice(0, 64),
+          source: `did:pkh:stellar:testnet:${Keypair.random().publicKey()}`,
+        })
+        return method.verify({ credential: cred as any, request: cred.challenge.request })
+      }),
+    )
+    const elapsed = Date.now() - start
+
+    // All should be rejected (NOT_FOUND)
+    expect(results.every((r) => r.status === 'rejected')).toBe(true)
+    // Should complete quickly — no 20s poll timeout per request
+    expect(elapsed).toBeLessThan(2000)
+  })
+})
+
 describe('charge DoS prevention: no global serial lock', () => {
   it('processes concurrent verify calls in parallel, not serially', async () => {
     // Regression test: verifyLock was removed to prevent head-of-line blocking.
