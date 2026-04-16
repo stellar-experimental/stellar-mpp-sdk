@@ -1,5 +1,6 @@
 import { Method } from 'mppx'
 import { z } from 'zod/mini'
+import { DEFAULT_MAX_XDR_LENGTH } from '../shared/defaults.js'
 
 /**
  * Stellar charge intent for one-time SEP-41 token transfers.
@@ -23,7 +24,10 @@ export const charge = Method.from({
         /** Push mode: client broadcasts and sends the tx hash. */
         z.object({ hash: z.string().check(z.regex(/^[0-9a-f]{64}$/i)), type: z.literal('hash') }),
         /** Pull mode: client sends signed XDR as `payload.transaction`, server broadcasts. */
-        z.object({ transaction: z.string(), type: z.literal('transaction') }),
+        z.object({
+          transaction: z.string().check(z.maxLength(DEFAULT_MAX_XDR_LENGTH)),
+          type: z.literal('transaction'),
+        }),
       ]),
     },
     request: z.object({

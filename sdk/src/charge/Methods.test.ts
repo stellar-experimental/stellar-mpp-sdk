@@ -184,4 +184,21 @@ describe('Methods.charge', () => {
       expect(result.transaction).toBe('AAAA...')
     }
   })
+
+  it('credential payload rejects oversized transaction XDR', () => {
+    expect(() =>
+      Methods.charge.schema.credential.payload.parse({
+        type: 'transaction',
+        transaction: 'A'.repeat(8193),
+      }),
+    ).toThrow()
+  })
+
+  it('credential payload accepts transaction XDR at the size limit', () => {
+    const result = Methods.charge.schema.credential.payload.parse({
+      type: 'transaction',
+      transaction: 'A'.repeat(8192),
+    })
+    expect(result.type).toBe('transaction')
+  })
 })
