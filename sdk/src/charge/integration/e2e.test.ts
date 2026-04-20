@@ -28,6 +28,11 @@ import { charge as chargeMethod } from '../Methods.js'
 import { charge as serverCharge } from '../server/Charge.js'
 import { charge as clientCharge } from '../client/Charge.js'
 
+// All flows share TEST_PAYER so we only fund one payer account per suite run.
+// Consequence: tests are NOT fully independent — the payer's sequence advances
+// between flows, and a tx failure mid-broadcast can surface as a sequence or
+// balance error in a later flow. If a test fails unexpectedly, re-run the
+// whole file rather than isolating a single `it()`.
 const TEST_PAYER = Keypair.random()
 const TEST_RECIPIENT = Keypair.random().publicKey()
 const TEST_ENVELOPE_SIGNER = Keypair.random()
@@ -136,9 +141,15 @@ function handlerAsFetch(
     const request = new Request(input, init)
     const result = await handler(request)
     if (result.status === 402) {
-      return result.challenge!
+      if (!result.challenge) {
+        throw new Error(`handlerAsFetch: 402 result missing challenge: ${JSON.stringify(result)}`)
+      }
+      return result.challenge
     }
-    return result.withReceipt!(Response.json({ message: 'paid' }))
+    if (result.withReceipt) {
+      return result.withReceipt(Response.json({ message: 'paid' }))
+    }
+    throw new Error(`handlerAsFetch: unexpected handler result: ${JSON.stringify(result)}`)
   }
 }
 
@@ -171,35 +182,30 @@ async function runChargeFlow(opts: {
   expect(receipt.method).toBe('stellar')
   expect(receipt.reference).toMatch(/^[a-f0-9]{64}$/)
 
-  const tx = (await sorobanServer.getTransaction(
-    receipt.reference,
-  )) as Api.GetSuccessfulTransactionResponse
-  expect(tx.txHash).toEqual(receipt.reference)
+  const tx = await sorobanServer.getTransaction(receipt.reference)
   expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
+  const successful = tx as Api.GetSuccessfulTransactionResponse
+  expect(successful.txHash).toEqual(receipt.reference)
 
-  return tx
+  return successful
 }
 
 /**
  * Asserts the on-chain tx envelope is a plain Transaction (not a FeeBump)
- * sourced from `expectedSource`, with exactly one signature.
+ * signed by `expectedSource`, with exactly one signature.
  */
 function expectPlainEnvelope(
   tx: Api.GetSuccessfulTransactionResponse,
-  expectedSource: Keypair | string,
+  expectedSource: Keypair,
 ): Transaction {
   expect(tx.feeBump).toBe(false)
   const envelope = TransactionBuilder.fromXDR(
     tx.envelopeXdr,
     NETWORK_PASSPHRASE[STELLAR_TESTNET],
   ) as Transaction
-  const sourcePubKey =
-    typeof expectedSource === 'string' ? expectedSource : expectedSource.publicKey()
-  expect(envelope.source).toBe(sourcePubKey)
+  expect(envelope.source).toBe(expectedSource.publicKey())
   expect(envelope.signatures.length).toBe(1)
-  if (typeof expectedSource !== 'string') {
-    expect(envelope.signatures[0].hint()).toEqual(expectedSource.signatureHint())
-  }
+  expect(envelope.signatures[0].hint()).toEqual(expectedSource.signatureHint())
   return envelope
 }
 
