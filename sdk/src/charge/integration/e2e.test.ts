@@ -7,7 +7,6 @@ import {
   Transaction,
   TransactionBuilder,
   nativeToScVal,
-  rpc,
 } from '@stellar/stellar-sdk'
 import { Server as SorobanServer, Api } from '@stellar/stellar-sdk/rpc'
 import { Credential, Method, Receipt, Store } from 'mppx'
@@ -68,21 +67,21 @@ function makeServerMethod(feePayer?: {
  * Used to exercise the unsponsored-with-feeBump flows the built-in
  * `clientCharge()` factory does not cover.
  */
-function feeBumpChargeClient(
-  payerKP: Keypair,
-  feeBumpKP: Keypair,
-  mode: 'push' | 'pull',
-): ClientChargeMethod {
+function feeBumpChargeClient(opts: {
+  payerKP: Keypair
+  feeBumpKP: Keypair
+  mode: 'push' | 'pull'
+}): ClientChargeMethod {
+  const { payerKP, feeBumpKP, mode } = opts
   return Method.toClient(chargeMethod, {
     async createCredential({ challenge }) {
       const { request } = challenge
       const { amount, currency, recipient } = request
       const network = resolveNetworkId(request.methodDetails?.network)
       const networkPassphrase = NETWORK_PASSPHRASE[network]
-      const server = new rpc.Server(SOROBAN_RPC_URLS[network])
 
       const contract = new Contract(currency)
-      const sourceAccount = await server.getAccount(payerKP.publicKey())
+      const sourceAccount = await sorobanServer.getAccount(payerKP.publicKey())
 
       const tx = new TransactionBuilder(sourceAccount, {
         fee: BASE_FEE,
@@ -99,18 +98,18 @@ function feeBumpChargeClient(
         .setTimeout(DEFAULT_TIMEOUT)
         .build()
 
-      const prepared = await server.prepareTransaction(tx)
+      const prepared = await sorobanServer.prepareTransaction(tx)
       prepared.sign(payerKP)
 
       const feeBumpTx = wrapFeeBump(prepared, feeBumpKP, { networkPassphrase })
       const source = `did:pkh:${network}:${payerKP.publicKey()}`
 
       if (mode === 'push') {
-        const result = await server.sendTransaction(feeBumpTx)
+        const result = await sorobanServer.sendTransaction(feeBumpTx)
         if (result.status !== 'PENDING') {
           throw new Error(`Broadcast failed: sendTransaction returned ${result.status}`)
         }
-        await pollTransaction(server, result.hash, {})
+        await pollTransaction(sorobanServer, result.hash, {})
         return Credential.serialize({
           challenge,
           payload: { type: 'hash' as const, hash: result.hash },
@@ -255,7 +254,11 @@ describe('charge e2e (testnet)', () => {
   it('flow 2: push, unsponsored + FeeBump (client-wrapped)', async () => {
     const tx = await runChargeFlow({
       serverMethod: makeServerMethod(),
-      clientMethod: feeBumpChargeClient(TEST_PAYER, TEST_FEE_PAYER, 'push'),
+      clientMethod: feeBumpChargeClient({
+        payerKP: TEST_PAYER,
+        feeBumpKP: TEST_FEE_PAYER,
+        mode: 'push',
+      }),
     })
     expectFeeBumpEnvelope(tx, TEST_FEE_PAYER, TEST_PAYER)
   }, 120_000)
@@ -271,7 +274,11 @@ describe('charge e2e (testnet)', () => {
   it('flow 4: pull, unsponsored + FeeBump (client-wrapped)', async () => {
     const tx = await runChargeFlow({
       serverMethod: makeServerMethod(),
-      clientMethod: feeBumpChargeClient(TEST_PAYER, TEST_FEE_PAYER, 'pull'),
+      clientMethod: feeBumpChargeClient({
+        payerKP: TEST_PAYER,
+        feeBumpKP: TEST_FEE_PAYER,
+        mode: 'pull',
+      }),
     })
     expectFeeBumpEnvelope(tx, TEST_FEE_PAYER, TEST_PAYER)
   }, 120_000)
