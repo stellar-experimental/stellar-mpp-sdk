@@ -141,4 +141,25 @@ describe('channel method schema', () => {
       }),
     ).toThrow()
   })
+
+  it('credential payload rejects oversized transaction XDR in open action', () => {
+    expect(() =>
+      channel.schema.credential.payload.parse({
+        action: 'open',
+        transaction: 'A'.repeat(8193),
+        amount: '1000000',
+        signature: 'a'.repeat(128),
+      }),
+    ).toThrow()
+  })
+
+  it('credential payload accepts transaction XDR at the size limit in open action', () => {
+    const result = channel.schema.credential.payload.parse({
+      action: 'open',
+      transaction: 'A'.repeat(8192),
+      amount: '1000000',
+      signature: 'a'.repeat(128),
+    })
+    expect(result.action).toBe('open')
+  })
 })

@@ -145,14 +145,33 @@ describe('Methods.charge', () => {
   })
 
   it('credential payload accepts hash type (push)', () => {
+    const hash = 'a'.repeat(64)
     const result = Methods.charge.schema.credential.payload.parse({
       type: 'hash',
-      hash: 'abc123',
+      hash,
     })
     expect(result.type).toBe('hash')
     if (result.type === 'hash') {
-      expect(result.hash).toBe('abc123')
+      expect(result.hash).toBe(hash)
     }
+  })
+
+  it('credential payload rejects invalid hash format', () => {
+    expect(() =>
+      Methods.charge.schema.credential.payload.parse({
+        type: 'hash',
+        hash: 'abc123',
+      }),
+    ).toThrow()
+  })
+
+  it('credential payload rejects hash that is not hex', () => {
+    expect(() =>
+      Methods.charge.schema.credential.payload.parse({
+        type: 'hash',
+        hash: 'zzzz' + '0'.repeat(60),
+      }),
+    ).toThrow()
   })
 
   it('credential payload accepts transaction type (pull)', () => {
@@ -164,5 +183,22 @@ describe('Methods.charge', () => {
     if (result.type === 'transaction') {
       expect(result.transaction).toBe('AAAA...')
     }
+  })
+
+  it('credential payload rejects oversized transaction XDR', () => {
+    expect(() =>
+      Methods.charge.schema.credential.payload.parse({
+        type: 'transaction',
+        transaction: 'A'.repeat(8193),
+      }),
+    ).toThrow()
+  })
+
+  it('credential payload accepts transaction XDR at the size limit', () => {
+    const result = Methods.charge.schema.credential.payload.parse({
+      type: 'transaction',
+      transaction: 'A'.repeat(8192),
+    })
+    expect(result.type).toBe('transaction')
   })
 })

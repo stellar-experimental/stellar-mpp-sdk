@@ -190,12 +190,25 @@ export function charge(parameters: charge.Parameters) {
         }
         releaseClaim(store, hashKey)
 
-        const txResult = await pollTransaction(rpcServer, hash, {
-          maxAttempts: pollMaxAttempts,
-          delayMs: pollDelayMs,
-          timeoutMs: pollTimeoutMs,
-          semaphore: pollSemaphore,
-        })
+        // Push mode requires the transaction to be confirmed on-chain
+        // before the client submits the hash.
+        const result = await rpcServer.getTransaction(hash)
+
+        if (result.status === 'FAILED') {
+          throw new PaymentVerificationError(`${LOG_PREFIX} Transaction failed on-chain.`, {
+            hash,
+            ...(result.resultXdr ? { resultXdr: result.resultXdr } : {}),
+          })
+        }
+
+        if (result.status !== 'SUCCESS') {
+          throw new PaymentVerificationError(
+            `${LOG_PREFIX} Transaction not found on-chain. Push mode requires the transaction to be confirmed before submitting the hash.`,
+            { hash, status: result.status },
+          )
+        }
+
+        const txResult = result as rpc.Api.GetSuccessfulTransactionResponse
 
         // Extract the payer's public key from the credential DID to verify
         // the on-chain transfer's `from` address matches the credential's

@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - End-toEnd tests for the charge intent, submitting real transactions on Testnet, and making sure the flows work in combinations of push/pull and sponsorship ([#41](https://github.com/stellar/stellar-mpp-sdk/pull/41))
 
+### Fixed
+- Fix push-mode DoS via semaphore exhaustion: replace unbounded polling with single `getTransaction` lookup, add schema-level XDR size cap and hash format validation ([#44](https://github.com/stellar/stellar-mpp-sdk/pull/44))
+
 ## [0.5.0] - 2026-04-13
 
 - Harden verification, replay protection, fix sponsored charge path, and replace SAC terminology with SEP-41 across docs, comments, and error messages ([#42](https://github.com/stellar/stellar-mpp-sdk/pull/42))
