@@ -9,9 +9,9 @@ import {
   STELLAR_TESTNET,
   XLM_SAC_TESTNET,
   SOROBAN_RPC_URLS,
-} from '../constants.js'
-import { charge as serverCharge } from './server/Charge.js'
-import { charge as clientCharge } from './client/Charge.js'
+} from '../../constants.js'
+import { charge as serverCharge } from '../server/Charge.js'
+import { charge as clientCharge } from '../client/Charge.js'
 
 const TEST_PAYER = Keypair.random()
 const TEST_RECIPIENT = Keypair.random().publicKey()

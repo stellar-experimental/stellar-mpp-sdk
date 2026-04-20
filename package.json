@@ -52,6 +52,7 @@
     "build": "tsc",
     "check:types": "tsc --noEmit",
     "test": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "demo:charge-server": "tsx examples/charge-server.ts",
     "demo:charge-client": "tsx examples/charge-client.ts",
     "demo:channel-server": "tsx examples/channel-server.ts",
