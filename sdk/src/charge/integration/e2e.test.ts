@@ -1,6 +1,6 @@
 import { FeeBumpTransaction, Keypair, Transaction, TransactionBuilder } from '@stellar/stellar-sdk'
 import { Server as SorobanServer, Api } from '@stellar/stellar-sdk/rpc'
-import { Receipt } from 'mppx'
+import { Receipt, Store } from 'mppx'
 import { Mppx as MppxServer } from 'mppx/server'
 import { Mppx as MppxClient } from 'mppx/client'
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -58,6 +58,7 @@ describe('charge e2e (testnet)', () => {
         serverCharge({
           recipient: TEST_RECIPIENT,
           currency: XLM_SAC_TESTNET,
+          store: Store.memory(),
         }),
       ],
     })
@@ -94,7 +95,7 @@ describe('charge e2e (testnet)', () => {
     // The transaction should be successful
     const txHash = receipt.reference
     const tx = (await sorobanServer.getTransaction(txHash)) as Api.GetSuccessfulTransactionResponse
-    expect(tx.txHash).toEqual(receipt.reference) // maybe unnecessary?
+    expect(tx.txHash).toEqual(receipt.reference)
     expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
     expect(tx.feeBump).toBe(false)
 
@@ -114,6 +115,7 @@ describe('charge e2e (testnet)', () => {
         serverCharge({
           recipient: TEST_RECIPIENT,
           currency: XLM_SAC_TESTNET,
+          store: Store.memory(),
         }),
       ],
     })
@@ -151,7 +153,7 @@ describe('charge e2e (testnet)', () => {
     // Same validation as in the previous test
     const txHash = receipt.reference
     const tx = (await sorobanServer.getTransaction(txHash)) as Api.GetSuccessfulTransactionResponse
-    expect(tx.txHash).toEqual(receipt.reference) // maybe unnecessary?
+    expect(tx.txHash).toEqual(receipt.reference)
     expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
     expect(tx.feeBump).toBe(false)
     const envelope = TransactionBuilder.fromXDR(
@@ -169,6 +171,7 @@ describe('charge e2e (testnet)', () => {
         serverCharge({
           recipient: TEST_RECIPIENT,
           currency: XLM_SAC_TESTNET,
+          store: Store.memory(),
           feePayer: {
             envelopeSigner: TEST_ENVELOPE_SIGNER,
           },
@@ -208,7 +211,7 @@ describe('charge e2e (testnet)', () => {
     const txHash = receipt.reference
     const tx = (await sorobanServer.getTransaction(txHash)) as Api.GetSuccessfulTransactionResponse
     // The transaction should be successful
-    expect(tx.txHash).toEqual(receipt.reference) // maybe unnecessary?
+    expect(tx.txHash).toEqual(receipt.reference)
     expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
     expect(tx.feeBump).toBe(false)
 
@@ -229,6 +232,7 @@ describe('charge e2e (testnet)', () => {
         serverCharge({
           recipient: TEST_RECIPIENT,
           currency: XLM_SAC_TESTNET,
+          store: Store.memory(),
           feePayer: {
             envelopeSigner: TEST_ENVELOPE_SIGNER,
             feeBumpSigner: TEST_FEE_PAYER,
@@ -269,7 +273,7 @@ describe('charge e2e (testnet)', () => {
     const txHash = receipt.reference
     const tx = (await sorobanServer.getTransaction(txHash)) as Api.GetSuccessfulTransactionResponse
     // The transaction should be successful
-    expect(tx.txHash).toEqual(receipt.reference) // maybe unnecessary?
+    expect(tx.txHash).toEqual(receipt.reference)
     expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
 
     // The outer transaction should be a feeBumpTransaction
