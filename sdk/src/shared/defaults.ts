@@ -1,4 +1,6 @@
 export const DEFAULT_MAX_FEE_BUMP_STROOPS = 10_000_000
+/** Maximum base64-encoded XDR length accepted in credential payloads (~8 KB). */
+export const DEFAULT_MAX_XDR_LENGTH = 8_192
 export const DEFAULT_POLL_MAX_ATTEMPTS = 20
 export const DEFAULT_POLL_DELAY_MS = 1_000
 export const DEFAULT_POLL_BACKOFF_MULTIPLIER = 1.2
