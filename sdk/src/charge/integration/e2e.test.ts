@@ -36,6 +36,25 @@ const TEST_FEE_PAYER = Keypair.random()
 const MPP_SECRET_KEY = 'e2e-test-secret-key'
 const sorobanServer = new SorobanServer(SOROBAN_RPC_URLS[STELLAR_TESTNET])
 
+type ServerChargeMethod = ReturnType<typeof serverCharge>
+type ClientChargeMethod = ReturnType<typeof clientCharge>
+
+/**
+ * Builds the standard server-side charge method with a fresh in-memory store.
+ * Accepts an optional `feePayer` configuration to toggle sponsorship variants.
+ */
+function makeServerMethod(feePayer?: {
+  envelopeSigner: Keypair
+  feeBumpSigner?: Keypair
+}): ServerChargeMethod {
+  return serverCharge({
+    recipient: TEST_RECIPIENT,
+    currency: XLM_SAC_TESTNET,
+    store: Store.memory(),
+    ...(feePayer ? { feePayer } : {}),
+  })
+}
+
 /**
  * Builds a charge client that wraps the signed inner tx in a
  * `FeeBumpTransaction` before returning it to the server (pull) or
@@ -44,7 +63,11 @@ const sorobanServer = new SorobanServer(SOROBAN_RPC_URLS[STELLAR_TESTNET])
  * Used to exercise the unsponsored-with-feeBump flows the built-in
  * `clientCharge()` factory does not cover.
  */
-function feeBumpChargeClient(payerKP: Keypair, feeBumpKP: Keypair, mode: 'push' | 'pull') {
+function feeBumpChargeClient(
+  payerKP: Keypair,
+  feeBumpKP: Keypair,
+  mode: 'push' | 'pull',
+): ClientChargeMethod {
   return Method.toClient(chargeMethod, {
     async createCredential({ challenge }) {
       const { request } = challenge
@@ -119,6 +142,92 @@ function handlerAsFetch(
   }
 }
 
+/**
+ * Drives a full charge round-trip and returns the settled on-chain
+ * transaction. Asserts the response code, receipt envelope, and that the
+ * referenced tx was confirmed successfully — flow-specific envelope shape
+ * (source, feeBump, signatures) is checked by each test afterward.
+ */
+async function runChargeFlow(opts: {
+  serverMethod: ServerChargeMethod
+  clientMethod: ClientChargeMethod
+}): Promise<Api.GetSuccessfulTransactionResponse> {
+  const serverMppx = MppxServer.create({
+    secretKey: MPP_SECRET_KEY,
+    methods: [opts.serverMethod],
+  })
+  const handler = serverMppx.charge({ amount: '1' })
+  const clientMppx = MppxClient.create({
+    polyfill: false,
+    fetch: handlerAsFetch(handler),
+    methods: [opts.clientMethod],
+  })
+
+  const response = await clientMppx.fetch('http://localhost/test')
+  expect(response.status).toBe(200)
+
+  const receipt = Receipt.deserialize(response.headers.get('Payment-Receipt')!)
+  expect(receipt.status).toBe('success')
+  expect(receipt.method).toBe('stellar')
+  expect(receipt.reference).toMatch(/^[a-f0-9]{64}$/)
+
+  const tx = (await sorobanServer.getTransaction(
+    receipt.reference,
+  )) as Api.GetSuccessfulTransactionResponse
+  expect(tx.txHash).toEqual(receipt.reference)
+  expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
+
+  return tx
+}
+
+/**
+ * Asserts the on-chain tx envelope is a plain Transaction (not a FeeBump)
+ * sourced from `expectedSource`, with exactly one signature.
+ */
+function expectPlainEnvelope(
+  tx: Api.GetSuccessfulTransactionResponse,
+  expectedSource: Keypair | string,
+): Transaction {
+  expect(tx.feeBump).toBe(false)
+  const envelope = TransactionBuilder.fromXDR(
+    tx.envelopeXdr,
+    NETWORK_PASSPHRASE[STELLAR_TESTNET],
+  ) as Transaction
+  const sourcePubKey =
+    typeof expectedSource === 'string' ? expectedSource : expectedSource.publicKey()
+  expect(envelope.source).toBe(sourcePubKey)
+  expect(envelope.signatures.length).toBe(1)
+  if (typeof expectedSource !== 'string') {
+    expect(envelope.signatures[0].hint()).toEqual(expectedSource.signatureHint())
+  }
+  return envelope
+}
+
+/**
+ * Asserts the on-chain tx envelope is a FeeBumpTransaction with outer fee
+ * source `feeBumpKP` and inner source `innerKP`, each with one signature.
+ */
+function expectFeeBumpEnvelope(
+  tx: Api.GetSuccessfulTransactionResponse,
+  feeBumpKP: Keypair,
+  innerKP: Keypair,
+): FeeBumpTransaction {
+  expect(tx.feeBump).toBe(true)
+  const outerEnv = TransactionBuilder.fromXDR(
+    tx.envelopeXdr,
+    NETWORK_PASSPHRASE[STELLAR_TESTNET],
+  ) as FeeBumpTransaction
+  expect(outerEnv.feeSource).toBe(feeBumpKP.publicKey())
+  expect(outerEnv.signatures.length).toBe(1)
+  expect(outerEnv.signatures[0].hint()).toEqual(feeBumpKP.signatureHint())
+
+  const innerEnv = outerEnv.innerTransaction
+  expect(innerEnv.source).toBe(innerKP.publicKey())
+  expect(innerEnv.signatures.length).toBe(1)
+  expect(innerEnv.signatures[0].hint()).toEqual(innerKP.signatureHint())
+  return outerEnv
+}
+
 describe('charge e2e (testnet)', () => {
   beforeAll(async () => {
     await Promise.all([
@@ -129,350 +238,54 @@ describe('charge e2e (testnet)', () => {
     ])
   }, 30_000)
 
-  it('completes a pull-mode charge', async () => {
-    const serverMppx = MppxServer.create({
-      secretKey: MPP_SECRET_KEY,
-      methods: [
-        serverCharge({
-          recipient: TEST_RECIPIENT,
-          currency: XLM_SAC_TESTNET,
-          store: Store.memory(),
-        }),
-      ],
+  it('flow 1: push, unsponsored', async () => {
+    const tx = await runChargeFlow({
+      serverMethod: makeServerMethod(),
+      clientMethod: clientCharge({ keypair: TEST_PAYER, mode: 'push' }),
     })
-
-    const handler = serverMppx.charge({ amount: '1' })
-
-    // Wire the server handler into the client as a custom fetch
-    const clientMppx = MppxClient.create({
-      polyfill: false,
-      fetch: handlerAsFetch(handler),
-      methods: [
-        clientCharge({
-          keypair: TEST_PAYER,
-        }),
-      ],
-    })
-
-    const response = await clientMppx.fetch('http://localhost/test')
-
-    // The response should be a successful 200 with a receipt
-    expect(response.status).toBe(200)
-
-    const receiptHeader = response.headers.get('Payment-Receipt')
-    expect(receiptHeader).toBeTruthy()
-
-    // Deserialize and validate the receipt
-    const receipt = Receipt.deserialize(receiptHeader!)
-    expect(receipt.status).toBe('success')
-    expect(receipt.method).toBe('stellar')
-    expect(receipt.reference).toBeTruthy()
-    // The reference should be a 64-char hex tx hash
-    expect(receipt.reference).toMatch(/^[a-f0-9]{64}$/)
-
-    // The transaction should be successful
-    const txHash = receipt.reference
-    const tx = (await sorobanServer.getTransaction(txHash)) as Api.GetSuccessfulTransactionResponse
-    expect(tx.txHash).toEqual(receipt.reference)
-    expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
-    expect(tx.feeBump).toBe(false)
-
-    // The transaction should be sourced from the payer
-    const envelope = TransactionBuilder.fromXDR(
-      tx.envelopeXdr,
-      NETWORK_PASSPHRASE[STELLAR_TESTNET],
-    ) as Transaction
-    expect(envelope.source).toBe(TEST_PAYER.publicKey())
-    expect(envelope.signatures.length).toBe(1)
+    expectPlainEnvelope(tx, TEST_PAYER)
   }, 120_000)
 
-  it('completes a push-mode charge', async () => {
-    const serverMppx = MppxServer.create({
-      secretKey: MPP_SECRET_KEY,
-      methods: [
-        serverCharge({
-          recipient: TEST_RECIPIENT,
-          currency: XLM_SAC_TESTNET,
-          store: Store.memory(),
-        }),
-      ],
+  it('flow 2: push, unsponsored + FeeBump (client-wrapped)', async () => {
+    const tx = await runChargeFlow({
+      serverMethod: makeServerMethod(),
+      clientMethod: feeBumpChargeClient(TEST_PAYER, TEST_FEE_PAYER, 'push'),
     })
-
-    const handler = serverMppx.charge({ amount: '1' })
-
-    // Wire the server handler into the client as a custom fetch
-    const clientMppx = MppxClient.create({
-      polyfill: false,
-      fetch: handlerAsFetch(handler),
-      methods: [
-        clientCharge({
-          keypair: TEST_PAYER,
-          mode: 'push',
-        }),
-      ],
-    })
-
-    const response = await clientMppx.fetch('http://localhost/test')
-
-    // The response should be a successful 200 with a receipt
-    expect(response.status).toBe(200)
-
-    const receiptHeader = response.headers.get('Payment-Receipt')
-    expect(receiptHeader).toBeTruthy()
-
-    // Deserialize and validate the receipt
-    const receipt = Receipt.deserialize(receiptHeader!)
-    expect(receipt.status).toBe('success')
-    expect(receipt.method).toBe('stellar')
-    expect(receipt.reference).toBeTruthy()
-    // The reference should be a 64-char hex tx hash
-    expect(receipt.reference).toMatch(/^[a-f0-9]{64}$/)
-
-    // Same validation as in the previous test
-    const txHash = receipt.reference
-    const tx = (await sorobanServer.getTransaction(txHash)) as Api.GetSuccessfulTransactionResponse
-    expect(tx.txHash).toEqual(receipt.reference)
-    expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
-    expect(tx.feeBump).toBe(false)
-    const envelope = TransactionBuilder.fromXDR(
-      tx.envelopeXdr,
-      NETWORK_PASSPHRASE[STELLAR_TESTNET],
-    ) as Transaction
-    expect(envelope.source).toBe(TEST_PAYER.publicKey())
-    expect(envelope.signatures.length).toBe(1)
+    expectFeeBumpEnvelope(tx, TEST_FEE_PAYER, TEST_PAYER)
   }, 120_000)
 
-  it('completes a pull-mode charge, with envelopeSigner', async () => {
-    const serverMppx = MppxServer.create({
-      secretKey: MPP_SECRET_KEY,
-      methods: [
-        serverCharge({
-          recipient: TEST_RECIPIENT,
-          currency: XLM_SAC_TESTNET,
-          store: Store.memory(),
-          feePayer: {
-            envelopeSigner: TEST_ENVELOPE_SIGNER,
-          },
-        }),
-      ],
+  it('flow 3: pull, unsponsored', async () => {
+    const tx = await runChargeFlow({
+      serverMethod: makeServerMethod(),
+      clientMethod: clientCharge({ keypair: TEST_PAYER }),
     })
-
-    const handler = serverMppx.charge({ amount: '1' })
-
-    // Wire the server handler into the client as a custom fetch
-    const clientMppx = MppxClient.create({
-      polyfill: false,
-      fetch: handlerAsFetch(handler),
-      methods: [
-        clientCharge({
-          keypair: TEST_PAYER,
-        }),
-      ],
-    })
-
-    const response = await clientMppx.fetch('http://localhost/test')
-
-    // The response should be a successful 200 with a receipt
-    expect(response.status).toBe(200)
-
-    const receiptHeader = response.headers.get('Payment-Receipt')
-    expect(receiptHeader).toBeTruthy()
-
-    // Deserialize and validate the receipt
-    const receipt = Receipt.deserialize(receiptHeader!)
-    expect(receipt.status).toBe('success')
-    expect(receipt.method).toBe('stellar')
-    expect(receipt.reference).toBeTruthy()
-    // The reference should be a 64-char hex tx hash
-    expect(receipt.reference).toMatch(/^[a-f0-9]{64}$/)
-
-    const txHash = receipt.reference
-    const tx = (await sorobanServer.getTransaction(txHash)) as Api.GetSuccessfulTransactionResponse
-    // The transaction should be successful
-    expect(tx.txHash).toEqual(receipt.reference)
-    expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
-    expect(tx.feeBump).toBe(false)
-
-    // The transaction source should NOT be the payer
-    const envelope = TransactionBuilder.fromXDR(
-      tx.envelopeXdr,
-      NETWORK_PASSPHRASE[STELLAR_TESTNET],
-    ) as Transaction
-    expect(envelope.source).toBe(TEST_ENVELOPE_SIGNER.publicKey())
-    expect(envelope.signatures.length).toBe(1)
-    expect(envelope.signatures[0].hint()).toEqual(TEST_ENVELOPE_SIGNER.signatureHint())
+    expectPlainEnvelope(tx, TEST_PAYER)
   }, 120_000)
 
-  it('completes a pull-mode charge, with feeBumpSigner', async () => {
-    const serverMppx = MppxServer.create({
-      secretKey: MPP_SECRET_KEY,
-      methods: [
-        serverCharge({
-          recipient: TEST_RECIPIENT,
-          currency: XLM_SAC_TESTNET,
-          store: Store.memory(),
-          feePayer: {
-            envelopeSigner: TEST_ENVELOPE_SIGNER,
-            feeBumpSigner: TEST_FEE_PAYER,
-          },
-        }),
-      ],
+  it('flow 4: pull, unsponsored + FeeBump (client-wrapped)', async () => {
+    const tx = await runChargeFlow({
+      serverMethod: makeServerMethod(),
+      clientMethod: feeBumpChargeClient(TEST_PAYER, TEST_FEE_PAYER, 'pull'),
     })
-
-    const handler = serverMppx.charge({ amount: '1' })
-
-    // Wire the server handler into the client as a custom fetch
-    const clientMppx = MppxClient.create({
-      polyfill: false,
-      fetch: handlerAsFetch(handler),
-      methods: [
-        clientCharge({
-          keypair: TEST_PAYER,
-        }),
-      ],
-    })
-
-    const response = await clientMppx.fetch('http://localhost/test')
-
-    // The response should be a successful 200 with a receipt
-    expect(response.status).toBe(200)
-
-    const receiptHeader = response.headers.get('Payment-Receipt')
-    expect(receiptHeader).toBeTruthy()
-
-    // Deserialize and validate the receipt
-    const receipt = Receipt.deserialize(receiptHeader!)
-    expect(receipt.status).toBe('success')
-    expect(receipt.method).toBe('stellar')
-    expect(receipt.reference).toBeTruthy()
-    // The reference should be a 64-char hex tx hash
-    expect(receipt.reference).toMatch(/^[a-f0-9]{64}$/)
-
-    const txHash = receipt.reference
-    const tx = (await sorobanServer.getTransaction(txHash)) as Api.GetSuccessfulTransactionResponse
-    // The transaction should be successful
-    expect(tx.txHash).toEqual(receipt.reference)
-    expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
-
-    // The outer transaction should be a feeBumpTransaction
-    expect(tx.feeBump).toBe(true)
-    const outerEnv = TransactionBuilder.fromXDR(
-      tx.envelopeXdr,
-      NETWORK_PASSPHRASE[STELLAR_TESTNET],
-    ) as FeeBumpTransaction
-    expect(outerEnv.feeSource).toBe(TEST_FEE_PAYER.publicKey())
-    expect(outerEnv.signatures.length).toBe(1)
-    expect(outerEnv.signatures[0].hint()).toEqual(TEST_FEE_PAYER.signatureHint())
-    expect(outerEnv.innerTransaction).toBeTruthy()
-
-    // The inner transaction should look correct
-    const innerEnv = outerEnv.innerTransaction
-    expect(innerEnv.source).toBe(TEST_ENVELOPE_SIGNER.publicKey())
-    expect(innerEnv.signatures.length).toBe(1)
-    expect(innerEnv.signatures[0].hint()).toEqual(TEST_ENVELOPE_SIGNER.signatureHint())
+    expectFeeBumpEnvelope(tx, TEST_FEE_PAYER, TEST_PAYER)
   }, 120_000)
 
-  it('completes a push-mode charge, client-wrapped in FeeBump (unsponsored)', async () => {
-    const serverMppx = MppxServer.create({
-      secretKey: MPP_SECRET_KEY,
-      methods: [
-        serverCharge({
-          recipient: TEST_RECIPIENT,
-          currency: XLM_SAC_TESTNET,
-          store: Store.memory(),
-        }),
-      ],
+  it('flow 5: pull, sponsored', async () => {
+    const tx = await runChargeFlow({
+      serverMethod: makeServerMethod({ envelopeSigner: TEST_ENVELOPE_SIGNER }),
+      clientMethod: clientCharge({ keypair: TEST_PAYER }),
     })
-
-    const handler = serverMppx.charge({ amount: '1' })
-
-    const clientMppx = MppxClient.create({
-      polyfill: false,
-      fetch: handlerAsFetch(handler),
-      methods: [feeBumpChargeClient(TEST_PAYER, TEST_FEE_PAYER, 'push')],
-    })
-
-    const response = await clientMppx.fetch('http://localhost/test')
-
-    expect(response.status).toBe(200)
-
-    const receiptHeader = response.headers.get('Payment-Receipt')
-    const receipt = Receipt.deserialize(receiptHeader!)
-    expect(receipt.status).toBe('success')
-    expect(receipt.method).toBe('stellar')
-    expect(receipt.reference).toMatch(/^[a-f0-9]{64}$/)
-
-    const txHash = receipt.reference
-    const tx = (await sorobanServer.getTransaction(txHash)) as Api.GetSuccessfulTransactionResponse
-    expect(tx.txHash).toEqual(receipt.reference)
-    expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
-
-    // Outer envelope is a FeeBumpTransaction paid by the fee-bump key,
-    // inner envelope is the payer's signed transfer.
-    expect(tx.feeBump).toBe(true)
-    const outerEnv = TransactionBuilder.fromXDR(
-      tx.envelopeXdr,
-      NETWORK_PASSPHRASE[STELLAR_TESTNET],
-    ) as FeeBumpTransaction
-    expect(outerEnv.feeSource).toBe(TEST_FEE_PAYER.publicKey())
-    expect(outerEnv.signatures.length).toBe(1)
-    expect(outerEnv.signatures[0].hint()).toEqual(TEST_FEE_PAYER.signatureHint())
-
-    const innerEnv = outerEnv.innerTransaction
-    expect(innerEnv.source).toBe(TEST_PAYER.publicKey())
-    expect(innerEnv.signatures.length).toBe(1)
-    expect(innerEnv.signatures[0].hint()).toEqual(TEST_PAYER.signatureHint())
+    expectPlainEnvelope(tx, TEST_ENVELOPE_SIGNER)
   }, 120_000)
 
-  it('completes a pull-mode charge, client-wrapped in FeeBump (unsponsored)', async () => {
-    const serverMppx = MppxServer.create({
-      secretKey: MPP_SECRET_KEY,
-      methods: [
-        serverCharge({
-          recipient: TEST_RECIPIENT,
-          currency: XLM_SAC_TESTNET,
-          store: Store.memory(),
-        }),
-      ],
+  it('flow 6: pull, sponsored + FeeBump', async () => {
+    const tx = await runChargeFlow({
+      serverMethod: makeServerMethod({
+        envelopeSigner: TEST_ENVELOPE_SIGNER,
+        feeBumpSigner: TEST_FEE_PAYER,
+      }),
+      clientMethod: clientCharge({ keypair: TEST_PAYER }),
     })
-
-    const handler = serverMppx.charge({ amount: '1' })
-
-    const clientMppx = MppxClient.create({
-      polyfill: false,
-      fetch: handlerAsFetch(handler),
-      methods: [feeBumpChargeClient(TEST_PAYER, TEST_FEE_PAYER, 'pull')],
-    })
-
-    const response = await clientMppx.fetch('http://localhost/test')
-
-    expect(response.status).toBe(200)
-
-    const receiptHeader = response.headers.get('Payment-Receipt')
-    const receipt = Receipt.deserialize(receiptHeader!)
-    expect(receipt.status).toBe('success')
-    expect(receipt.method).toBe('stellar')
-    expect(receipt.reference).toMatch(/^[a-f0-9]{64}$/)
-
-    const txHash = receipt.reference
-    const tx = (await sorobanServer.getTransaction(txHash)) as Api.GetSuccessfulTransactionResponse
-    expect(tx.txHash).toEqual(receipt.reference)
-    expect(tx.status).toBe(Api.GetTransactionStatus.SUCCESS)
-
-    // Outer envelope is a FeeBumpTransaction paid by the fee-bump key,
-    // inner envelope is the payer's signed transfer.
-    expect(tx.feeBump).toBe(true)
-    const outerEnv = TransactionBuilder.fromXDR(
-      tx.envelopeXdr,
-      NETWORK_PASSPHRASE[STELLAR_TESTNET],
-    ) as FeeBumpTransaction
-    expect(outerEnv.feeSource).toBe(TEST_FEE_PAYER.publicKey())
-    expect(outerEnv.signatures.length).toBe(1)
-    expect(outerEnv.signatures[0].hint()).toEqual(TEST_FEE_PAYER.signatureHint())
-
-    const innerEnv = outerEnv.innerTransaction
-    expect(innerEnv.source).toBe(TEST_PAYER.publicKey())
-    expect(innerEnv.signatures.length).toBe(1)
-    expect(innerEnv.signatures[0].hint()).toEqual(TEST_PAYER.signatureHint())
+    expectFeeBumpEnvelope(tx, TEST_FEE_PAYER, TEST_ENVELOPE_SIGNER)
   }, 120_000)
 })
