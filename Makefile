@@ -1,5 +1,5 @@
 .PHONY: install build clean typecheck lint lint-fix format format-check test test-watch \
-        test-integration check demo-server demo-client demo-channel-server demo-channel-client help
+        test-integration audit check demo-server demo-client demo-channel-server demo-channel-client help
 
 help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/ { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)

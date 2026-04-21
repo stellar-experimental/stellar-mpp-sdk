@@ -146,7 +146,7 @@ function handlerAsFetch(
       return result.challenge
     }
     if (result.withReceipt) {
-      return result.withReceipt(Response.json({ message: 'paid' }))
+      return result.withReceipt(Response.json({ message: 'paid' }, { status: result.status }))
     }
     throw new Error(`handlerAsFetch: unexpected handler result: ${JSON.stringify(result)}`)
   }
@@ -176,7 +176,12 @@ async function runChargeFlow(opts: {
   const response = await clientMppx.fetch('http://localhost/test')
   expect(response.status).toBe(200)
 
-  const receipt = Receipt.deserialize(response.headers.get('Payment-Receipt')!)
+  const paymentReceiptHeader = response.headers.get('Payment-Receipt')
+  expect(
+    paymentReceiptHeader,
+    'expected Payment-Receipt header to be present on a successful charge response',
+  ).not.toBeNull()
+  const receipt = Receipt.deserialize(paymentReceiptHeader!)
   expect(receipt.status).toBe('success')
   expect(receipt.method).toBe('stellar')
   expect(receipt.reference).toMatch(/^[a-f0-9]{64}$/)
