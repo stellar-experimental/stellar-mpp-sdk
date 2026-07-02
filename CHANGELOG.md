@@ -7,16 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1]
+
 ### Added
 
 - Add a v0.7 migration guide (`docs/migrating-to-v0.7.md`), linked from the README [#49](https://github.com/stellar/stellar-mpp-sdk/pull/49)
 
 ### Security
 
-- Override the transitive `ws` dependency to `^8.21.0`, clearing a high-severity advisory reachable via `viem` [#49](https://github.com/stellar/stellar-mpp-sdk/pull/49)
-- Override the transitive `form-data` dependency to `^4.0.6`, clearing a high-severity advisory reachable via `@stellar/stellar-sdk` [#49](https://github.com/stellar/stellar-mpp-sdk/pull/49)
+- Harden charge and channel payment verification against issues identified in an internal security review. Operators running charge or channel servers or clients are strongly encouraged to upgrade. Specifics are intentionally withheld for now so that deployments still on an earlier version are not put at additional risk before they can upgrade. [#52](https://github.com/stellar/stellar-mpp-sdk/pull/52)
+- Update transitive dependencies (`ws`, `form-data`) to clear high-severity advisories in third-party packages [#49](https://github.com/stellar/stellar-mpp-sdk/pull/49)
 
-## [0.7.0] - 2026-06-15
+### Changed
+
+- Upgrade development dependencies to the latest versions satisfying the 7-day `minimumReleaseAge` supply-chain soak [#52](https://github.com/stellar/stellar-mpp-sdk/pull/52)
+- Surface invalid inputs and simulation failures as typed `StellarMppError`s instead of untyped runtime errors [#52](https://github.com/stellar/stellar-mpp-sdk/pull/52)
+- Restore the full 7-day dependency soak by dropping the temporary `esbuild` and `form-data` `minimumReleaseAgeExclude` exemptions now that both have aged past it [#50](https://github.com/stellar/stellar-mpp-sdk/pull/50)
+
+## [0.7.0]
 
 ### Security
 
@@ -43,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Drop the `open` credential action, the server-side open settlement path, and the `examples/channel-open.ts` example.
   - The one-way-channel contract is created by its constructor at deploy time and has no on-chain open entrypoint, so the MPP open path was dead code. Deploy the channel out-of-band (e.g. with the `stellar` CLI); off-chain vouchers and on-chain close are unchanged.
 
-## [0.6.0] - 2026-05-26
+## [0.6.0]
 
 ### Changed
 
@@ -59,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Constrain the `viem` range to `>=2.50.4 <2.51.0 || >2.51.0`. viem 2.51.0 resolves its `ox` dependency from a non-registry `pkg.pr.new` preview tarball — a mutable, unaudited source unfit for a published SDK's lockfile. The range excludes only 2.51.0 while still allowing 2.50.x patches and future clean releases ([#46](https://github.com/stellar/stellar-mpp-sdk/pull/46))
 
-## [0.5.1] - 2026-04-21
+## [0.5.1]
 
 ### Added
 
@@ -69,11 +77,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix push-mode DoS via semaphore exhaustion: replace unbounded polling with single `getTransaction` lookup, add schema-level XDR size cap and hash format validation ([#44](https://github.com/stellar/stellar-mpp-sdk/pull/44))
 
-## [0.5.0] - 2026-04-13
+## [0.5.0]
 
 - Harden verification, replay protection, fix sponsored charge path, and replace SAC terminology with SEP-41 across docs, comments, and error messages ([#42](https://github.com/stellar/stellar-mpp-sdk/pull/42))
 
-## [0.4.0] - 2026-04-01
+## [0.4.0]
 
 ### Changed
 
@@ -90,7 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix charge client so it sends a transaction with signed auth entries when the server is sponsoring transaction fees ([#37](https://github.com/stellar/stellar-mpp-sdk/pull/37))
 - Fix CHANGELOG entries for v0.3.0 ([#36](https://github.com/stellar/stellar-mpp-sdk/pull/36))
 
-## [0.3.0] - 2026-03-31
+## [0.3.0]
 
 ### Added
 
@@ -101,7 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Align fee-bump transaction handling with the spec and restructure server signer configuration (`feePayer`) to match cross-chain conventions [#33](https://github.com/stellar/stellar-mpp-sdk/pull/33)
 - Nest channel server `signer` + `feeBumpSigner` into `feePayer: { envelopeSigner, feeBumpSigner? }` to match charge server convention [#34](https://github.com/stellar/stellar-mpp-sdk/pull/34)
 
-## [0.2.1] - 2026-03-30
+## [0.2.1]
 
 ### Fixed
 
@@ -112,7 +120,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rewrote the Install section in the README to focus on npm package consumers, with peer dependency callout and subpath import examples [#29](https://github.com/stellar/stellar-mpp-sdk/pull/29)
 - Add CHANGELOG and release structure for v0.2.x [#31](https://github.com/stellar/stellar-mpp-sdk/pull/31)
 
-## [0.2.0] - 2026-03-30
+## [0.2.0]
 
 ### Added
 
@@ -123,7 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Env parsing primitives for Stellar-aware configuration
 - Shared utilities: fee bump wrapping, transaction polling with backoff, Soroban simulation, unit conversion, keypair resolution
 
-[Unreleased]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/stellar/stellar-mpp-sdk/compare/v0.5.0...v0.5.1
