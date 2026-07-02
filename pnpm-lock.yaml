@@ -46,8 +46,8 @@ importers:
         specifier: ^8.2.0
         version: 8.2.0
       mppx:
-        specifier: ^0.7.0
-        version: 0.7.0(express@5.2.1)(typescript@6.0.3)(viem@2.53.1(typescript@6.0.3)(zod@4.4.3))
+        specifier: ^0.8.1
+        version: 0.8.1(express@5.2.1)(typescript@6.0.3)(viem@2.53.1(typescript@6.0.3)(zod@4.4.3))
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -499,8 +499,8 @@ packages:
     engines: {node: '>=22.0.0'}
     hasBin: true
 
-  '@stripe/stripe-js@9.7.0':
-    resolution: {integrity: sha512-r1ElolvWXM4aYnZZVHvKW3EDL8JcwEuIgTuWxlB5lvC+YsvjkQ0gX35x9d8dTDubX395fViLVqkaolVs1PmIQQ==}
+  '@stripe/stripe-js@9.8.0':
+    resolution: {integrity: sha512-DHJpol/98VKyojNSYmpkB5vOMnlf87hPe0wPxyaYTNiTMk5QjKMXDfSZLwGctYIXAgAWDFeRABc8lFAj0BELyw==}
     engines: {node: '>=12.16'}
 
   '@toon-format/toon@2.3.0':
@@ -905,6 +905,10 @@ packages:
   eventemitter3@5.0.1:
     resolution: {integrity: sha512-GWkBvjiSZK87ELrYOSESUYeVIc9mvLLf/nXalMOS5dYrgZq9o5OVkbZAVM06CVxYsCwH9BDZFPlQTlPA1j4ahA==}
 
+  eventsource-parser@3.0.6:
+    resolution: {integrity: sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg==}
+    engines: {node: '>=18.0.0'}
+
   eventsource-parser@3.1.0:
     resolution: {integrity: sha512-kJezFj9YFAMLeORyi7aCLxLbD5/qWMQnoMVlVPyHIll7lgRJCc3JVln9Vgl9nwQi0YkMnhdGTMNn7CkRRAptMg==}
     engines: {node: '>=18.0.0'}
@@ -1256,14 +1260,14 @@ packages:
     resolution: {integrity: sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg==}
     engines: {node: 18 || 20 || >=22}
 
-  mppx@0.7.0:
-    resolution: {integrity: sha512-qOHQjD75wSHSZeXutngPXou8NEMIOw6RhZ/lQbo2JmDQWfOi40pLGpqXgHgwIjw4YcJHClFsI7mFXBK3Nj5WCQ==}
+  mppx@0.8.1:
+    resolution: {integrity: sha512-k0l4wK0DhGruTb6DfbTQAvNDikLKQ/c/wId9WYTSInYV708C8JBvIB+HBhp8zDfL4bXx/lzkb+isoc9ojKlpjA==}
     hasBin: true
     peerDependencies:
       '@modelcontextprotocol/sdk': '>=1.25.0'
       elysia: '>=1'
       express: '>=5'
-      hono: '>=4.12.18'
+      hono: '>=4.12.25'
       viem: '>=2.51.0'
     peerDependenciesMeta:
       '@modelcontextprotocol/sdk':
@@ -1312,14 +1316,6 @@ packages:
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
     engines: {node: '>= 0.8.0'}
-
-  ox@0.14.27:
-    resolution: {integrity: sha512-+xhLHo/f+f4BH121/1Pomm/1vgBBda1wYiFpTvjSo8o5OcEj76Pf1hGPJiepoYMTQoTm2SKdSBvWkFWk5l07PA==}
-    peerDependencies:
-      typescript: '>=5.4.0'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
 
   ox@0.14.29:
     resolution: {integrity: sha512-M5j87Ec4V99MQdRct/g09eWXW60g6zhHTUs1lr4deUtrPDnezBdCJTgKd7pxqTpSZBFveV0ALi9jMMuT1qKyNg==}
@@ -2015,7 +2011,7 @@ snapshots:
       - debug
       - supports-color
 
-  '@stripe/stripe-js@9.7.0': {}
+  '@stripe/stripe-js@9.8.0': {}
 
   '@toon-format/toon@2.3.0': {}
 
@@ -2493,6 +2489,8 @@ snapshots:
 
   eventemitter3@5.0.1: {}
 
+  eventsource-parser@3.0.6: {}
+
   eventsource-parser@3.1.0: {}
 
   eventsource@4.1.0:
@@ -2819,11 +2817,12 @@ snapshots:
     dependencies:
       brace-expansion: 5.0.6
 
-  mppx@0.7.0(express@5.2.1)(typescript@6.0.3)(viem@2.53.1(typescript@6.0.3)(zod@4.4.3)):
+  mppx@0.8.1(express@5.2.1)(typescript@6.0.3)(viem@2.53.1(typescript@6.0.3)(zod@4.4.3)):
     dependencies:
-      '@stripe/stripe-js': 9.7.0
+      '@stripe/stripe-js': 9.8.0
+      eventsource-parser: 3.0.6
       incur: 0.4.10
-      ox: 0.14.27(typescript@6.0.3)(zod@4.4.3)
+      ox: 0.14.29(typescript@6.0.3)(zod@4.4.3)
       viem: 2.53.1(typescript@6.0.3)(zod@4.4.3)
       zod: 4.4.3
     optionalDependencies:
@@ -2862,21 +2861,6 @@ snapshots:
       type-check: 0.4.0
       word-wrap: 1.2.5
 
-  ox@0.14.27(typescript@6.0.3)(zod@4.4.3):
-    dependencies:
-      '@adraffy/ens-normalize': 1.11.1
-      '@noble/ciphers': 1.3.0
-      '@noble/curves': 1.9.1
-      '@noble/hashes': 1.8.0
-      '@scure/bip32': 1.7.0
-      '@scure/bip39': 1.6.0
-      abitype: 1.2.4(typescript@6.0.3)(zod@4.4.3)
-      eventemitter3: 5.0.1
-    optionalDependencies:
-      typescript: 6.0.3
-    transitivePeerDependencies:
-      - zod
-
   ox@0.14.29(typescript@6.0.3)(zod@4.4.3):
     dependencies:
       '@adraffy/ens-normalize': 1.11.1
@@ -2885,7 +2869,7 @@ snapshots:
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
-      abitype: 1.2.3(typescript@6.0.3)(zod@4.4.3)
+      abitype: 1.2.4(typescript@6.0.3)(zod@4.4.3)
       eventemitter3: 5.0.1
     optionalDependencies:
       typescript: 6.0.3

@@ -28,7 +28,7 @@ import { charge as serverCharge } from '../../../server/Charge.js'
 const TEST_PAYER = Keypair.random()
 const TEST_RECIPIENT = Keypair.random().publicKey()
 
-const MPP_SECRET_KEY = 'legacy-hash-test-secret-key'
+const MPP_SECRET_KEY = 'legacy-hash-test-secret-key-min-32-bytes'
 const sorobanServer = new SorobanServer(SOROBAN_RPC_URLS[STELLAR_TESTNET])
 
 /**
