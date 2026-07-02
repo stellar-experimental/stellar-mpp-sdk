@@ -37,13 +37,13 @@ function transferInvocation(from: string): xdr.SorobanAuthorizedInvocation {
 }
 
 async function signedEntryFor(signer: Keypair): Promise<xdr.SorobanAuthorizationEntry> {
-  return authorizeInvocation(
+  return authorizeInvocation({
     signer,
-    VALID_UNTIL_LEDGER,
-    transferInvocation(signer.publicKey()),
-    signer.publicKey(),
-    NETWORK,
-  )
+    validUntilLedgerSeq: VALID_UNTIL_LEDGER,
+    invocation: transferInvocation(signer.publicKey()),
+    publicKey: signer.publicKey(),
+    networkPassphrase: NETWORK,
+  })
 }
 
 describe('verifyAuthEntrySignature', () => {
@@ -85,16 +85,16 @@ describe('verifyAuthEntrySignature', () => {
     const attacker = Keypair.random()
 
     // Address is the authorizer, but the signature is produced by the attacker.
-    const entry = await authorizeInvocation(
-      (preimage: xdr.HashIdPreimage) => ({
+    const entry = await authorizeInvocation({
+      signer: (preimage: xdr.HashIdPreimage) => ({
         signature: attacker.sign(hash(preimage.toXDR())),
         publicKey: attacker.publicKey(),
       }),
-      VALID_UNTIL_LEDGER,
-      transferInvocation(authorizer.publicKey()),
-      authorizer.publicKey(),
-      NETWORK,
-    )
+      validUntilLedgerSeq: VALID_UNTIL_LEDGER,
+      invocation: transferInvocation(authorizer.publicKey()),
+      publicKey: authorizer.publicKey(),
+      networkPassphrase: NETWORK,
+    })
 
     expect(() => verifyAuthEntrySignature(entry, NETWORK)).toThrow(
       'key other than the authorizing account',
