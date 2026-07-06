@@ -4,7 +4,6 @@ import {
   Contract,
   Keypair,
   Memo,
-  Networks,
   Operation,
   TransactionBuilder,
   authorizeInvocation,
@@ -114,7 +113,7 @@ function buildMockPrepareTxAuthEntry() {
       ),
       subInvocations: [],
     }),
-    networkPassphrase: Networks.FUTURENET,
+    networkPassphrase: NETWORK_PASSPHRASE[STELLAR_TESTNET],
   }).then((auth) => {
     transferOp.body().invokeHostFunctionOp().auth().push(auth)
   })
@@ -175,7 +174,7 @@ async function buildTxWithAuthInvocation(opts: {
     signer: TEST_KEYPAIR,
     validUntilLedgerSeq: 1000,
     invocation: opts.rootInvocation,
-    networkPassphrase: Networks.FUTURENET,
+    networkPassphrase: NETWORK_PASSPHRASE[STELLAR_TESTNET],
   })
   transferOp.body().invokeHostFunctionOp().auth().push(auth)
   return new TransactionBuilder(account, {
