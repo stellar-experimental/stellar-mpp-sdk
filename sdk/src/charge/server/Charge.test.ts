@@ -5126,13 +5126,13 @@ describe('charge sponsored auth-entry expiration', () => {
       ),
       subInvocations: [],
     })
-    const auth = await authorizeInvocation(
-      PAYER,
-      validUntilLedger,
+    const auth = await authorizeInvocation({
+      signer: PAYER,
+      validUntilLedgerSeq: validUntilLedger,
       invocation,
-      PAYER.publicKey(),
-      NETWORK_PASSPHRASE,
-    )
+      publicKey: PAYER.publicKey(),
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
     transferOp.body().invokeHostFunctionOp().auth().push(auth)
     const tx = new TransactionBuilder(account, {
       fee: BASE_FEE,

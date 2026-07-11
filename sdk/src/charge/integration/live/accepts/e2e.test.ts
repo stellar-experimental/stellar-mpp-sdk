@@ -49,7 +49,7 @@ const sponsoredEnvelopeSigners = {
 const TEST_RECIPIENT = Keypair.random().publicKey()
 const TEST_FEE_PAYER = Keypair.random()
 
-const MPP_SECRET_KEY = 'e2e-test-secret-key'
+const MPP_SECRET_KEY = 'e2e-test-secret-key-min-32-bytes-long'
 const sorobanServer = new SorobanServer(SOROBAN_RPC_URLS[STELLAR_TESTNET])
 
 type ServerChargeMethod = ReturnType<typeof serverCharge>

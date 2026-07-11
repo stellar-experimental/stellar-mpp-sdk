@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Upgrade dependencies to the latest versions clearing the 7-day `minimumReleaseAge` soak, including the `@stellar/stellar-sdk` (`^16.0.1`, major) and `mppx` (`^0.8.1`) peer dependencies — consumers should bump both [#54](https://github.com/stellar/stellar-mpp-sdk/pull/54)
+
 ## [0.7.1]
 
 ### Added

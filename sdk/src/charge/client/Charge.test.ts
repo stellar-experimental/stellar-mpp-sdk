@@ -96,10 +96,10 @@ function buildMockPrepareTxAuthEntry() {
     new Address(RECIPIENT).toScVal(),
     nativeToScVal(100000n, { type: 'i128' }),
   )
-  authorizeInvocation(
-    TEST_KEYPAIR,
-    1000,
-    new xdr.SorobanAuthorizedInvocation({
+  authorizeInvocation({
+    signer: TEST_KEYPAIR,
+    validUntilLedgerSeq: 1000,
+    invocation: new xdr.SorobanAuthorizedInvocation({
       function: xdr.SorobanAuthorizedFunction.sorobanAuthorizedFunctionTypeContractFn(
         new xdr.InvokeContractArgs({
           contractAddress: contract.address().toScAddress(),
@@ -113,7 +113,8 @@ function buildMockPrepareTxAuthEntry() {
       ),
       subInvocations: [],
     }),
-  ).then((auth) => {
+    networkPassphrase: NETWORK_PASSPHRASE[STELLAR_TESTNET],
+  }).then((auth) => {
     transferOp.body().invokeHostFunctionOp().auth().push(auth)
   })
   return new TransactionBuilder(account, {
@@ -169,7 +170,12 @@ async function buildTxWithAuthInvocation(opts: {
     new Address(RECIPIENT).toScVal(),
     nativeToScVal(100000n, { type: 'i128' }),
   )
-  const auth = await authorizeInvocation(TEST_KEYPAIR, 1000, opts.rootInvocation)
+  const auth = await authorizeInvocation({
+    signer: TEST_KEYPAIR,
+    validUntilLedgerSeq: 1000,
+    invocation: opts.rootInvocation,
+    networkPassphrase: NETWORK_PASSPHRASE[STELLAR_TESTNET],
+  })
   transferOp.body().invokeHostFunctionOp().auth().push(auth)
   return new TransactionBuilder(account, {
     fee: '100',

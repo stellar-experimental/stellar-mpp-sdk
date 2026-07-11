@@ -45,7 +45,7 @@ describe('channel server creation', () => {
   it('returns 402 challenge when no credential provided', async () => {
     const { Mppx } = await import('mppx/server')
     const mppx = Mppx.create({
-      secretKey: 'test-secret-key-for-mppx',
+      secretKey: 'test-secret-key-for-mppx-min-32-bytes',
       methods: [
         serverChannel({
           channel: CHANNEL_ADDRESS,

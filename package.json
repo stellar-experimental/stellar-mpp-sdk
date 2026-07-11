@@ -66,23 +66,23 @@
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@stellar/stellar-sdk": "^15.1.0",
-    "mppx": "^0.6.29"
+    "@stellar/stellar-sdk": "^16.0.1",
+    "mppx": "^0.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@stellar/stellar-sdk": "^15.1.0",
+    "@stellar/stellar-sdk": "^16.0.1",
     "@types/express": "^5.0.6",
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.0.1",
     "@vitest/coverage-v8": "^4.1.9",
-    "eslint": "^10.5.0",
+    "eslint": "^10.6.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",
-    "mppx": "^0.6.31",
+    "mppx": "^0.8.1",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
-    "prettier": "^3.8.4",
+    "prettier": "^3.9.3",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.0",
@@ -91,9 +91,9 @@
   },
   "pnpm": {
     "overrides": {
-      "axios": "^1.16.0",
+      "axios": "^1.18.1",
       "form-data": "^4.0.6",
-      "vite": "^8.0.16",
+      "vite": "^8.1.0",
       "ws": "^8.21.0"
     }
   },

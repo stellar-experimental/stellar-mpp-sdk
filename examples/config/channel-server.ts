@@ -20,7 +20,7 @@ export class Env {
   }
 
   static get mppSecretKey(): string {
-    return parseOptional('MPP_SECRET_KEY', 'stellar-mpp-channel-demo-secret')!
+    return parseOptional('MPP_SECRET_KEY', 'stellar-mpp-channel-demo-secret-key-32b')!
   }
 
   static get rateLimitWindowMs(): number {
