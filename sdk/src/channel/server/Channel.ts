@@ -693,27 +693,13 @@ export function channel(parameters: channel.Parameters) {
       return { windowStartMs, spentStroops: spentStroops + charge }
     }
 
-    // Prefer the store's atomic read-modify-write so the budget holds under
-    // concurrent settlements (which run outside the cumulative lock). Stores
-    // without `update` fall back to get/put — best-effort under cross-process
-    // races, acceptable for a fee-drain guard rather than a hard cap.
-    const atomicStore = store as {
-      update?: (
-        key: string,
-        fn: (current: FeeBudgetRecord | null) => Store.Change<FeeBudgetRecord, void>,
-      ) => Promise<void>
-    }
-
-    if (typeof atomicStore.update === 'function') {
-      await atomicStore.update(budgetKey, (current) => ({
-        op: 'set',
-        value: applyCharge(current),
-        result: undefined,
-      }))
-    } else {
-      const current = (await store.get(budgetKey)) as FeeBudgetRecord | null
-      await store.put(budgetKey, applyCharge(current))
-    }
+    // Atomic read-modify-write so the budget holds under concurrent settlements
+    // (which run outside the cumulative lock).
+    await store.update(budgetKey, (current): Store.Change<FeeBudgetRecord, void> => ({
+      op: 'set',
+      value: applyCharge(current as FeeBudgetRecord | null),
+      result: undefined,
+    }))
   }
 
   /**

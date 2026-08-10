@@ -23,7 +23,7 @@ import { Mppx, Store } from 'mppx/server'
 import { Mppx as MppxClient } from 'mppx/client'
 import { stellar } from '../sdk/src/charge/server/index.js'
 import { stellar as stellarClient } from '../sdk/src/charge/client/index.js'
-import { USDC_SAC_TESTNET } from '../sdk/src/constants.js'
+import { USDC_SAC_TESTNET, XLM_SAC_TESTNET } from '../sdk/src/constants.js'
 import { Env } from './config/charge-server.js'
 
 const logger = pino({ level: Env.logLevel })
@@ -50,7 +50,10 @@ const mppx = Mppx.create({
   methods: [
     stellar.charge({
       recipient: Env.stellarRecipient,
-      currency: USDC_SAC_TESTNET,
+      // USDC is a classic issued asset, so payer and recipient both need a USDC
+      // trustline. Set CHARGE_CURRENCY=xlm to run the demo on friendbot funding
+      // alone — native XLM needs no trustline.
+      currency: process.env.CHARGE_CURRENCY === 'xlm' ? XLM_SAC_TESTNET : USDC_SAC_TESTNET,
       network: 'stellar:testnet',
       store: Store.memory(),
       ...(feePayer ? { feePayer } : {}),
