@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Refresh transitive development dependencies (`ip-address`, `postcss`, `brace-expansion`) to clear high-severity advisories in third-party packages. All three are build- and test-time only, so the published package is unaffected. No `package.json` change was needed — each parent's existing range already permitted the patched release [#62](https://github.com/stellar/stellar-mpp-sdk/pull/62)
+- Pin transitive development dependencies (`ip-address`, `postcss`, `brace-expansion`) via `pnpm.overrides` to clear advisories in third-party packages. All three are build- and test-time only, so the published package is unaffected [#62](https://github.com/stellar/stellar-mpp-sdk/pull/62)
+  - Drop the now-redundant `form-data` and `vite` overrides — their parents' ranges already resolve to a patched version unaided
 
 ### Changed
 
