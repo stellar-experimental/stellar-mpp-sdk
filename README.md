@@ -296,6 +296,7 @@ stellar.channel({
   pollDelayMs?: number,           // delay between poll attempts in ms (default: 1,000)
   pollTimeoutMs?: number,         // overall poll timeout in ms (default: 20,000)
   simulationTimeoutMs?: number,   // simulation timeout in ms (default: 10,000)
+  simulateMaxConcurrent?: number, // max verifications simulating at once (default: 10)
   logger?: Logger,                // structured logger (default: no-op)
 })
 ```
