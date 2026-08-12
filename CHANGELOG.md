@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Pin transitive development dependencies (`ip-address`, `postcss`, `brace-expansion`) via `pnpm.overrides` to clear advisories in third-party packages. All three are build- and test-time only, so the published package is unaffected [#62](https://github.com/stellar/stellar-mpp-sdk/pull/62)
+  - Drop the now-redundant `form-data` and `vite` overrides — their parents' ranges already resolve to a patched version unaided
+
 ### Changed
 
 - Upgrade dependencies to the latest versions clearing the 7-day `minimumReleaseAge` soak, including the `@stellar/stellar-sdk` (`^16.0.1`, major) and `mppx` (`^0.8.1`) peer dependencies — consumers should bump both [#54](https://github.com/stellar/stellar-mpp-sdk/pull/54)
