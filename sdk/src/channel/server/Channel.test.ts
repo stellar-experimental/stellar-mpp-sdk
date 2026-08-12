@@ -3101,7 +3101,7 @@ describe('channel verification runs RPC outside the cumulative lock', () => {
     expect(stateReads.max).toBe(4)
   })
 
-  it('bounds concurrent on-chain state reads by simulateMaxConcurrent', async () => {
+  it('bounds concurrent on-chain state reads by verifyMaxConcurrent', async () => {
     // The semaphore wraps both RPC paths, so it caps state reads too.
     trackSimulateConcurrency(0)
     const stateReads = trackStateReadConcurrency()
@@ -3111,7 +3111,7 @@ describe('channel verification runs RPC outside the cumulative lock', () => {
       checkOnChainState: true,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
-      simulateMaxConcurrent: 2,
+      verifyMaxConcurrent: 2,
     })
 
     const credentials = makeConcurrentCredentials([1000n, 2000n, 3000n, 4000n])
@@ -3122,7 +3122,7 @@ describe('channel verification runs RPC outside the cumulative lock', () => {
     expect(stateReads.max).toBe(2)
   })
 
-  it('bounds concurrent simulations by simulateMaxConcurrent', async () => {
+  it('bounds concurrent simulations by verifyMaxConcurrent', async () => {
     // With the lock no longer serializing RPC, the semaphore is the only cap on
     // fan-out onto the RPC provider.
     const counter = trackSimulateConcurrency()
@@ -3132,7 +3132,7 @@ describe('channel verification runs RPC outside the cumulative lock', () => {
       checkOnChainState: false,
       commitmentKey: COMMITMENT_KEY,
       store: Store.memory(),
-      simulateMaxConcurrent: 2,
+      verifyMaxConcurrent: 2,
     })
 
     const credentials = makeConcurrentCredentials([1000n, 2000n, 3000n, 4000n])

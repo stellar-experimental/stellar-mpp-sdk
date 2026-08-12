@@ -25,7 +25,7 @@ import {
   DEFAULT_POLL_MAX_ATTEMPTS,
   DEFAULT_POLL_MAX_CONCURRENT,
   DEFAULT_POLL_TIMEOUT_MS,
-  DEFAULT_SIMULATE_MAX_CONCURRENT,
+  DEFAULT_VERIFY_MAX_CONCURRENT,
   DEFAULT_SIMULATION_TIMEOUT_MS,
 } from '../../shared/defaults.js'
 import { Semaphore } from '../../shared/semaphore.js'
@@ -147,7 +147,7 @@ export function channel(parameters: channel.Parameters) {
     pollMaxConcurrent = DEFAULT_POLL_MAX_CONCURRENT,
     pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
     rpcUrl,
-    simulateMaxConcurrent = DEFAULT_SIMULATE_MAX_CONCURRENT,
+    verifyMaxConcurrent = DEFAULT_VERIFY_MAX_CONCURRENT,
     simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
     store,
     feeBudget,
@@ -158,9 +158,9 @@ export function channel(parameters: channel.Parameters) {
   const networkPassphrase = NETWORK_PASSPHRASE[network]
   const rpcServer = new rpc.Server(resolvedRpcUrl)
   const pollSemaphore = new Semaphore(pollMaxConcurrent)
-  // Bounds credential verifications holding RPC simulations concurrently. The
-  // simulations run outside cumulativeLock, so this is the only cap on fan-out.
-  const simulateSemaphore = new Semaphore(simulateMaxConcurrent)
+  // Bounds credential verifications holding RPC calls concurrently. Those calls
+  // run outside cumulativeLock, so this is the only cap on fan-out.
+  const verifySemaphore = new Semaphore(verifyMaxConcurrent)
 
   // Parse the commitment public key (accepts G... Stellar public key string or Keypair)
   const commitmentKP = (() => {
@@ -418,7 +418,7 @@ export function channel(parameters: channel.Parameters) {
     // in flight as a side effect of serialising validation; now that the RPC
     // runs unlocked, that cap has to be explicit or a burst of credentials fans
     // straight out onto the RPC provider.
-    await simulateSemaphore.acquire()
+    await verifySemaphore.acquire()
     try {
       // Verify the commitment signature before anything writes channel state.
       await verifyCommitmentSignature(commitmentAmount, signatureBytes)
@@ -431,7 +431,7 @@ export function channel(parameters: channel.Parameters) {
         await verifyOnChainState(commitmentAmount)
       }
     } finally {
-      simulateSemaphore.release()
+      verifySemaphore.release()
     }
 
     // A close can only be settled by a server configured with an envelope signer.
@@ -1172,15 +1172,15 @@ export declare namespace channel {
      */
     rpcUrl?: string
     /**
-     * Maximum credential verifications allowed to hold Soroban RPC simulations
-     * at once. Verification runs its simulations outside the cumulative lock so
-     * a slow RPC cannot stall concurrent payers, which makes this the only
-     * bound on RPC fan-out under a burst of credentials. Callers past the limit
-     * queue briefly and are then rejected with a `SemaphoreTimeoutError`.
+     * Maximum credential verifications allowed to hold Soroban RPC calls at
+     * once. Verification makes those calls outside the cumulative lock so a slow
+     * RPC cannot stall concurrent payers, which makes this the only bound on RPC
+     * fan-out under a burst of credentials. Callers past the limit queue briefly
+     * and are then rejected with a `SemaphoreTimeoutError`.
      *
      * @default 10
      */
-    simulateMaxConcurrent?: number
+    verifyMaxConcurrent?: number
     /** Simulation timeout in milliseconds. @default 10_000 */
     simulationTimeoutMs?: number
     /**
