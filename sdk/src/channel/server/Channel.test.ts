@@ -1,6 +1,6 @@
 import { Account, Address, Keypair, Networks, Transaction, xdr } from '@stellar/stellar-sdk'
 import { Challenge, Credential, Store } from 'mppx'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Hoisted mock stubs — accessible inside the vi.mock factory
 const mockGetAccount = vi.fn()
@@ -2976,5 +2976,196 @@ describe('channel server close transaction inspection (auth-tree injection)', ()
       }),
     ).rejects.toThrow('Prepared close authorization carries unexpected sub-invocations.')
     expect(mockSendTransaction).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// RPC-outside-the-lock tests
+// ---------------------------------------------------------------------------
+
+describe('channel verification runs RPC outside the cumulative lock', () => {
+  const COMMITMENT_BYTES = Buffer.from('unlocked-rpc-commitment-bytes')
+
+  // These tests swap in delayed mock implementations. Mocks are not auto-cleared
+  // in this file, so restore the module-level defaults rather than leaving a
+  // slow getChannelState behind for whatever test is added next.
+  afterEach(() => {
+    mockGetChannelState.mockReset()
+    mockGetChannelState.mockResolvedValue(mockHealthyChannelState())
+  })
+
+  /**
+   * Replaces the simulate mock with a slow one that records how many
+   * simulations are in flight at once.
+   *
+   * @returns A live counter — read `max` after the verifies settle.
+   */
+  function trackSimulateConcurrency(delayMs = 50) {
+    const counter = { inFlight: 0, max: 0 }
+    mockSimulateTransaction.mockReset()
+    mockSimulateTransaction.mockImplementation(() => {
+      counter.inFlight++
+      counter.max = Math.max(counter.max, counter.inFlight)
+      return new Promise((resolve) =>
+        setTimeout(() => {
+          counter.inFlight--
+          resolve(successSimResult(COMMITMENT_BYTES))
+        }, delayMs),
+      )
+    })
+    return counter
+  }
+
+  /**
+   * Replaces the on-chain state mock with a slow one that records how many
+   * state reads are in flight at once.
+   *
+   * `verifyOnChainState` is a separate, multi-call RPC path from the
+   * signature simulation, so it needs its own overlap assertion — tests that
+   * run with `checkOnChainState: false` would still pass if this path alone
+   * were moved back under the cumulative lock.
+   *
+   * @returns A live counter — read `max` after the verifies settle.
+   */
+  function trackStateReadConcurrency(delayMs = 50) {
+    const counter = { inFlight: 0, max: 0 }
+    mockGetChannelState.mockReset()
+    mockGetChannelState.mockImplementation(() => {
+      counter.inFlight++
+      counter.max = Math.max(counter.max, counter.inFlight)
+      return new Promise((resolve) =>
+        setTimeout(() => {
+          counter.inFlight--
+          resolve(mockHealthyChannelState())
+        }, delayMs),
+      )
+    })
+    return counter
+  }
+
+  /** Credentials all signed over the same bytes, so each passes the mocked
+   *  `prepare_commitment` signature check regardless of its amount. */
+  function makeConcurrentCredentials(amounts: bigint[]) {
+    return amounts.map((amount) =>
+      makeSignedCredential({
+        commitmentBytes: COMMITMENT_BYTES,
+        cumulativeAmount: amount,
+        challengeAmount: amount.toString(),
+      }),
+    )
+  }
+
+  it('overlaps simulations across concurrent verifies instead of serializing them', async () => {
+    // The regression this guards: when the signature simulation ran under the
+    // cumulative lock, only one could ever be in flight, so a slow RPC stalled
+    // every concurrent payer on the channel.
+    const counter = trackSimulateConcurrency()
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
+      commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
+    })
+
+    const credentials = makeConcurrentCredentials([1000n, 2000n, 3000n, 4000n])
+    await Promise.allSettled(
+      credentials.map((c) => method.verify({ credential: c as any, request: c.challenge.request })),
+    )
+
+    expect(counter.max).toBe(4)
+  })
+
+  it('overlaps on-chain state reads across concurrent verifies', async () => {
+    // Same guarantee as above, for the other RPC path. `verifyOnChainState`
+    // costs several calls, so serializing it under the lock would stall
+    // concurrent payers just as badly — and the checkOnChainState: false tests
+    // above cannot detect that.
+    trackSimulateConcurrency(0)
+    const stateReads = trackStateReadConcurrency()
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      checkOnChainState: true,
+      commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
+    })
+
+    const credentials = makeConcurrentCredentials([1000n, 2000n, 3000n, 4000n])
+    await Promise.allSettled(
+      credentials.map((c) => method.verify({ credential: c as any, request: c.challenge.request })),
+    )
+
+    // All four reach the state read together: one verification progresses into
+    // it while the others' reads are still pending.
+    expect(stateReads.max).toBe(4)
+  })
+
+  it('bounds concurrent on-chain state reads by verifyMaxConcurrent', async () => {
+    // The semaphore wraps both RPC paths, so it caps state reads too.
+    trackSimulateConcurrency(0)
+    const stateReads = trackStateReadConcurrency()
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      checkOnChainState: true,
+      commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
+      verifyMaxConcurrent: 2,
+    })
+
+    const credentials = makeConcurrentCredentials([1000n, 2000n, 3000n, 4000n])
+    await Promise.allSettled(
+      credentials.map((c) => method.verify({ credential: c as any, request: c.challenge.request })),
+    )
+
+    expect(stateReads.max).toBe(2)
+  })
+
+  it('bounds concurrent simulations by verifyMaxConcurrent', async () => {
+    // With the lock no longer serializing RPC, the semaphore is the only cap on
+    // fan-out onto the RPC provider.
+    const counter = trackSimulateConcurrency()
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
+      commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
+      verifyMaxConcurrent: 2,
+    })
+
+    const credentials = makeConcurrentCredentials([1000n, 2000n, 3000n, 4000n])
+    await Promise.allSettled(
+      credentials.map((c) => method.verify({ credential: c as any, request: c.challenge.request })),
+    )
+
+    expect(counter.max).toBe(2)
+  })
+
+  it('still admits exactly one of several concurrent credentials at the same cumulative', async () => {
+    // Unlocked RPC must not weaken monotonicity: all four clear the pre-RPC
+    // short-circuit against a cumulative of 0, then serialize in the locked
+    // commit, where only the first can advance the cumulative.
+    trackSimulateConcurrency()
+
+    const method = channel({
+      channel: CHANNEL_ADDRESS,
+      checkOnChainState: false,
+      commitmentKey: COMMITMENT_KEY,
+      store: Store.memory(),
+    })
+
+    const credentials = makeConcurrentCredentials([1000n, 1000n, 1000n, 1000n])
+    const results = await Promise.allSettled(
+      credentials.map((c) => method.verify({ credential: c as any, request: c.challenge.request })),
+    )
+
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    for (const rejected of results.filter((r) => r.status === 'rejected')) {
+      expect((rejected as PromiseRejectedResult).reason.message).toContain(
+        'must be greater than previous cumulative',
+      )
+    }
   })
 })

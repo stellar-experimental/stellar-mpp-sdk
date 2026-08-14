@@ -8,6 +8,12 @@ export const DEFAULT_POLL_JITTER_MS = 200
 export const DEFAULT_POLL_TIMEOUT_MS = 20_000
 export const DEFAULT_POLL_MAX_CONCURRENT = 10
 export const DEFAULT_SIMULATION_TIMEOUT_MS = 10_000
+/**
+ * Maximum credential verifications allowed to hold Soroban RPC calls at once.
+ * Channel verification makes those calls outside the cumulative lock, so this
+ * is the only bound on RPC fan-out under a burst of credentials.
+ */
+export const DEFAULT_VERIFY_MAX_CONCURRENT = 10
 
 /**
  * Default timeout in seconds for read-only contract getter simulations (State.ts).

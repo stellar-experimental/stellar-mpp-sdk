@@ -25,6 +25,7 @@ import {
   DEFAULT_POLL_MAX_ATTEMPTS,
   DEFAULT_POLL_MAX_CONCURRENT,
   DEFAULT_POLL_TIMEOUT_MS,
+  DEFAULT_VERIFY_MAX_CONCURRENT,
   DEFAULT_SIMULATION_TIMEOUT_MS,
 } from '../../shared/defaults.js'
 import { Semaphore } from '../../shared/semaphore.js'
@@ -146,6 +147,7 @@ export function channel(parameters: channel.Parameters) {
     pollMaxConcurrent = DEFAULT_POLL_MAX_CONCURRENT,
     pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
     rpcUrl,
+    verifyMaxConcurrent = DEFAULT_VERIFY_MAX_CONCURRENT,
     simulationTimeoutMs = DEFAULT_SIMULATION_TIMEOUT_MS,
     store,
     feeBudget,
@@ -156,6 +158,9 @@ export function channel(parameters: channel.Parameters) {
   const networkPassphrase = NETWORK_PASSPHRASE[network]
   const rpcServer = new rpc.Server(resolvedRpcUrl)
   const pollSemaphore = new Semaphore(pollMaxConcurrent)
+  // Bounds credential verifications holding RPC calls concurrently. Those calls
+  // run outside cumulativeLock, so this is the only cap on fan-out.
+  const verifySemaphore = new Semaphore(verifyMaxConcurrent)
 
   // Parse the commitment public key (accepts G... Stellar public key string or Keypair)
   const commitmentKP = (() => {
@@ -235,17 +240,26 @@ export function channel(parameters: channel.Parameters) {
       }
     },
     async verify({ credential }) {
-      // Phase 1: validate and update cumulative under lock (fast path).
-      // Phase 2: long operations (broadcast, poll) run outside the lock.
-      const validated = await new Promise<ValidatedCredential>((resolve, reject) => {
-        cumulativeLock = cumulativeLock.then(
-          () => doValidate(credential).then(resolve, reject),
-          () => doValidate(credential).then(resolve, reject),
-        )
-      })
+      // Phase 1a: format checks, replay claim, and RPC — outside the lock.
+      // Phase 1b: authoritative cumulative write — under the lock, store only.
+      // Phase 2: broadcast and poll for a close — outside the lock.
+      const prepared = await doPrepare(credential)
+      const validated = await withCumulativeLock(() => doCommit(prepared))
       return doSettle(validated)
     },
   })
+
+  /** Output of {@link doPrepare}: everything {@link doCommit} needs to write
+   *  channel state without re-reading the credential. */
+  type PreparedCredential = {
+    action: 'voucher' | 'close'
+    commitmentAmount: bigint
+    requestedAmount: bigint
+    signatureBytes: Buffer
+    challengeStoreKey: string
+    challengeReference: string
+    externalId?: string
+  }
 
   type ValidatedCredential =
     | { action: 'voucher'; receipt: Receipt.Receipt }
@@ -258,21 +272,29 @@ export function channel(parameters: channel.Parameters) {
       }
 
   /**
-   * Phase 1 — validation (runs under {@link cumulativeLock}).
+   * Serializes `fn` against every other holder of the cumulative lock.
    *
-   * Performs replay protection, cumulative amount checks, and signature
-   * verification. For vouchers, writes the cumulative and returns the
-   * receipt directly. For close, returns the validated state so
-   * the long on-chain operation can run outside the lock.
+   * The same callback is passed to both `.then` arms so a rejected predecessor
+   * does not poison the chain — without the second arm, one failed validation
+   * would leave `cumulativeLock` permanently rejected and every later caller
+   * would skip its turn.
    */
-  async function doValidate(credential: ChannelCredential): Promise<ValidatedCredential> {
-    const { challenge, payload } = credential
-    const { request: challengeRequest } = challenge
+  function withCumulativeLock<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      cumulativeLock = cumulativeLock.then(
+        () => fn().then(resolve, reject),
+        () => fn().then(resolve, reject),
+      )
+    })
+  }
 
-    const action = payload.action ?? 'voucher'
-    const { externalId } = challengeRequest
-
-    // Reject credentials once the channel has been closed on-chain. Applied to all actions.
+  /**
+   * Rejects credentials once the channel has been closed on-chain.
+   *
+   * Read by both phases: {@link doPrepare} rejects early to avoid spending RPC,
+   * and {@link doCommit} re-reads because an RPC round-trip has elapsed since.
+   */
+  async function assertNotClosed(): Promise<void> {
     const closed = await store.get(`${STORE_PREFIX}:closed:${channelAddress}`)
     if (closed) {
       logger.warn(`${LOG_PREFIX} Rejecting credential — channel already closed`, {
@@ -283,6 +305,31 @@ export function channel(parameters: channel.Parameters) {
         { channel: channelAddress },
       )
     }
+  }
+
+  /**
+   * Phase 1a — checks and RPC (runs OUTSIDE {@link cumulativeLock}).
+   *
+   * Claims the challenge, validates formats, and proves the commitment
+   * signature authentic. Nothing here writes channel state beyond the
+   * self-synchronising challenge claim, so the lifecycle reads are advisory:
+   * they shed obvious rejects before any RPC is spent, and the authoritative
+   * checks run in {@link doCommit} under the lock.
+   *
+   * Keeping RPC out of the lock is deliberate. A simulation is bounded by
+   * `simulationTimeoutMs` (default 10s) and the on-chain state query costs
+   * several more calls; holding the lock across them lets a single credential
+   * stall every concurrent payer on this channel.
+   */
+  async function doPrepare(credential: ChannelCredential): Promise<PreparedCredential> {
+    const { challenge, payload } = credential
+    const { request: challengeRequest } = challenge
+
+    const action = payload.action ?? 'voucher'
+    const { externalId } = challengeRequest
+
+    // Advisory lifecycle reads — re-checked authoritatively in doCommit.
+    await assertNotClosed()
 
     // Reject all actions if a close is currently settling. The settling marker is set
     // atomically under the lock when a close is accepted, and remains set until settlement
@@ -315,7 +362,8 @@ export function channel(parameters: channel.Parameters) {
     }
 
     // Replay protection via atomic compare-and-set: reject if challenge already used.
-    // Applied to all actions.
+    // Applied to all actions. Self-synchronising, so it needs no lock — and it runs
+    // ahead of the RPC below so replayed challenges are shed without a round-trip.
     const challengeStoreKey = `${STORE_PREFIX}:challenge:${challenge.id}`
     const replayError = new ChannelVerificationError('Challenge already used. Replay rejected.', {
       channel: channelAddress,
@@ -354,8 +402,9 @@ export function channel(parameters: channel.Parameters) {
     // Cheap monotonicity short-circuit before any RPC work: a commitment that
     // cannot advance the cumulative is rejected here, so a flood of stale or
     // non-monotonic commitments cannot amplify into signature-verify and
-    // on-chain-state RPC load. The atomic store.update below stays authoritative,
-    // re-reading the latest cumulative to remain correct under concurrent writes.
+    // on-chain-state RPC load. The atomic store.update in doCommit stays
+    // authoritative, re-reading the latest cumulative to remain correct under
+    // concurrent writes.
     const preCheckError = cumulativeMonotonicityError(
       readCumulativeAmount(cumulativeRecord),
       commitmentAmount,
@@ -365,16 +414,24 @@ export function channel(parameters: channel.Parameters) {
       throw preCheckError
     }
 
-    // Verify commitment signature before atomic cumulative update
-    // (async work must complete before the atomic CAS)
-    await verifyCommitmentSignature(commitmentAmount, signatureBytes)
+    // Bound concurrent RPC. The cumulative lock used to cap simulations at one
+    // in flight as a side effect of serialising validation; now that the RPC
+    // runs unlocked, that cap has to be explicit or a burst of credentials fans
+    // straight out onto the RPC provider.
+    await verifySemaphore.acquire()
+    try {
+      // Verify the commitment signature before anything writes channel state.
+      await verifyCommitmentSignature(commitmentAmount, signatureBytes)
 
-    // Query on-chain state only after the commitment signature is proven
-    // authentic. The state read costs several RPC calls; gating it behind the
-    // cheaper signature check stops a forged voucher from amplifying into the
-    // full state query.
-    if (checkOnChainState) {
-      await verifyOnChainState(commitmentAmount)
+      // Query on-chain state only after the commitment signature is proven
+      // authentic. The state read costs several RPC calls; gating it behind the
+      // cheaper signature check stops a forged voucher from amplifying into the
+      // full state query.
+      if (checkOnChainState) {
+        await verifyOnChainState(commitmentAmount)
+      }
+    } finally {
+      verifySemaphore.release()
     }
 
     // A close can only be settled by a server configured with an envelope signer.
@@ -386,6 +443,41 @@ export function channel(parameters: channel.Parameters) {
         {},
       )
     }
+
+    return {
+      action,
+      commitmentAmount,
+      requestedAmount,
+      signatureBytes,
+      challengeStoreKey,
+      challengeReference: challengeRequest.methodDetails?.reference ?? challenge.id,
+      ...(externalId ? { externalId } : {}),
+    }
+  }
+
+  /**
+   * Phase 1b — authoritative state write (runs UNDER {@link cumulativeLock}).
+   *
+   * Holds the lock for store operations only: one atomic cumulative update plus
+   * a marker write. For vouchers this returns the receipt directly; for a close
+   * it returns the validated state so settlement can run outside the lock.
+   */
+  async function doCommit(prepared: PreparedCredential): Promise<ValidatedCredential> {
+    const {
+      action,
+      commitmentAmount,
+      requestedAmount,
+      signatureBytes,
+      challengeStoreKey,
+      challengeReference,
+      externalId,
+    } = prepared
+
+    // Re-read: an RPC round-trip elapsed inside doPrepare, so its lifecycle
+    // reads may be seconds stale. The cumulative update below covers `settling`
+    // (that flag lives in the cumulative record); `closed` is a separate key and
+    // has to be re-read here.
+    await assertNotClosed()
 
     // Atomic cumulative monotonic check and write: reject if invariants fail,
     // or write the new cumulative if all checks pass.
@@ -413,7 +505,7 @@ export function channel(parameters: channel.Parameters) {
         }
 
         // Authoritative monotonicity check against the latest stored cumulative,
-        // applying the same rules as the pre-RPC short-circuit above.
+        // applying the same rules as the pre-RPC short-circuit in doPrepare.
         const monotonicityError = cumulativeMonotonicityError(
           previousCumulative,
           commitmentAmount,
@@ -463,7 +555,7 @@ export function channel(parameters: channel.Parameters) {
       action: 'voucher',
       receipt: Receipt.from({
         method: 'stellar',
-        reference: challengeRequest.methodDetails?.reference ?? challenge.id,
+        reference: challengeReference,
         status: 'success',
         timestamp: new Date().toISOString(),
         ...(externalId ? { externalId } : {}),
@@ -693,27 +785,13 @@ export function channel(parameters: channel.Parameters) {
       return { windowStartMs, spentStroops: spentStroops + charge }
     }
 
-    // Prefer the store's atomic read-modify-write so the budget holds under
-    // concurrent settlements (which run outside the cumulative lock). Stores
-    // without `update` fall back to get/put — best-effort under cross-process
-    // races, acceptable for a fee-drain guard rather than a hard cap.
-    const atomicStore = store as {
-      update?: (
-        key: string,
-        fn: (current: FeeBudgetRecord | null) => Store.Change<FeeBudgetRecord, void>,
-      ) => Promise<void>
-    }
-
-    if (typeof atomicStore.update === 'function') {
-      await atomicStore.update(budgetKey, (current) => ({
-        op: 'set',
-        value: applyCharge(current),
-        result: undefined,
-      }))
-    } else {
-      const current = (await store.get(budgetKey)) as FeeBudgetRecord | null
-      await store.put(budgetKey, applyCharge(current))
-    }
+    // Atomic read-modify-write so the budget holds under concurrent settlements
+    // (which run outside the cumulative lock).
+    await store.update(budgetKey, (current): Store.Change<FeeBudgetRecord, void> => ({
+      op: 'set',
+      value: applyCharge(current as FeeBudgetRecord | null),
+      result: undefined,
+    }))
   }
 
   /**
@@ -1093,6 +1171,16 @@ export declare namespace channel {
      * ```
      */
     rpcUrl?: string
+    /**
+     * Maximum credential verifications allowed to hold Soroban RPC calls at
+     * once. Verification makes those calls outside the cumulative lock so a slow
+     * RPC cannot stall concurrent payers, which makes this the only bound on RPC
+     * fan-out under a burst of credentials. Callers past the limit queue briefly
+     * and are then rejected with a `SemaphoreTimeoutError`.
+     *
+     * @default 10
+     */
+    verifyMaxConcurrent?: number
     /** Simulation timeout in milliseconds. @default 10_000 */
     simulationTimeoutMs?: number
     /**

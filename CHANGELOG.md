@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Move Soroban RPC calls in channel credential verification (commitment-signature simulation and the on-chain state query) out of the cumulative lock, so a slow RPC no longer stalls every concurrent payer on a channel. The authoritative cumulative check and write still run under the lock. Adds a `verifyMaxConcurrent` channel server option (default 10) bounding how many verifications may hold RPC calls at once [#61](https://github.com/stellar/stellar-mpp-sdk/pull/61)
 - Upgrade dependencies to the latest versions clearing the 7-day `minimumReleaseAge` soak, including the `@stellar/stellar-sdk` (`^16.0.1`, major) and `mppx` (`^0.8.1`) peer dependencies — consumers should bump both [#54](https://github.com/stellar/stellar-mpp-sdk/pull/54)
 
 ## [0.7.1]
